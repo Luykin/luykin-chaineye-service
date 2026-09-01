@@ -16,6 +16,7 @@ const DEFAULT_SOCIAL_LISTENING_RUNTIME_CONFIG = Object.freeze({
     maxPages: 3,
     matchLimit: 500,
     officialPostScanLimit: 1000,
+    followLatestMin: 150,
   },
   ai: {
     apiKey: "",
@@ -73,6 +74,8 @@ const DEFAULT_SOCIAL_LISTENING_RUNTIME_CONFIG = Object.freeze({
     volumeSpikeMultiplier: 2,
     negativeSpikeMinAnalyzed: 20,
     negativeShareSpikeDelta: 0.2,
+    negativeContentMinPosts: 1,
+    negativeContentMinAuthors: 1,
     concentratedNegativeMinPosts: 3,
     concentratedNegativeMinAuthors: 2,
     concentratedNegativeMinViews: 0,
@@ -186,6 +189,7 @@ function normalizeConfig(document = {}) {
       maxPages: toInteger(getValue(merged, "scan.maxPages", merged.scan.maxPages), 3, 1, 20),
       matchLimit: toInteger(getValue(merged, "scan.matchLimit", merged.scan.matchLimit), 500, 1, 2000),
       officialPostScanLimit: toInteger(getValue(merged, "scan.officialPostScanLimit", merged.scan.officialPostScanLimit), 1000, 50, 5000),
+      followLatestMin: toInteger(getValue(merged, "scan.followLatestMin", merged.scan.followLatestMin), 150, 1, 200),
     },
     ai: {
       apiKey: toText(getValue(merged, "ai.apiKey", merged.ai.apiKey)),
@@ -246,6 +250,8 @@ function normalizeConfig(document = {}) {
       volumeSpikeMultiplier: toNumber(getValue(merged, "alert.volumeSpikeMultiplier", merged.alert.volumeSpikeMultiplier), 2, 1, 100),
       negativeSpikeMinAnalyzed: toInteger(getValue(merged, "alert.negativeSpikeMinAnalyzed", merged.alert.negativeSpikeMinAnalyzed), 20, 1, 1000),
       negativeShareSpikeDelta: toNumber(getValue(merged, "alert.negativeShareSpikeDelta", merged.alert.negativeShareSpikeDelta), 0.2, 0, 1),
+      negativeContentMinPosts: toInteger(getValue(merged, "alert.negativeContentMinPosts", merged.alert.negativeContentMinPosts), 1, 1, 1000),
+      negativeContentMinAuthors: toInteger(getValue(merged, "alert.negativeContentMinAuthors", merged.alert.negativeContentMinAuthors), 1, 1, 1000),
       concentratedNegativeMinPosts: toInteger(getValue(merged, "alert.concentratedNegativeMinPosts", merged.alert.concentratedNegativeMinPosts), 3, 1, 1000),
       concentratedNegativeMinAuthors: toInteger(getValue(merged, "alert.concentratedNegativeMinAuthors", merged.alert.concentratedNegativeMinAuthors), 2, 1, 1000),
       concentratedNegativeMinViews: toInteger(getValue(merged, "alert.concentratedNegativeMinViews", merged.alert.concentratedNegativeMinViews), 0, 0, 1000000000),

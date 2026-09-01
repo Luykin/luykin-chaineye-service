@@ -153,6 +153,39 @@ function normalizeAggregateItem(value) {
   };
 }
 
+function normalizeWordKey(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/^[@#$]+/, "")
+    .toLowerCase()
+    .replace(/[\s_\-.,!?，。！？:：;；()[\]{}"'“”‘’`]+/g, "");
+}
+
+function getBoardDiscussionKeywordExclusions(board = {}) {
+  const metadata = board.metadata && typeof board.metadata === "object" ? board.metadata : {};
+  const values = [
+    board.officialHandle,
+    board.projectName,
+    ...(Array.isArray(metadata.keywords) ? metadata.keywords : []),
+    ...(Array.isArray(metadata.aliases) ? metadata.aliases : []),
+    ...(metadata.token ? [metadata.token] : []),
+  ];
+  return new Set(values.map(normalizeWordKey).filter(Boolean));
+}
+
+function filterDiscussionKeywords(values, board) {
+  const list = Array.isArray(values) ? values : values ? [values] : [];
+  const exclusions = getBoardDiscussionKeywordExclusions(board);
+  return list.filter((value) => {
+    const item = normalizeAggregateItem(value);
+    if (!item?.name) return false;
+    const key = normalizeWordKey(item.name || item.word);
+    if (!key || key.length < 2) return false;
+    return !exclusions.has(key);
+  });
+}
+
 function getDominantSentiment(counts = {}) {
   const order = [SENTIMENTS.POSITIVE, SENTIMENTS.NEGATIVE, SENTIMENTS.NEUTRAL, SENTIMENTS.UNKNOWN];
   return order
@@ -239,8 +272,18 @@ function pickTopAggregateValues(posts, field, limit = 5) {
     .slice(0, limit);
 }
 
+function pickTopDiscussionKeywords(posts, board, limit = 5) {
+  const map = new Map();
+  posts.forEach((post) => {
+    aggregateListValues(map, filterDiscussionKeywords(post.keywords, board), post, { source: "ai_hot_tags" });
+  });
+  return Array.from(map.values())
+    .sort((a, b) => (b.count - a.count) || (b.views - a.views))
+    .slice(0, limit);
+}
+
 function pickPostSummary(post, lang) {
-  if (lang === "zh") return post.summaryZh || post.sentimentSummaryZh || post.postZh || post.text || "";
+  if (lang === "zh") return post.summaryZh || post.sentimentSummaryZh || post.text || "";
   return post.summaryEn || post.text || "";
 }
 
@@ -255,7 +298,7 @@ function buildViewpointText(posts, sentiment, board, lang) {
     return `No ${sentiment === SENTIMENTS.POSITIVE ? "positive" : "negative"} viewpoint can be summarized for the selected range.`;
   }
   const topicNames = pickTopAggregateValues(selected, "topics", 3).map((item) => lang === "zh" ? item.topicZh : item.name).filter(Boolean);
-  const keywordNames = pickTopAggregateValues(selected, "keywords", 5).map((item) => item.word).filter(Boolean);
+  const keywordNames = pickTopDiscussionKeywords(selected, board, 5).map((item) => item.word).filter(Boolean);
   const summaries = selected.map((post) => pickPostSummary(post, lang)).filter(Boolean).slice(0, 2);
   if (lang === "zh") {
     const sentimentLabel = sentiment === SENTIMENTS.POSITIVE ? "正面" : "负面";
@@ -355,7 +398,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   const wordMap = new Map();
   posts.forEach((post) => {
     aggregateListValues(topicMap, post.topics, post, { source: "topics" });
-    aggregateListValues(wordMap, post.keywords, post, { source: "keywords" });
+    aggregateListValues(wordMap, filterDiscussionKeywords(post.keywords, board), post, { source: "ai_hot_tags" });
   });
 
   const topTopics = sortAggregate(topicMap, 20);
@@ -650,23 +693,29 @@ async function generateAggregateAlerts(board, options = {}) {
   const minNegativePosts = Math.max(Number(alertConfig.concentratedNegativeMinPosts || 3), 1);
   const minNegativeAuthors = Math.max(Number(alertConfig.concentratedNegativeMinAuthors || 2), 1);
   const minNegativeViews = Math.max(Number(alertConfig.concentratedNegativeMinViews || 0), 0);
-  if (
+  const negativeContentMinPosts = Math.max(Number(alertConfig.negativeContentMinPosts ?? 1), 1);
+  const negativeContentMinAuthors = Math.max(Number(alertConfig.negativeContentMinAuthors ?? 1), 1);
+  const isConcentratedNegative = (
     negativePosts.length >= minNegativePosts &&
-    negativeAuthors.size >= minNegativeAuthors &&
+    negativeAuthors.size >= minNegativeAuthors
+  );
+  if (
+    negativePosts.length >= negativeContentMinPosts &&
+    negativeAuthors.size >= negativeContentMinAuthors &&
     negativeViews >= minNegativeViews
   ) {
     alerts += await upsertAggregateAlert(board, {
       alertType: ALERT_TYPES.NEGATIVE_CONTENT,
-      severity: negativePosts.length >= minNegativePosts * 2 || negativeViews >= Math.max(minNegativeViews * 2, 50000) ? "high" : "medium",
+      severity: isConcentratedNegative || negativeViews >= Math.max(minNegativeViews * 2, 50000) ? "high" : "medium",
       dedupeKey: `${ALERT_TYPES.NEGATIVE_CONTENT}:${bucketStart.toISOString()}`,
       triggeredAt: currentStartAt,
       lastSeenAt: now,
-      titleZh: "集中负面内容风险",
-      messageZh: `最近 1 小时出现 ${negativePosts.length} 条负面内容，来自 ${negativeAuthors.size} 个账号。`,
-      currentValue: { negativeCount: negativePosts.length, authorCount: negativeAuthors.size, views: negativeViews },
+      titleZh: isConcentratedNegative ? "集中负面内容风险" : "负面内容风险",
+      messageZh: `最近 1 小时识别到 ${negativePosts.length} 条负面讨论，来自 ${negativeAuthors.size} 个账号。`,
+      currentValue: { count: negativePosts.length, negativeCount: negativePosts.length, authorCount: negativeAuthors.size, views: negativeViews },
       baselineValue: null,
       sampleSize: negativePosts.length,
-      reason: "同一时间窗内负面帖数量和负面作者数达到阈值",
+      reason: isConcentratedNegative ? "同一时间窗内负面帖数量和负面作者数达到集中风险阈值" : "时间窗内存在已确认负面讨论",
       evidenceTweetIds: negativePosts.slice(0, 20).map((post) => post.tweetId),
     });
   }

@@ -18,8 +18,9 @@ Social Listening V1 后端与管理后台已从“骨架闭环”推进到 **可
 - `singletonJobsServer.js` 中的采集/聚合调度器：监控中看板按配置触发增量采集，默认增量间隔 15 分钟。
 - 独立 AI Worker：与 15 分钟采集调度拆开，有待处理数据时约 10 秒一轮连续回填，可在管理后台单独暂停/恢复。
 - 只读库数据源读取、帖子召回入库、聚合快照、关键账号动态、预警、手动刷新、导出、授权校验。
-- 关注/取关动态读取：`dev.twitter_user_follow`、`dev.twitter_user_unfollow`、`dev.project_follow`。
-- 聚合型预警：讨论量异常、负面占比异常、集中负面风险。
+- 关注/取关动态读取：`dev.twitter_user_follow`、`dev.twitter_user_unfollow`、`dev.project_follow`；通用新增关注默认按旧服务口径过滤 `latest >= 150`。
+- 聚合型预警：讨论量异常、负面占比异常、负面内容风险、集中负面风险。
+- 词云口径：不再直接展示召回关键词，而是聚合 AI `hot_tags` 写入的讨论热词，并排除项目名、官方 handle、token、aliases、召回 keywords。
 - AI 回填改为每条推文 **一次综合调用**，一次产出摘要、结构化主题/热词、项目态度；不再按“标签/摘要/态度”拆成多次请求。
 
 仍需注意：
@@ -42,6 +43,7 @@ Social Listening V1 后端与管理后台已从“骨架闭环”推进到 **可
 | 需要生成/写入 `postZh` 中文全文 | 不再生成 `postZh`。该字段只作为历史兼容概念，当前表结构没有 `postZh` 列，代码不应再查询或写入它。 |
 | AI 和 15 分钟采集轮询绑定 | 已拆分：采集/聚合仍按调度跑；AI Worker 独立连续回填待处理旧帖和新帖，可单独暂停。 |
 | 通过 `SOCIAL_LISTENING_AI_*` 环境变量控制 | 当前主要通过 Nacos `echohunt_social_listening_config` 控制，后端有默认配置兜底。 |
+| 词云就是召回关键词列表 | 当前词云应表达“大家在讨论什么”，聚合 AI 热词并过滤召回/品牌词。 |
 
 ## 3. 已修改/新增文件概览
 
@@ -387,3 +389,4 @@ yarn db:migrate:pg:status
 3. EchoHunt 前台仓库接真实 API，移除 Social Listening Mock 数据。
 4. 继续校准 quote/reply/comment 召回 SQL 与真实 JSON 样例。
 5. 如线上仍报 `postZh`，优先排查旧进程/旧导出字段/旧 SQL 引用。
+6. 继续观察词云与预警样本：词云应少出现纯召回词；有负面帖子时应至少产生“负面内容风险”，达到集中阈值时再升级为“集中负面内容风险”。

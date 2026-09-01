@@ -516,7 +516,10 @@ function mapRelationRow(row) {
 async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
   if (!isNumericId(board?.officialTwitterId)) return [];
   const db = getReadonlyDbOrThrow();
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const scanConfig = runtimeConfig.scan || {};
   const limit = Math.min(Math.max(Number(options.limit || 200), 1), 1000);
+  const followLatestMin = clampInteger(options.followLatestMin ?? scanConfig.followLatestMin, 150, 1, 200);
   const now = options.now || new Date();
   const safeUnfollowEndAt = new Date(Math.min(new Date(endAt).getTime(), now.getTime() - 60 * 60 * 1000));
   const bind = {
@@ -525,6 +528,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
     endAt,
     safeUnfollowEndAt,
     limit,
+    followLatestMin,
   };
 
   const unionParts = [
@@ -544,7 +548,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
         WHERE f.following_id::text = $officialTwitterId
         AND f.created_at >= $startAt
         AND f.created_at < $endAt
-        AND f.latest > 0
+        AND COALESCE(f.latest, 0) >= $followLatestMin
     `,
     `
       SELECT
@@ -562,7 +566,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
         WHERE f.follower_id::text = $officialTwitterId
         AND f.created_at >= $startAt
         AND f.created_at < $endAt
-        AND f.latest > 0
+        AND COALESCE(f.latest, 0) >= $followLatestMin
     `,
   ];
 

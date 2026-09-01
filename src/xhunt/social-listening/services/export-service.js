@@ -28,7 +28,6 @@ function buildPostWhere(boardId, query = {}) {
   if (q) {
     where[Op.or] = [
       { text: { [Op.iLike]: `%${q}%` } },
-      { postZh: { [Op.iLike]: `%${q}%` } },
       { authorHandle: { [Op.iLike]: `%${q.replace(/^@+/, "")}%` } },
       { authorName: { [Op.iLike]: `%${q}%` } },
     ];
@@ -41,7 +40,6 @@ function buildPostWhere(boardId, query = {}) {
         [Op.or]: [
           { keywords: { [Op.contains]: [keyword] } },
           { text: { [Op.iLike]: `%${keyword}%` } },
-          { postZh: { [Op.iLike]: `%${keyword}%` } },
         ],
       },
     ];
@@ -114,7 +112,6 @@ async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null
       关键词: (post.keywords || []).join(", "),
       中文摘要: post.summaryZh || "",
       英文摘要: post.summaryEn || "",
-      旧中文全文: post.postZh || "",
       原文: post.text || "",
     };
   });

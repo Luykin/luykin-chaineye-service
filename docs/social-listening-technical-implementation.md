@@ -17,7 +17,7 @@
 - EchoHunt 前台只有被分配了至少一个被监控账号的账号才应展示 Social Listening 入口；无授权用户直接访问时应跳回首页。
 - 手动刷新和导出必须限流；同一看板不允许并发跑重复采集任务。
 - 华语排名优先取 `dev.twitter_user.feature.rank.kolCnRank`，缺失时 fallback 到 `dev.twitter_user.kol` 或 `dev.cache` 排名快照。
-- 关注/取关来源为 `dev.twitter_user_follow`、`dev.twitter_user_unfollow`、`dev.project_follow`。
+- 关注/取关来源为 `dev.twitter_user_follow`、`dev.twitter_user_unfollow`、`dev.project_follow`；通用关注关系默认沿用旧服务口径 `latest >= 150`。
 - AI 不回写 `dev.tweet.ai`，也不把 `dev.tweet.ai` 作为最终展示/聚合口径。
 - 当前 AI 主链路是每条推文一次 `tweetAnalysis` 综合结构化调用，同时产出摘要、结构化主题/热词、项目态度；不生成 `postZh`。
 
@@ -184,7 +184,7 @@ AI 字段当前来源：
 
 - `summaryZh/summaryEn`：来自一次综合 `tweetAnalysis` 的 `summary_cn/summary_en`。
 - `topics`：来自 `domain_tag/crypto_sub_tags/ai_sub_tags` 规整后的主题集合；自由文本 `tags` 仅作兼容记录，不作为主聚合口径。
-- `keywords`：命中关键词 + `hot_tags`。
+- `keywords`：入库保留命中关键词 + `hot_tags`；聚合词云只使用过滤后的讨论热词，排除项目名、官方 handle、token、aliases、召回 keywords。
 - `projectAttitudeScore/sentiment/sentimentSummaryZh`：来自 `score/sentiment/attitude_summary`。
 - `aiSource` 主口径：`social_listening_combined`。
 - `postZh`：当前不使用、不查询、不写入；如有错误日志说明存在旧引用。
@@ -505,14 +505,15 @@ POST /api/admin/social-listening/ai-worker/resume
 - 互动：likes + reposts + quotes + replies。
 - 情绪：只统计明确 positive/neutral/negative 的帖子；unknown 单独记录。
 - 主题：聚合 `topics`。
-- 词云：聚合 `keywords`。
+- 词云：聚合过滤后的 AI 讨论热词，不直接展示召回关键词。
 
 预警：
 
 - 高排名账号提及：global <= 10000 或 cn <= 1500。
 - 讨论量异常：最近 1 小时 vs 历史同小时段基线，默认 2x 且达到最小样本数。
 - 负面占比异常：最近 1 小时负面占比相对基线上升，默认 +20pp。
-- 集中负面风险：最近窗口内负面帖数与负面作者数同时达到阈值。
+- 负面内容风险：最近窗口内出现达到配置阈值的已确认负面讨论即可提示。
+- 集中负面风险：最近窗口内负面帖数与负面作者数同时达到集中阈值时提高严重级别。
 
 阈值在 Nacos `alert` 配置中控制。
 
@@ -578,7 +579,7 @@ column "postZh" does not exist
 
 - EchoHunt 前台真实 API 接入进度。
 - quote/reply/comment 召回 SQL 与真实 JSON 样例的边界校准。
-- 关注/取关动态的最终产品展示口径。
+- 关注/取关动态的展示继续按“高排名账号提及 / 新增 KOL 粉丝 / 取关动态”校准，通用 follow 默认 `latest >= 150`，project follow 默认 `latest > 0`。
 - AI prompt 质量：通过管理后台“AI 回填检查”抽样调优。
 - 线上并发、批大小、截断长度与成本的最终平衡。
 - Social Listening 数据保留周期。
