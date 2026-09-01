@@ -20,6 +20,8 @@ function getCacheKey(model, temperature, streaming) {
 /**
  * 创建新的 ChatOpenAI 实例（不缓存，避免并发问题）
  * @param {Object} options - 可选配置
+ * @param {string} options.apiKey - 可选 API Key 覆盖，未传时使用全局配置
+ * @param {string} options.baseURL - 可选 OpenAI-compatible Base URL 覆盖
  * @param {string} options.model - 模型名称
  * @param {number} options.temperature - 温度
  * @param {boolean} options.streaming - 是否流式
@@ -36,10 +38,14 @@ function getChatModel(options = {}) {
     maxTokens,
     responseFormat,
     jsonSchema,
+    apiKey: apiKeyOverride,
+    baseURL: baseURLOverride,
+    timeout: timeoutOverride,
+    maxRetries: maxRetriesOverride,
     debug = process.env.LLM_DEBUG === "true",
   } = options;
 
-  const apiKey = config.apiKey;
+  const apiKey = apiKeyOverride || config.apiKey;
   
   if (!apiKey) {
     throw new Error('LLM_API_KEY is not configured');
@@ -82,10 +88,10 @@ function getChatModel(options = {}) {
     openAIApiKey: apiKey,
     modelKwargs: Object.keys(modelKwargs).length > 0 ? modelKwargs : undefined,
     configuration: {
-      baseURL: config.baseURL,
+      baseURL: baseURLOverride || config.baseURL,
     },
-    timeout: config.timeout,
-    maxRetries: config.maxRetries,
+    timeout: timeoutOverride || config.timeout,
+    maxRetries: maxRetriesOverride ?? config.maxRetries,
   };
 
   // 每次创建新实例，避免并发问题

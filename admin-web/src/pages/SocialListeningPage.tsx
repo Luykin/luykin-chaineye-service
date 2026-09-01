@@ -846,6 +846,7 @@ export function SocialListeningPage() {
   const boardsQuery = useQuery({
     queryKey: ["social-listening", "boards", filters],
     queryFn: () => fetchSocialListeningBoards({ pageSize: 50, ...filters }),
+    refetchInterval: 15_000,
   });
   const jobsQuery = useQuery({
     queryKey: ["social-listening", "jobs", "recent"],
@@ -861,6 +862,12 @@ export function SocialListeningPage() {
   const activeCount = boards.filter((item) => item.status === "monitoring").length;
   const failedCount = boards.filter((item) => item.status === "failed").length;
   const runningJobs = (jobsQuery.data?.data.items || []).filter((item) => ["pending", "running"].includes(item.status)).length;
+
+  useEffect(() => {
+    if (!drawerBoard?.id) return;
+    const latest = boards.find((item) => item.id === drawerBoard.id);
+    if (latest) setDrawerBoard(latest);
+  }, [boards, drawerBoard?.id]);
 
   const resolveMutation = useMutation({
     mutationFn: (handle: string) => resolveSocialListeningAccount(handle),

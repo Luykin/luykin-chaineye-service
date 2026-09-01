@@ -1,50 +1,66 @@
-const axios = require("axios");
 const { Op } = require("sequelize");
 const { EchohuntSocialListeningPost } = require("../../../models/postgres-start");
 const { SENTIMENTS } = require("../constants");
 const { normalizeTweetText } = require("../utils/text-normalize");
 
-const DEFAULT_AI_BASE_URL = "http://backend-v1.xhunt.svc.cluster.local:3010";
-const DEFAULT_TIMEOUT_MS = Number(process.env.SOCIAL_LISTENING_AI_TIMEOUT_MS || 8000);
-const SUMMARY_WORDS = Number(process.env.SOCIAL_LISTENING_SUMMARY_WORDS || 5);
-const NEGATIVE_THRESHOLD = Number(process.env.SOCIAL_LISTENING_NEGATIVE_SCORE_THRESHOLD || 4);
-const POSITIVE_THRESHOLD = Number(process.env.SOCIAL_LISTENING_POSITIVE_SCORE_THRESHOLD || 6);
-const MAX_PROMPT_LENGTH = Number(process.env.SOCIAL_LISTENING_AI_PROMPT_MAX_LENGTH || 6000);
+const { getSocialListeningRuntimeConfig } = require("./runtime-config");
+const { PROMPT_FIELDS, PROMPT_ALIASES, DEFAULT_LOCAL_AI_PROMPTS } = require("./ai-prompt-templates");
+const {
+  generateTweetTagV2,
+  generateProjectAttitude,
+  generateTweetSummaryMedia,
+} = require("./local-ai-service");
 
-const PROMPT_FIELDS = Object.freeze({
-  PROJECT_ATTITUDE: "projectAttitude",
-  TWEET_TAG: "tweetTag",
-  TWEET_SUMMARY: "tweetSummary",
-});
-
-function getAiBaseUrl() {
-  return String(process.env.SOCIAL_LISTENING_AI_BASE_URL || process.env.AI_SERVICE_BASE_URL || DEFAULT_AI_BASE_URL).replace(/\/+$/, "");
+async function getAiConfig() {
+  const config = await getSocialListeningRuntimeConfig();
+  return config.ai || {};
 }
 
-function isProjectAttitudeEnabled() {
-  if (process.env.SOCIAL_LISTENING_PROJECT_ATTITUDE_ENABLED === "false") return false;
-  return Boolean(getAiBaseUrl());
+function hasLocalAiConfig(aiConfig = {}) {
+  return Boolean(String(aiConfig.apiKey || "").trim() && String(aiConfig.baseURL || "").trim());
 }
 
-function isContentAiEnabled() {
-  if (process.env.SOCIAL_LISTENING_CONTENT_AI_ENABLED === "false") return false;
-  return Boolean(getAiBaseUrl());
+async function isProjectAttitudeEnabled() {
+  const aiConfig = await getAiConfig();
+  return Boolean(aiConfig.projectAttitudeEnabled && hasLocalAiConfig(aiConfig));
 }
 
-function normalizePrompt(value) {
+async function isContentAiEnabled() {
+  const aiConfig = await getAiConfig();
+  return Boolean(aiConfig.contentEnabled && hasLocalAiConfig(aiConfig));
+}
+
+function normalizePrompt(value, maxLength = 6000) {
   const text = String(value || "").trim();
   if (!text) return "";
-  return text.slice(0, Math.max(200, MAX_PROMPT_LENGTH));
+  return text.slice(0, Math.max(200, Number(maxLength) || 6000));
 }
 
 function getBoardMetadata(board) {
   return board?.metadata && typeof board.metadata === "object" ? board.metadata : {};
 }
 
-function getBoardPrompt(board, field) {
+function pickPromptValue(prompts, field) {
+  const source = prompts && typeof prompts === "object" ? prompts : {};
+  const keys = PROMPT_ALIASES[field] || [field];
+  for (const key of keys) {
+    if (source[key]) return source[key];
+  }
+  return "";
+}
+
+function getBoardPrompt(board, field, maxLength) {
   const metadata = getBoardMetadata(board);
   const prompts = metadata.aiPrompts && typeof metadata.aiPrompts === "object" ? metadata.aiPrompts : {};
-  return normalizePrompt(prompts[field]);
+  return normalizePrompt(pickPromptValue(prompts, field), maxLength);
+}
+
+function getRuntimePrompt(aiConfig, field) {
+  return normalizePrompt(pickPromptValue(aiConfig?.prompts, field), aiConfig?.promptMaxLength);
+}
+
+function getDefaultPrompt(field) {
+  return DEFAULT_LOCAL_AI_PROMPTS[field] || "";
 }
 
 function renderPromptTemplate(prompt, variables = {}) {
@@ -55,33 +71,44 @@ function renderPromptTemplate(prompt, variables = {}) {
   });
 }
 
-function buildPromptPayload(board, field, variables = {}) {
-  const template = getBoardPrompt(board, field);
-  if (!template) return {};
-  const prompt = renderPromptTemplate(template, variables);
+function buildPromptInfo(board, aiConfig, field, variables = {}) {
+  const boardTemplate = getBoardPrompt(board, field, aiConfig?.promptMaxLength);
+  const runtimeTemplate = getRuntimePrompt(aiConfig, field);
+  const defaultTemplate = getDefaultPrompt(field);
+  let source = "default";
+  let configured = false;
+  let template = defaultTemplate;
+
+  if (runtimeTemplate) {
+    template = runtimeTemplate;
+    source = "nacos.echohunt_social_listening_config.ai.prompts";
+    configured = true;
+  }
+  if (boardTemplate) {
+    template = boardTemplate;
+    source = "board.metadata.aiPrompts";
+    configured = true;
+  }
+
+  let prompt = renderPromptTemplate(template, variables);
+  if (variables.text && !prompt.includes(String(variables.text))) {
+    prompt = `${prompt}\n\n输入文本：\n${variables.text}`;
+  }
   return {
     prompt,
-    customPrompt: prompt,
-    promptOverride: prompt,
-    promptSource: "board.metadata.aiPrompts",
-    promptKey: field,
+    trace: {
+      key: field,
+      source,
+      configured,
+      length: prompt.length,
+      preview: prompt.slice(0, 240),
+      templatePreview: template.slice(0, 240),
+    },
   };
 }
 
-function buildPromptTrace(board, field, variables = {}) {
-  const template = getBoardPrompt(board, field);
-  if (!template) {
-    return { key: field, source: "default", configured: false };
-  }
-  const prompt = renderPromptTemplate(template, variables);
-  return {
-    key: field,
-    source: "board.metadata.aiPrompts",
-    configured: true,
-    length: prompt.length,
-    preview: prompt.slice(0, 240),
-    templatePreview: template.slice(0, 240),
-  };
+function buildPromptTrace(board, field, variables = {}, aiConfig = {}) {
+  return buildPromptInfo(board, aiConfig, field, variables).trace;
 }
 
 function hasPromptOverride(board, field) {
@@ -92,23 +119,14 @@ function countPromptOverrides(board, fields) {
   return fields.filter((field) => hasPromptOverride(board, field)).length;
 }
 
-function scoreToSentiment(score) {
+function scoreToSentiment(score, config = {}) {
   const num = Number(score);
   if (!Number.isFinite(num)) return SENTIMENTS.UNKNOWN;
-  if (num < NEGATIVE_THRESHOLD) return SENTIMENTS.NEGATIVE;
-  if (num > POSITIVE_THRESHOLD) return SENTIMENTS.POSITIVE;
+  const negativeThreshold = Number.isFinite(Number(config.negativeScoreThreshold)) ? Number(config.negativeScoreThreshold) : 4;
+  const positiveThreshold = Number.isFinite(Number(config.positiveScoreThreshold)) ? Number(config.positiveScoreThreshold) : 6;
+  if (num < negativeThreshold) return SENTIMENTS.NEGATIVE;
+  if (num > positiveThreshold) return SENTIMENTS.POSITIVE;
   return SENTIMENTS.NEUTRAL;
-}
-
-async function callAiEndpoint(path, payload) {
-  const baseUrl = getAiBaseUrl();
-  if (!baseUrl) throw new Error("SOCIAL_LISTENING_AI_NOT_CONFIGURED");
-  const headers = { "Content-Type": "application/json" };
-  if (process.env.SOCIAL_LISTENING_AI_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.SOCIAL_LISTENING_AI_TOKEN}`;
-  }
-  const response = await axios.post(`${baseUrl}${path}`, payload, { timeout: DEFAULT_TIMEOUT_MS, headers });
-  return response?.data?.data || response?.data || {};
 }
 
 function buildProjectPromptName(board) {
@@ -117,21 +135,17 @@ function buildProjectPromptName(board) {
 }
 
 async function callProjectAttitudeAi(board, post) {
+  const aiConfig = await getAiConfig();
   const text = `<<${new Date(post.postCreatedAt).toISOString()}--${normalizeTweetText(post.text || post.normalizedText || "")}>>`;
   const project = buildProjectPromptName(board);
   const promptVariables = { text, project, lang: "cn" };
-  const promptTrace = buildPromptTrace(board, PROMPT_FIELDS.PROJECT_ATTITUDE, promptVariables);
-  const data = await callAiEndpoint("/ai/project_attitude", {
-    text,
-    project,
-    lang: "cn",
-    ...buildPromptPayload(board, PROMPT_FIELDS.PROJECT_ATTITUDE, promptVariables),
-  });
+  const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.PROJECT_ATTITUDE, promptVariables);
+  const data = await generateProjectAttitude({ prompt, aiConfig });
 
   const score = data.score ?? data.data?.score;
   return {
     score,
-    sentiment: scoreToSentiment(score),
+    sentiment: scoreToSentiment(score, aiConfig),
     summary: data.summary || data.reason || data.message || null,
     raw: data,
     promptTrace,
@@ -182,12 +196,10 @@ function hasSummaryFields(row) {
 async function callTweetTagAi(board, post) {
   const text = normalizeTweetText(post.text || post.normalizedText || "");
   const promptVariables = { text };
-  const promptTrace = buildPromptTrace(board, PROMPT_FIELDS.TWEET_TAG, promptVariables);
+  const aiConfig = await getAiConfig();
+  const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_TAG, promptVariables);
   if (!text) return { topics: [], keywords: [], raw: {}, promptTrace };
-  const data = await callAiEndpoint("/ai/tweet_tag_v2", {
-    text,
-    ...buildPromptPayload(board, PROMPT_FIELDS.TWEET_TAG, promptVariables),
-  });
+  const data = await generateTweetTagV2({ prompt, aiConfig });
   return { ...extractTagResult(data), promptTrace };
 }
 
@@ -203,24 +215,21 @@ function pickFirstMedia(post) {
 }
 
 async function callTweetSummaryAi(board, post, lang) {
+  const aiConfig = await getAiConfig();
+  const summaryWords = aiConfig.summaryWords || 5;
   const text = normalizeTweetText(post.text || post.normalizedText || "");
-  const promptVariables = { text, lang, words: SUMMARY_WORDS, media: pickFirstMedia(post) };
-  const promptTrace = buildPromptTrace(board, PROMPT_FIELDS.TWEET_SUMMARY, promptVariables);
+  const promptVariables = { text, lang, words: summaryWords, media: pickFirstMedia(post) };
+  const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_SUMMARY, promptVariables);
   if (!text) return { summary: "", promptTrace, raw: {} };
-  const data = await callAiEndpoint("/ai/tweet_summary_media", {
-    text,
-    lang,
-    words: SUMMARY_WORDS,
-    media: promptVariables.media,
-    ...buildPromptPayload(board, PROMPT_FIELDS.TWEET_SUMMARY, promptVariables),
-  });
+  const data = await generateTweetSummaryMedia({ prompt, aiConfig });
   const summary = typeof data === "string" ? data : (data.summary || data.text || "");
   return { summary, promptTrace, raw: typeof data === "object" ? data : { text: data } };
 }
 
 async function analyzePendingContentMetadata(board, options = {}) {
-  if (!isContentAiEnabled()) return { enabled: false, analyzed: 0, failed: 0, skipped: 0 };
-  const limit = Math.min(Math.max(Number(options.limit || process.env.SOCIAL_LISTENING_CONTENT_AI_BATCH_SIZE || 10), 1), 50);
+  const aiConfig = await getAiConfig();
+  if (!await isContentAiEnabled()) return { enabled: false, analyzed: 0, failed: 0, skipped: 0 };
+  const limit = Math.min(Math.max(Number(options.limit || aiConfig.contentBatchSize || 10), 1), 50);
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
       boardId: board.id,
@@ -324,8 +333,9 @@ async function analyzePendingContentMetadata(board, options = {}) {
 }
 
 async function analyzePendingProjectAttitudes(board, options = {}) {
-  if (!isProjectAttitudeEnabled()) return { enabled: false, analyzed: 0, failed: 0 };
-  const limit = Math.min(Math.max(Number(options.limit || process.env.SOCIAL_LISTENING_AI_BATCH_SIZE || 20), 1), 100);
+  const aiConfig = await getAiConfig();
+  if (!await isProjectAttitudeEnabled()) return { enabled: false, analyzed: 0, failed: 0 };
+  const limit = Math.min(Math.max(Number(options.limit || aiConfig.projectAttitudeBatchSize || 20), 1), 100);
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
       boardId: board.id,

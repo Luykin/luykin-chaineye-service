@@ -69,6 +69,14 @@ const NACOS_CONFIG_CATALOG = [
     publicReadable: true,
     permissions: ["nacos-messages"],
   },
+  {
+    dataId: "echohunt_social_listening_config",
+    label: "EchoHunt Social Listening 运行/AI Prompt 配置",
+    group: DEFAULT_GROUP,
+    type: "json",
+    publicReadable: false,
+    permissions: ["social-listening", "nacos-admin"],
+  },
 ];
 
 const CATALOG_MAP = new Map(NACOS_CONFIG_CATALOG.map((item) => [item.dataId, item]));

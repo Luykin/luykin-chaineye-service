@@ -5,20 +5,26 @@ const {
 } = require("../../../models/postgres-start");
 const { BOARD_STATUSES, JOB_STATUSES, JOB_TYPES } = require("../constants");
 const { processSocialListeningJob, recoverStaleRunningJobs, getIncrementalRange } = require("./ingest-service");
+const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
 const SCHEDULER_STATE_KEY = "echohunt:social-listening:scheduler:state";
 const SCHEDULER_ENABLED_VALUE = "running";
 
-function isForceDisabled() {
-  return process.env.SOCIAL_LISTENING_SCHEDULER_ENABLED === "false";
+async function getSchedulerMode() {
+  const config = await getSocialListeningRuntimeConfig();
+  return config.scheduler?.mode || "default";
 }
 
-function isForceEnabled() {
-  return process.env.SOCIAL_LISTENING_SCHEDULER_ENABLED === "true";
+async function isForceDisabled() {
+  return await getSchedulerMode() === "disabled";
+}
+
+async function isForceEnabled() {
+  return await getSchedulerMode() === "enabled";
 }
 
 async function enableSocialListeningScheduler(redisClient, actor = {}) {
-  if (isForceDisabled()) return { enabled: false, reason: "env_disabled" };
+  if (await isForceDisabled()) return { enabled: false, reason: "nacos_disabled" };
   if (!redisClient?.set) return { enabled: false, reason: "redis_unavailable" };
   await redisClient.set(SCHEDULER_STATE_KEY, SCHEDULER_ENABLED_VALUE);
   await redisClient.set(`${SCHEDULER_STATE_KEY}:enabled_at`, JSON.stringify({
@@ -30,14 +36,14 @@ async function enableSocialListeningScheduler(redisClient, actor = {}) {
 }
 
 function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
-  const intervalMs = Number(tickIntervalMs || process.env.SOCIAL_LISTENING_TICK_INTERVAL_MS || 60 * 1000);
+  const fallbackIntervalMs = tickIntervalMs || 60 * 1000;
   let timer = null;
   let ticking = false;
   let pausedLogged = false;
 
   async function isSchedulerEnabled() {
-    if (isForceDisabled()) return false;
-    if (isForceEnabled()) return true;
+    if (await isForceDisabled()) return false;
+    if (await isForceEnabled()) return true;
     const state = await redisClient?.get?.(SCHEDULER_STATE_KEY).catch(() => null);
     return state === SCHEDULER_ENABLED_VALUE;
   }
@@ -56,7 +62,9 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
 
   async function enqueueDueIncrementalJobs() {
     const now = new Date();
-    const dueBefore = new Date(now.getTime() - 15 * 60 * 1000);
+    const runtimeConfig = await getSocialListeningRuntimeConfig();
+    const incrementalIntervalMinutes = runtimeConfig.scheduler?.incrementalIntervalMinutes || 15;
+    const dueBefore = new Date(now.getTime() - incrementalIntervalMinutes * 60 * 1000);
     const boards = await EchohuntSocialListeningBoard.findAll({
       where: {
         status: BOARD_STATUSES.MONITORING,
@@ -79,7 +87,7 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
         where: { boardId: board.id, status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] } },
       });
       if (existing) continue;
-      const range = getIncrementalRange(board, now);
+      const range = await getIncrementalRange(board, now);
       await EchohuntSocialListeningJob.create({
         boardId: board.id,
         jobType: JOB_TYPES.INCREMENTAL,
@@ -95,7 +103,8 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
   }
 
   async function processPendingJobs() {
-    const maxJobs = Number(process.env.SOCIAL_LISTENING_MAX_JOBS_PER_TICK || 3);
+    const runtimeConfig = await getSocialListeningRuntimeConfig();
+    const maxJobs = Number(runtimeConfig.scheduler?.maxJobsPerTick || 3);
     const jobs = await EchohuntSocialListeningJob.findAll({
       where: { status: JOB_STATUSES.PENDING },
       order: [["createdAt", "ASC"]],
@@ -142,21 +151,29 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     }
   }
 
-  function start() {
-    if (isForceDisabled()) {
-      console.warn("[SocialListeningScheduler] disabled by SOCIAL_LISTENING_SCHEDULER_ENABLED=false");
-      return { enabled: false };
-    }
-    if (timer) return { enabled: true, alreadyStarted: true };
-    timer = setInterval(tick, Math.max(intervalMs, 10 * 1000));
+  async function getNextTickIntervalMs() {
+    const config = await getSocialListeningRuntimeConfig().catch(() => null);
+    return Math.max(Number(config?.scheduler?.tickIntervalMs || fallbackIntervalMs), 10 * 1000);
+  }
+
+  function scheduleNext(delayMs) {
+    timer = setTimeout(async () => {
+      await tick();
+      if (!timer) return;
+      scheduleNext(await getNextTickIntervalMs());
+    }, Math.max(delayMs, 1000));
     timer.unref?.();
-    setTimeout(tick, 5000).unref?.();
-    console.log(`[SocialListeningScheduler] started intervalMs=${intervalMs}, defaultState=${isForceEnabled() ? "running(env)" : "paused"}`);
+  }
+
+  function start() {
+    if (timer) return { enabled: true, alreadyStarted: true };
+    scheduleNext(5000);
+    console.log(`[SocialListeningScheduler] started defaultIntervalMs=${fallbackIntervalMs}, configSource=nacos, defaultState=nacos_or_redis`);
     return { enabled: true };
   }
 
   function stop() {
-    if (timer) clearInterval(timer);
+    if (timer) clearTimeout(timer);
     timer = null;
   }
 

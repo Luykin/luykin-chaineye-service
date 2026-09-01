@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { Op, fn, col } = require("sequelize");
 const {
   pgInstance,
   AuthCenterXhuntIdentity,
@@ -26,6 +26,7 @@ const { normalizeKeywords } = require("../utils/text-normalize");
 const { resolveTwitterUserByHandle } = require("./data-source");
 const { publicError } = require("./errors");
 const { getHistoryRange } = require("./ingest-service");
+const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 const { enableSocialListeningScheduler } = require("./scheduler");
 
 function toJson(record) {
@@ -36,6 +37,58 @@ function normalizePage(query = {}) {
   const page = Math.max(parseInt(query.page || "1", 10) || 1, 1);
   const pageSize = Math.min(Math.max(parseInt(query.pageSize || DEFAULT_PAGE_SIZE, 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
   return { page, pageSize, offset: (page - 1) * pageSize, limit: pageSize };
+}
+
+function buildBoardCountMap(rows = []) {
+  return rows.reduce((map, item) => {
+    const row = toJson(item) || {};
+    const boardId = row.boardId || row.board_id || row["boardId"];
+    if (boardId) map.set(boardId, Number(row.count || 0));
+    return map;
+  }, new Map());
+}
+
+async function loadBoardListStats(boardIds = []) {
+  if (!boardIds.length) {
+    return {
+      accessCountByBoard: new Map(),
+      postCountByBoard: new Map(),
+      latestJobByBoard: new Map(),
+    };
+  }
+
+  const boardWhere = { boardId: { [Op.in]: boardIds } };
+  const [accessCountRows, postCountRows, jobs] = await Promise.all([
+    EchohuntSocialListeningBoardAccess.findAll({
+      attributes: ["boardId", [fn("COUNT", col("id")), "count"]],
+      where: { ...boardWhere, status: ACCESS_STATUSES.ACTIVE },
+      group: ["boardId"],
+      raw: true,
+    }),
+    EchohuntSocialListeningPost.findAll({
+      attributes: ["boardId", [fn("COUNT", col("id")), "count"]],
+      where: boardWhere,
+      group: ["boardId"],
+      raw: true,
+    }),
+    EchohuntSocialListeningJob.findAll({
+      where: boardWhere,
+      order: [["boardId", "ASC"], ["createdAt", "DESC"]],
+    }),
+  ]);
+
+  const latestJobByBoard = new Map();
+  for (const job of jobs) {
+    if (job.boardId && !latestJobByBoard.has(job.boardId)) {
+      latestJobByBoard.set(job.boardId, job);
+    }
+  }
+
+  return {
+    accessCountByBoard: buildBoardCountMap(accessCountRows),
+    postCountByBoard: buildBoardCountMap(postCountRows),
+    latestJobByBoard,
+  };
 }
 
 function getTwitterIdentityFromAuthCenter(authCenter) {
@@ -260,7 +313,7 @@ function shouldRunInitialBackfill(board) {
 }
 
 async function createInitialBackfillJob(board, adminId = null) {
-  const range = getHistoryRange("recent_7d");
+  const range = await getHistoryRange("recent_7d");
   return EchohuntSocialListeningJob.create({
     boardId: board.id,
     jobType: JOB_TYPES.HISTORY_BACKFILL,
@@ -329,7 +382,21 @@ async function listMonitoredAccounts(query = {}) {
     offset,
     limit,
   });
-  return { items: result.rows.map(serializeBoard), page, pageSize, total: result.count };
+  const boardIds = result.rows.map((row) => row.id).filter(Boolean);
+  const { accessCountByBoard, postCountByBoard, latestJobByBoard } = await loadBoardListStats(boardIds);
+  return {
+    items: result.rows.map((row) => {
+      const latestJob = latestJobByBoard.get(row.id);
+      return serializeBoard(row, {
+        accessCount: accessCountByBoard.get(row.id) || 0,
+        postCount: postCountByBoard.get(row.id) || 0,
+        latestJob: latestJob ? serializeJob(latestJob) : null,
+      });
+    }),
+    page,
+    pageSize,
+    total: result.count,
+  };
 }
 
 async function updateBoard(boardId, input = {}, adminId = null) {
@@ -494,14 +561,21 @@ async function createManualRefreshJob(boardId, actor, redisClient = null) {
   if (board.status === BOARD_STATUSES.PAUSED) {
     throw publicError("BOARD_PAUSED", 409, "看板已暂停，请先在管理后台恢复监控。");
   }
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const refreshConfig = runtimeConfig.refresh || {};
   const prefix = actor.type === "admin" ? `admin:${actor.adminId || "unknown"}` : `user:${actor.authCenterUserId || "unknown"}`;
-  const cooldownSeconds = actor.type === "admin" ? 60 : 5 * 60;
+  const cooldownSeconds = actor.type === "admin" ? refreshConfig.adminCooldownSeconds : refreshConfig.userCooldownSeconds;
   const cooldownKey = `echohunt:social-listening:refresh:${prefix}:${boardId}`;
   const boardCooldownKey = `echohunt:social-listening:refresh:board:${boardId}`;
 
   if (redisClient?.set) {
-    const ok = await redisClient.set(cooldownKey, "1", { NX: true, EX: cooldownSeconds }).catch(() => "OK");
-    const boardOk = await redisClient.set(boardCooldownKey, "1", { NX: true, EX: actor.type === "admin" ? 60 : 120 }).catch(() => "OK");
+    const ok = cooldownSeconds > 0
+      ? await redisClient.set(cooldownKey, "1", { NX: true, EX: cooldownSeconds }).catch(() => "OK")
+      : "OK";
+    const boardCooldownSeconds = actor.type === "admin" ? refreshConfig.adminBoardCooldownSeconds : refreshConfig.userBoardCooldownSeconds;
+    const boardOk = boardCooldownSeconds > 0
+      ? await redisClient.set(boardCooldownKey, "1", { NX: true, EX: boardCooldownSeconds }).catch(() => "OK")
+      : "OK";
     if (ok === null || boardOk === null) {
       throw publicError("REFRESH_RATE_LIMITED", 429, "刷新太频繁，请稍后再试。", { retryAfter: cooldownSeconds });
     }

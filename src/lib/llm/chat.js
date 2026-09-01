@@ -36,6 +36,8 @@ function convertHistory(history = []) {
  * @param {string} options.systemPrompt - 系统提示
  * @param {Array} options.history - 历史消息 [{role, content}]
  * @param {number} options.maxTokens - 最大 token 数
+ * @param {string} options.apiKey - 可选 API Key 覆盖，未传时使用全局配置
+ * @param {string} options.baseURL - 可选 OpenAI-compatible Base URL 覆盖
  * @param {string} options.responseFormat - 响应格式 ('json_object' | 'text')
  * @returns {Promise<string>} 回复文本
  */
@@ -47,10 +49,14 @@ async function chat(message, options = {}) {
     history = [],
     maxTokens,
     responseFormat,
+    apiKey,
+    baseURL,
+    timeout,
+    maxRetries,
   } = options;
 
   return withRetry(async () => {
-    const llm = getChatModel({ model, temperature, maxTokens, responseFormat });
+    const llm = getChatModel({ model, temperature, maxTokens, responseFormat, apiKey, baseURL, timeout, maxRetries });
     
     // 构建消息列表
     const messages = [];

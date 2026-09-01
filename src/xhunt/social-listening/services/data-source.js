@@ -7,13 +7,7 @@ const {
 const { assertTwitterHandle } = require("../utils/twitter");
 const { normalizeTweetText, collectMatchedKeywords, normalizeKeywords } = require("../utils/text-normalize");
 const { ACCOUNT_SIGNAL_TYPES } = require("../constants");
-
-const DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS = Number(
-  process.env.SOCIAL_LISTENING_PG_READ_STATEMENT_TIMEOUT_MS || 10000
-);
-const DEFAULT_SCAN_PAGE_SIZE = Number(process.env.SOCIAL_LISTENING_SCAN_PAGE_SIZE || 500);
-const DEFAULT_MAX_SCAN_PAGES = Number(process.env.SOCIAL_LISTENING_MAX_SCAN_PAGES || 4);
-const DEFAULT_OFFICIAL_POST_SCAN_LIMIT = Number(process.env.SOCIAL_LISTENING_OFFICIAL_POST_SCAN_LIMIT || 1000);
+const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
 function getReadonlyDbOrThrow() {
   const status = getPostgresReadOnlyStatus();
@@ -27,28 +21,10 @@ function getReadonlyDbOrThrow() {
   return getPostgresReadOnlyInstance();
 }
 
-function getReadStatementTimeoutMs() {
-  return Number.isFinite(DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS) && DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS > 0
-    ? Math.floor(DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS)
-    : 10000;
-}
-
 function clampInteger(value, fallback, min, max) {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
   return Math.min(Math.max(Math.floor(num), min), max);
-}
-
-function getScanPageSize() {
-  return clampInteger(DEFAULT_SCAN_PAGE_SIZE, 500, 50, 1000);
-}
-
-function getMaxScanPages() {
-  return clampInteger(DEFAULT_MAX_SCAN_PAGES, 4, 1, 20);
-}
-
-function getOfficialPostScanLimit() {
-  return clampInteger(DEFAULT_OFFICIAL_POST_SCAN_LIMIT, 1000, 50, 5000);
 }
 
 function escapeLikePattern(value) {
@@ -71,8 +47,9 @@ function isStatementTimeoutError(error) {
   }) || errors.some((item) => /canceling statement due to statement timeout/i.test(String(item.message || "")));
 }
 
-async function queryReadonlyWithStatementTimeout(db, sql, queryOptions, statementTimeoutMs = getReadStatementTimeoutMs()) {
-  const timeoutMs = Number(statementTimeoutMs);
+async function queryReadonlyWithStatementTimeout(db, sql, queryOptions, statementTimeoutMs) {
+  const configuredTimeout = statementTimeoutMs ?? (await getSocialListeningRuntimeConfig()).scan?.statementTimeoutMs;
+  const timeoutMs = Number(configuredTimeout);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return db.query(sql, queryOptions);
 
   return db.transaction(async (transaction) => {
@@ -368,11 +345,13 @@ function mapTweetRowToPostPayload(board, row) {
 
 async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {}) {
   const db = getReadonlyDbOrThrow();
-  const limit = Math.min(Math.max(Number(options.limit || 500), 1), 2000);
-  const pageSize = clampInteger(options.pageSize || getScanPageSize(), getScanPageSize(), 50, 1000);
-  const maxPages = clampInteger(options.maxPages || getMaxScanPages(), getMaxScanPages(), 1, 20);
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const scanConfig = runtimeConfig.scan || {};
+  const limit = Math.min(Math.max(Number(options.limit || scanConfig.matchLimit || 500), 1), 2000);
+  const pageSize = clampInteger(options.pageSize || scanConfig.pageSize, scanConfig.pageSize || 200, 50, 1000);
+  const maxPages = clampInteger(options.maxPages || scanConfig.maxPages, scanConfig.maxPages || 3, 1, 20);
   const scanLimit = pageSize * maxPages;
-  const officialPostLimit = getOfficialPostScanLimit();
+  const officialPostLimit = clampInteger(options.officialPostScanLimit || scanConfig.officialPostScanLimit, scanConfig.officialPostScanLimit || 1000, 50, 5000);
   const keywords = buildBoardKeywords(board).slice(0, 10);
   const patterns = keywords.map((keyword, index) => ({ key: `kw${index}`, value: `%${escapeLikePattern(String(keyword).replace(/^@+/, ""))}%` }));
 
@@ -449,7 +428,7 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
       "只读库扫描推文超时，不是前端 URL 或接口地址配置问题。",
       `当前窗口：${new Date(startAt).toISOString()} → ${new Date(endAt).toISOString()}。`,
       `当前已按 keyset 分页扫描，已扫 ${scanMeta.pagesScanned} 页 / ${maxPages} 页，每页 ${pageSize} 条。`,
-      "可继续调小 SOCIAL_LISTENING_WINDOW_MINUTES / SOCIAL_LISTENING_SCAN_PAGE_SIZE，或调大 SOCIAL_LISTENING_PG_READ_STATEMENT_TIMEOUT_MS 后重试。",
+      "可在 Nacos 配置 echohunt_social_listening_config 中调小 scan.windowMinutes / scan.pageSize / scan.maxPages，或调大 scan.statementTimeoutMs 后重试。",
     ].join(" ");
     throw error;
   }

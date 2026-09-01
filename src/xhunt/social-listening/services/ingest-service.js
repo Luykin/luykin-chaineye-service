@@ -16,11 +16,7 @@ const {
   generateAggregateAlerts,
 } = require("./aggregate-service");
 const { analyzePendingProjectAttitudes, analyzePendingContentMetadata } = require("./analysis-service");
-
-const DEFAULT_WINDOW_MINUTES = Number(process.env.SOCIAL_LISTENING_WINDOW_MINUTES || 60);
-const DEFAULT_HISTORY_DAYS = Number(process.env.SOCIAL_LISTENING_HISTORY_DAYS || 30);
-const DEFAULT_RECENT_DAYS = Number(process.env.SOCIAL_LISTENING_RECENT_DAYS || 7);
-const DEFAULT_OVERLAP_HOURS = Number(process.env.SOCIAL_LISTENING_INCREMENTAL_OVERLAP_HOURS || 2);
+const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
 function clampPositiveInteger(value, fallback, min, max) {
   const num = Number(value);
@@ -36,22 +32,26 @@ function addDays(date, days) {
   return new Date(new Date(date).getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-function getHistoryRange(stage, now = new Date()) {
+async function getHistoryRange(stage, now = new Date()) {
+  const config = await getSocialListeningRuntimeConfig();
+  const historyDays = clampPositiveInteger(config.scan?.historyDays, 30, 1, 90);
+  const recentDays = clampPositiveInteger(config.scan?.recentDays, 7, 1, 30);
   if (stage === "older_to_30d") {
-    return { startAt: addDays(now, -DEFAULT_HISTORY_DAYS), endAt: addDays(now, -DEFAULT_RECENT_DAYS) };
+    return { startAt: addDays(now, -historyDays), endAt: addDays(now, -recentDays) };
   }
-  return { startAt: addDays(now, -DEFAULT_RECENT_DAYS), endAt: now };
+  return { startAt: addDays(now, -recentDays), endAt: now };
 }
 
-function getIncrementalRange(board, now = new Date()) {
-  const overlapHours = clampPositiveInteger(DEFAULT_OVERLAP_HOURS, 2, 1, 24);
+async function getIncrementalRange(board, now = new Date()) {
+  const config = await getSocialListeningRuntimeConfig();
+  const overlapHours = clampPositiveInteger(config.scan?.incrementalOverlapHours, 2, 1, 24);
   const fallbackStart = addHours(now, -overlapHours);
   const processedThrough = board.processedThrough ? new Date(board.processedThrough) : fallbackStart;
   const startAt = new Date(Math.min(addHours(processedThrough, -overlapHours).getTime(), fallbackStart.getTime()));
   return { startAt, endAt: now };
 }
 
-function getJobRange(board, job) {
+async function getJobRange(board, job) {
   if (job.rangeStartAt && job.rangeEndAt) {
     return { startAt: new Date(job.rangeStartAt), endAt: new Date(job.rangeEndAt) };
   }
@@ -61,8 +61,8 @@ function getJobRange(board, job) {
   return getIncrementalRange(board);
 }
 
-function splitWindows(startAt, endAt, windowMinutes = DEFAULT_WINDOW_MINUTES) {
-  const minutes = clampPositiveInteger(windowMinutes, 60, 15, 240);
+function splitWindows(startAt, endAt, windowMinutes = 30) {
+  const minutes = clampPositiveInteger(windowMinutes, 30, 5, 240);
   const output = [];
   let cursor = new Date(startAt);
   const end = new Date(endAt);
@@ -159,8 +159,9 @@ async function processSocialListeningJob(jobId) {
   await markJobRunning(job);
   const counters = { scanned: 0, upserted: 0, windows: 0 };
   try {
-    const range = getJobRange(board, job);
-    const windows = splitWindows(range.startAt, range.endAt);
+    const runtimeConfig = await getSocialListeningRuntimeConfig();
+    const range = await getJobRange(board, job);
+    const windows = splitWindows(range.startAt, range.endAt, runtimeConfig.scan?.windowMinutes);
     for (const [index, window] of windows.entries()) {
       const result = await processWindow(board, window);
       counters.scanned += result.scanned;
@@ -198,14 +199,20 @@ async function processSocialListeningJob(jobId) {
       lastFailureReason: null,
     });
 
-    const contentAiResult = await analyzePendingContentMetadata(board, { limit: job.jobType === JOB_TYPES.HISTORY_BACKFILL ? 10 : 30 });
+    const contentAiLimit = job.jobType === JOB_TYPES.HISTORY_BACKFILL
+      ? Math.min(runtimeConfig.ai?.contentBatchSize || 10, 10)
+      : (runtimeConfig.ai?.contentBatchSize || 30);
+    const contentAiResult = await analyzePendingContentMetadata(board, { limit: contentAiLimit });
     counters.contentAiAnalyzed = contentAiResult.analyzed || 0;
     counters.contentAiFailed = contentAiResult.failed || 0;
     counters.contentAiSkipped = contentAiResult.skipped || 0;
     counters.contentAiEnabled = !!contentAiResult.enabled;
     counters.contentAiPromptOverrides = contentAiResult.promptOverrides || 0;
 
-    const aiResult = await analyzePendingProjectAttitudes(board, { limit: job.jobType === JOB_TYPES.HISTORY_BACKFILL ? 20 : 50 });
+    const attitudeAiLimit = job.jobType === JOB_TYPES.HISTORY_BACKFILL
+      ? Math.min(runtimeConfig.ai?.projectAttitudeBatchSize || 20, 20)
+      : (runtimeConfig.ai?.projectAttitudeBatchSize || 50);
+    const aiResult = await analyzePendingProjectAttitudes(board, { limit: attitudeAiLimit });
     counters.aiAnalyzed = aiResult.analyzed || 0;
     counters.aiFailed = aiResult.failed || 0;
     counters.aiEnabled = !!aiResult.enabled;
@@ -218,7 +225,7 @@ async function processSocialListeningJob(jobId) {
     await markJobSucceeded(job, { counters });
 
     if (job.jobType === JOB_TYPES.HISTORY_BACKFILL && (job.metadata?.stage || "recent_7d") === "recent_7d") {
-      const olderRange = getHistoryRange("older_to_30d");
+      const olderRange = await getHistoryRange("older_to_30d");
       await EchohuntSocialListeningJob.create({
         boardId: board.id,
         jobType: JOB_TYPES.HISTORY_BACKFILL,
@@ -243,7 +250,8 @@ async function processSocialListeningJob(jobId) {
 }
 
 async function recoverStaleRunningJobs(options = {}) {
-  const staleMinutes = clampPositiveInteger(options.staleMinutes || 60, 60, 15, 24 * 60);
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const staleMinutes = clampPositiveInteger(options.staleMinutes || runtimeConfig.scheduler?.staleRunningMinutes, 60, 15, 24 * 60);
   const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000);
   const [count] = await EchohuntSocialListeningJob.update(
     {

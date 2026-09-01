@@ -4,10 +4,10 @@ const {
   EchohuntSocialListeningPost,
   EchohuntSocialListeningAccessAuditLog,
 } = require("../../../models/postgres-start");
-const { EXPORT_MAX_ROWS } = require("../constants");
 const { normalizeRangeKey, getWindowForRange } = require("./aggregate-service");
 const { serializePost } = require("./board-service");
 const { publicError } = require("./errors");
+const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
 function buildPostWhere(boardId, query = {}) {
   const rangeKey = normalizeRangeKey(query.range);
@@ -40,24 +40,29 @@ function buildPostOrder(sort) {
 }
 
 async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null) {
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const exportConfig = runtimeConfig.export || {};
+  const exportMaxRows = exportConfig.maxRows || 10000;
   const cooldownSubject = actor.authCenterUserId || actor.adminId || "unknown";
-  const cooldownSeconds = actor.type === "admin" ? 5 * 60 : 10 * 60;
+  const cooldownSeconds = actor.type === "admin" ? exportConfig.adminCooldownSeconds : exportConfig.userCooldownSeconds;
   const cooldownKey = `echohunt:social-listening:export:${actor.type || "user"}:${cooldownSubject}:${board.id}`;
   if (redisClient?.set) {
-    const ok = await redisClient.set(cooldownKey, "1", { NX: true, EX: cooldownSeconds }).catch(() => "OK");
+    const ok = cooldownSeconds > 0
+      ? await redisClient.set(cooldownKey, "1", { NX: true, EX: cooldownSeconds }).catch(() => "OK")
+      : "OK";
     if (ok === null) throw publicError("EXPORT_RATE_LIMITED", 429, "导出太频繁，请稍后再试。", { retryAfter: cooldownSeconds });
   }
 
   const { where, rangeKey } = buildPostWhere(board.id, query);
   const total = await EchohuntSocialListeningPost.count({ where });
-  if (total > EXPORT_MAX_ROWS) {
-    throw publicError("EXPORT_TOO_LARGE", 400, `导出数据超过 ${EXPORT_MAX_ROWS} 行，请缩短时间范围或增加筛选条件。`);
+  if (total > exportMaxRows) {
+    throw publicError("EXPORT_TOO_LARGE", 400, `导出数据超过 ${exportMaxRows} 行，请缩短时间范围或增加筛选条件。`);
   }
 
   const rows = await EchohuntSocialListeningPost.findAll({
     where,
     order: buildPostOrder(query.sort),
-    limit: EXPORT_MAX_ROWS,
+    limit: exportMaxRows,
     raw: true,
   });
 

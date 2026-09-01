@@ -7,6 +7,7 @@ const {
 } = require("../../../models/postgres-start");
 const { RANGE_CONFIG, RANGE_KEYS, SENTIMENTS, ALERT_TYPES, ACCOUNT_SIGNAL_TYPES } = require("../constants");
 const { fetchFollowSignalsForBoard } = require("./data-source");
+const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
 function normalizeRangeKey(value) {
   const range = String(value || "7D").toUpperCase();
@@ -353,7 +354,9 @@ async function generateAggregateAlerts(board, options = {}) {
   const currentEndAt = options.until || now;
   const currentStartAt = options.since ? new Date(options.since) : new Date(currentEndAt.getTime() - 60 * 60 * 1000);
   const bucketStart = startOfHour(currentStartAt);
-  const baselineDays = Math.min(Math.max(Number(process.env.SOCIAL_LISTENING_ALERT_BASELINE_DAYS || 7), 1), 30);
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const alertConfig = runtimeConfig.alert || {};
+  const baselineDays = Math.min(Math.max(Number(alertConfig.baselineDays || 7), 1), 30);
   const baselineStartAt = new Date(currentStartAt.getTime() - baselineDays * 24 * 60 * 60 * 1000);
 
   const [currentPosts, baselinePosts] = await Promise.all([
@@ -371,8 +374,8 @@ async function generateAggregateAlerts(board, options = {}) {
   const baselineHour = bucketStart.getUTCHours();
   const sameHourBaseline = baselinePosts.filter((post) => new Date(post.postCreatedAt).getUTCHours() === baselineHour);
   const baselineAvg = sameHourBaseline.length / baselineDays;
-  const minVolume = Math.max(Number(process.env.SOCIAL_LISTENING_VOLUME_SPIKE_MIN_POSTS || 5), 1);
-  const volumeMultiplier = Math.max(Number(process.env.SOCIAL_LISTENING_VOLUME_SPIKE_MULTIPLIER || 2), 1);
+  const minVolume = Math.max(Number(alertConfig.volumeSpikeMinPosts || 5), 1);
+  const volumeMultiplier = Math.max(Number(alertConfig.volumeSpikeMultiplier || 2), 1);
   let alerts = 0;
 
   if (currentPosts.length >= minVolume && baselineAvg > 0 && currentPosts.length >= baselineAvg * volumeMultiplier) {
@@ -394,8 +397,8 @@ async function generateAggregateAlerts(board, options = {}) {
 
   const currentNegative = getNegativeRatio(currentPosts);
   const baselineNegative = getNegativeRatio(sameHourBaseline);
-  const minAnalyzed = Math.max(Number(process.env.SOCIAL_LISTENING_NEGATIVE_SPIKE_MIN_ANALYZED || 5), 1);
-  const ratioDelta = Number(process.env.SOCIAL_LISTENING_NEGATIVE_SHARE_SPIKE_DELTA || 0.2);
+  const minAnalyzed = Math.max(Number(alertConfig.negativeSpikeMinAnalyzed || 5), 1);
+  const ratioDelta = Number(alertConfig.negativeShareSpikeDelta ?? 0.2);
   if (
     currentNegative.analyzed >= minAnalyzed &&
     baselineNegative.analyzed >= minAnalyzed &&
@@ -422,9 +425,9 @@ async function generateAggregateAlerts(board, options = {}) {
   const negativePosts = currentPosts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE);
   const negativeAuthors = new Set(negativePosts.map((post) => post.authorTwitterId).filter(Boolean));
   const negativeViews = negativePosts.reduce((sum, post) => sum + toNumber(post.viewsCount), 0);
-  const minNegativePosts = Math.max(Number(process.env.SOCIAL_LISTENING_CONCENTRATED_NEGATIVE_MIN_POSTS || 3), 1);
-  const minNegativeAuthors = Math.max(Number(process.env.SOCIAL_LISTENING_CONCENTRATED_NEGATIVE_MIN_AUTHORS || 2), 1);
-  const minNegativeViews = Math.max(Number(process.env.SOCIAL_LISTENING_CONCENTRATED_NEGATIVE_MIN_VIEWS || 0), 0);
+  const minNegativePosts = Math.max(Number(alertConfig.concentratedNegativeMinPosts || 3), 1);
+  const minNegativeAuthors = Math.max(Number(alertConfig.concentratedNegativeMinAuthors || 2), 1);
+  const minNegativeViews = Math.max(Number(alertConfig.concentratedNegativeMinViews || 0), 0);
   if (
     negativePosts.length >= minNegativePosts &&
     negativeAuthors.size >= minNegativeAuthors &&

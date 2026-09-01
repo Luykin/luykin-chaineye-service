@@ -3,6 +3,7 @@
  *
  * 根据 LiteLLM 文档：https://docs.litellm.ai/docs/providers/lm_studio
  * 直接传递普通 JSON Schema，LiteLLM 会处理结构约束
+ * options 支持 apiKey/baseURL/timeout/maxRetries 覆盖，便于业务从 Nacos 动态配置。
  */
 
 const { getChatModel } = require("./models");
@@ -144,6 +145,10 @@ async function structuredChat(message, schema, options = {}) {
     temperature = 0,
     systemPrompt,
     maxTokens,
+    apiKey,
+    baseURL,
+    timeout,
+    maxRetries,
     debug = process.env.LLM_DEBUG === "true",
   } = options;
 
@@ -158,6 +163,10 @@ async function structuredChat(message, schema, options = {}) {
       temperature,
       streaming: false,
       maxTokens,
+      apiKey,
+      baseURL,
+      timeout,
+      maxRetries,
       debug,
       responseFormat: "json_schema",
       jsonSchema: {
