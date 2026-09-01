@@ -18,6 +18,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Pagination,
   Popconfirm,
   Progress,
   Row,
@@ -737,6 +738,110 @@ function PostAiInspector({ post }: { post: SocialListeningPost }) {
   );
 }
 
+
+function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open: boolean }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const samplesQuery = useQuery({
+    queryKey: ["social-listening", "latest-ai-samples", boardId, page, pageSize],
+    queryFn: () => fetchSocialListeningPosts(boardId, { range: "30D", page, pageSize, sort: "ai_recent", ai: "analyzed" }),
+    enabled: open && Boolean(boardId),
+    refetchInterval: open ? 15_000 : false,
+  });
+  const pageData = samplesQuery.data?.data;
+  const samples = pageData?.items || [];
+  const total = pageData?.total || 0;
+
+  return (
+    <Space direction="vertical" size={12} className="social-listening-full">
+      <Alert
+        type="info"
+        showIcon
+        message="最新 AI 回填样本"
+        description="按 aiAnalyzedAt 倒序展示最近回填过的帖子。看原文、中文全文/摘要、标签和态度结果，方便你判断 Prompt 是否需要调整。"
+        action={<Space size={8} wrap><Text type="secondary">共 {formatNumber(total)} 条</Text><Button size="small" icon={<ReloadOutlined />} loading={samplesQuery.isFetching} onClick={() => samplesQuery.refetch()}>刷新样本</Button></Space>}
+      />
+      {samples.length ? (
+        <Space direction="vertical" size={10} className="social-listening-full">
+          <Pagination
+            size="small"
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showSizeChanger
+            showQuickJumper
+            showTotal={(count, range) => `${range[0]}-${range[1]} / ${count} 条`}
+            pageSizeOptions={["10", "20", "50"]}
+            onChange={(nextPage, nextPageSize) => {
+              setPage(nextPage);
+              setPageSize(nextPageSize);
+            }}
+          />
+          {samples.map((post) => {
+            const row = post as SocialListeningPost & Record<string, unknown>;
+            const ai = asRecord(row.ai);
+            return (
+              <Card
+                key={post.id}
+                size="small"
+                title={<Space size={6} wrap><Text strong>@{post.author.handle || "-"}</Text><Tag>{post.source}</Tag>{statusTag(post.sentiment)}<Text type="secondary">{formatDate(getString(ai.aiAnalyzedAt))}</Text></Space>}
+                extra={<a href={post.tweetUrl} target="_blank" rel="noreferrer">打开推文</a>}
+              >
+                <Row gutter={[14, 12]}>
+                  <Col xs={24} lg={12}>
+                    <Space direction="vertical" size={8} className="social-listening-full">
+                      <Text type="secondary">原文</Text>
+                      <Paragraph copyable ellipsis={{ rows: 4, expandable: true, symbol: "展开" }}>{post.text || "-"}</Paragraph>
+                      <Space size={4} wrap>
+                        <Tooltip title="EchohuntSocialListeningPosts.tagStatus"><span>{statusTag(getString(ai.tagStatus))}</span></Tooltip>
+                        <Tooltip title="EchohuntSocialListeningPosts.summaryStatus"><span>{statusTag(getString(ai.summaryStatus))}</span></Tooltip>
+                        <Tooltip title="EchohuntSocialListeningPosts.attitudeStatus"><span>{statusTag(getString(ai.attitudeStatus))}</span></Tooltip>
+                        <Tag>{getString(ai.aiSource) || "aiSource -"}</Tag>
+                      </Space>
+                    </Space>
+                  </Col>
+                  <Col xs={24} lg={12}>
+                    <Space direction="vertical" size={8} className="social-listening-full">
+                      <Text type="secondary">AI 回填结果</Text>
+                      <Descriptions size="small" bordered column={1}>
+                        <Descriptions.Item label="中文全文"><Paragraph ellipsis={{ rows: 3, expandable: true, symbol: "展开" }}>{getString(row.postZh) || "-"}</Paragraph></Descriptions.Item>
+                        <Descriptions.Item label="中文摘要">{getString(row.summaryZh) || "-"}</Descriptions.Item>
+                        <Descriptions.Item label="英文摘要">{getString(row.summaryEn) || "-"}</Descriptions.Item>
+                        <Descriptions.Item label="态度说明">{getString(row.sentimentSummaryZh) || "-"}</Descriptions.Item>
+                        <Descriptions.Item label="态度分">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? "-" : String(row.projectAttitudeScore)}</Descriptions.Item>
+                      </Descriptions>
+                      <Space size={4} wrap>
+                        {Array.isArray(row.topics) && row.topics.length ? row.topics.slice(0, 8).map((item) => <Tag key={String(item)}>{String(item)}</Tag>) : <Tag>无 topics</Tag>}
+                        {Array.isArray(row.keywords) && row.keywords.length ? row.keywords.slice(0, 8).map((item) => <Tag key={String(item)} color="blue">{String(item)}</Tag>) : null}
+                      </Space>
+                    </Space>
+                  </Col>
+                </Row>
+              </Card>
+            );
+          })}
+          <Pagination
+            size="small"
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showSizeChanger
+            showQuickJumper
+            showTotal={(count, range) => `${range[0]}-${range[1]} / ${count} 条`}
+            pageSizeOptions={["10", "20", "50"]}
+            onChange={(nextPage, nextPageSize) => {
+              setPage(nextPage);
+              setPageSize(nextPageSize);
+            }}
+          />
+        </Space>
+      ) : (
+        <Empty description={samplesQuery.isFetching ? "正在读取最新 AI 回填样本" : "还没有可展示的 AI 回填样本"} />
+      )}
+    </Space>
+  );
+}
+
 function BoardFormGuide() {
   return (
     <Card size="small" className="social-listening-form-guide" title="字段教材">
@@ -950,7 +1055,7 @@ function AiRuntimeConfigPanel() {
                 type="info"
                 showIcon
                 message="AI 已从 15 分钟采集轮询拆出来"
-                description="采集任务只负责入库/聚合；这里的 AI Worker 单独按自己的频率回填旧帖和新帖，可独立暂停。待处理队列按正文长度从短到长执行，超长推文会先硬截断。"
+                description="采集任务只负责入库/聚合；AI Worker 有待处理时会每轮间隔约 10 秒连续回填旧帖和新帖，清空后才按空闲间隔检查，可独立暂停。待处理队列按正文长度从短到长执行，超长推文会先硬截断。"
                 style={{ marginBottom: 12 }}
               />
               <Row gutter={[12, 4]}>
@@ -959,7 +1064,7 @@ function AiRuntimeConfigPanel() {
                     <Select options={[{ value: "enabled", label: "允许运行" }, { value: "disabled", label: "强制关闭" }]} />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={6}><Form.Item name={["aiWorker", "tickIntervalMs"]} label="轮询间隔 ms"><InputNumber min={10000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "tickIntervalMs"]} label="空闲检查间隔 ms"><InputNumber min={10000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
                 <Col xs={12} md={6}><Form.Item name={["aiWorker", "maxBoardsPerTick"]} label="每轮账号数"><InputNumber min={1} max={20} style={{ width: "100%" }} /></Form.Item></Col>
                 <Col xs={12} md={6}><Form.Item name={["aiWorker", "maxTextLength"]} label="推文截断字符"><InputNumber min={200} max={5000} style={{ width: "100%" }} /></Form.Item></Col>
                 <Col xs={12} md={6}><Form.Item name={["aiWorker", "contentBatchSize"]} label="内容批大小"><InputNumber min={1} max={500} style={{ width: "100%" }} /></Form.Item></Col>
@@ -1115,7 +1220,7 @@ function AiProgressLine({
       </div>
       <Progress percent={percent} size="small" status={status} />
       <Text type="secondary">
-        待处理 {formatNumber(item.pending)} 条；每轮最多 {item.batchSize} 条，剩余约 {item.batchesRemaining} 轮，ETA {enabled ? formatEtaMinutes(item.estimatedMinutesRemaining) : "开启后开始估算"}。
+        待处理 {formatNumber(item.pending)} 条；每轮最多 {item.batchSize} 条，剩余约 {item.batchesRemaining} 轮，ETA {enabled ? formatEtaMinutes(item.estimatedMinutesRemaining) : "开启后开始估算"}（按连续回填粗估）。
       </Text>
     </Space>
   );
@@ -1490,6 +1595,11 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
                 children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里仅展示当前账号的实际任务记录；完整流程说明已放在页面底部「流程总览」。" /><Table rowKey="id" size="small" columns={jobColumns} dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} scroll={{ x: 1280 }} expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }} /></Space>,
               },
               {
+                key: "ai-samples",
+                label: "AI 回填样本",
+                children: <LatestAiBackfillSamplesPanel boardId={board.id} open={open} />,
+              },
+              {
                 key: "posts",
                 label: "推文字段追踪",
                 children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="展开每条推文，可以看到 AI 生成了哪些字段，以及这些字段保存在哪个表。" /><Space wrap><Select value={range} onChange={setRange} options={RANGE_OPTIONS} style={{ width: 100 }} /><Input.Search placeholder="搜索内容/作者" allowClear onSearch={(q) => setPostQuery((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={postQuery.sentiment} onChange={(sentiment) => setPostQuery((prev) => ({ ...prev, sentiment }))} style={{ width: 130 }} options={[{ value: "", label: "全部情绪" }, { value: "negative", label: "负面" }, { value: "neutral", label: "中性" }, { value: "positive", label: "正面" }, { value: "unknown", label: "未知" }]} /><Button icon={<DownloadOutlined />} onClick={() => window.open(buildSocialListeningExportUrl(board.id, { range, ...postQuery }), "_blank")}>导出</Button></Space><Table rowKey="id" size="small" columns={postColumns} dataSource={postsQuery.data?.data.items || []} loading={postsQuery.isFetching} pagination={false} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (row) => <PostAiInspector post={row} /> }} /></Space>,
@@ -1778,30 +1888,6 @@ export function SocialListeningPage() {
         </div>
 
 
-        <Card
-          size="small"
-          title="AI Worker 独立回填"
-          extra={<Space wrap>
-            {aiWorkerStatus?.enabled ? <Tag color="green">运行中</Tag> : <Tag color="orange">已暂停</Tag>}
-            <Button size="small" icon={<ReloadOutlined />} loading={aiWorkerQuery.isFetching} onClick={() => aiWorkerQuery.refetch()}>刷新状态</Button>
-            {aiWorkerStatus?.enabled ? (
-              <Button size="small" icon={<PauseCircleOutlined />} loading={pauseAiWorkerMutation.isPending} onClick={() => pauseAiWorkerMutation.mutate()}>暂停 AI</Button>
-            ) : (
-              <Button size="small" type="primary" icon={<PlayCircleOutlined />} loading={resumeAiWorkerMutation.isPending} onClick={() => resumeAiWorkerMutation.mutate()}>恢复 AI</Button>
-            )}
-          </Space>}
-        >
-          <Row gutter={[12, 12]} align="middle">
-            <Col xs={24} md={8} xl={6}>
-              <Text type="secondary">采集任务仍按 15 分钟跑；AI 由这个 Worker 单独回填，可独立暂停。</Text>
-            </Col>
-            <Col xs={12} md={4}><Statistic title="内容成功/轮" value={getNumberFromRecord(aiWorkerLastRun, "contentAnalyzed")} /></Col>
-            <Col xs={12} md={4}><Statistic title="态度成功/轮" value={getNumberFromRecord(aiWorkerLastRun, "attitudeAnalyzed")} /></Col>
-            <Col xs={12} md={4}><Statistic title="耗时" value={Math.round(getNumberFromRecord(aiWorkerLastRun, "durationMs") / 1000)} suffix="秒" /></Col>
-            <Col xs={12} md={4}><Statistic title="上次运行" value={formatDate(getString(aiWorkerLastRun.finishedAt))} /></Col>
-          </Row>
-        </Card>
-
         <PageSection
           title="被监控账号"
           description="新增账号默认暂停，不会自动跑任务；管理员点击恢复后先补最近 7 天数据，再低优先级补齐 30 天，后续增量任务每 15 分钟由 jobs 进程推进。"
@@ -1851,6 +1937,31 @@ export function SocialListeningPage() {
             ]}
           />
         </PageSection>
+
+        <Card
+          size="small"
+          title="AI Worker 独立回填"
+          extra={<Space wrap>
+            {aiWorkerStatus?.enabled ? <Tag color="green">运行中</Tag> : <Tag color="orange">已暂停</Tag>}
+            <Button size="small" icon={<ReloadOutlined />} loading={aiWorkerQuery.isFetching} onClick={() => aiWorkerQuery.refetch()}>刷新状态</Button>
+            {aiWorkerStatus?.enabled ? (
+              <Button size="small" icon={<PauseCircleOutlined />} loading={pauseAiWorkerMutation.isPending} onClick={() => pauseAiWorkerMutation.mutate()}>暂停 AI</Button>
+            ) : (
+              <Button size="small" type="primary" icon={<PlayCircleOutlined />} loading={resumeAiWorkerMutation.isPending} onClick={() => resumeAiWorkerMutation.mutate()}>恢复 AI</Button>
+            )}
+          </Space>}
+        >
+          <Row gutter={[12, 12]} align="middle">
+            <Col xs={24} md={8} xl={6}>
+              <Text type="secondary">采集增量仍按 15 分钟入库；AI Worker 有待处理时会每轮间隔约 10 秒连续回填，清空后才按空闲间隔检查，可独立暂停。</Text>
+            </Col>
+            <Col xs={12} md={4}><Statistic title="内容成功/轮" value={getNumberFromRecord(aiWorkerLastRun, "contentAnalyzed")} /></Col>
+            <Col xs={12} md={4}><Statistic title="态度成功/轮" value={getNumberFromRecord(aiWorkerLastRun, "attitudeAnalyzed")} /></Col>
+            <Col xs={12} md={4}><Statistic title="耗时" value={Math.round(getNumberFromRecord(aiWorkerLastRun, "durationMs") / 1000)} suffix="秒" /></Col>
+            <Col xs={12} md={4}><Statistic title="上次运行" value={formatDate(getString(aiWorkerLastRun.finishedAt))} /></Col>
+          </Row>
+        </Card>
+
       </Space>
 
       <Modal title={editingBoard ? "编辑被监控账号" : "新增被监控账号"} open={formOpen} onCancel={() => setFormOpen(false)} onOk={() => form.submit()} confirmLoading={saveMutation.isPending} okText="保存配置" cancelText="取消" width={1120}>

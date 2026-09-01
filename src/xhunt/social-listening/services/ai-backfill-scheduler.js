@@ -1,4 +1,8 @@
-const { EchohuntSocialListeningBoard } = require("../../../models/postgres-start");
+const { Op } = require("sequelize");
+const {
+  EchohuntSocialListeningBoard,
+  EchohuntSocialListeningPost,
+} = require("../../../models/postgres-start");
 const { BOARD_STATUSES } = require("../constants");
 const {
   analyzePendingContentMetadata,
@@ -11,6 +15,7 @@ const AI_WORKER_STATE_KEY = "echohunt:social-listening:ai-worker:state";
 const AI_WORKER_LAST_RUN_KEY = "echohunt:social-listening:ai-worker:last-run";
 const AI_WORKER_RUNNING_VALUE = "running";
 const AI_WORKER_PAUSED_VALUE = "paused";
+const AI_WORKER_ACTIVE_DELAY_MS = 10 * 1000;
 
 function clampInteger(value, fallback, min, max) {
   const num = Number(value);
@@ -21,6 +26,21 @@ function clampInteger(value, fallback, min, max) {
 async function getAiWorkerConfig() {
   const config = await getSocialListeningRuntimeConfig();
   return config.aiWorker || {};
+}
+
+function buildPendingAiPostWhere() {
+  return {
+    text: { [Op.ne]: null },
+    [Op.or]: [
+      { tagStatus: null },
+      { tagStatus: { [Op.in]: ["pending", "failed", "reused"] } },
+      { summaryStatus: null },
+      { summaryStatus: { [Op.in]: ["pending", "failed", "reused"] } },
+      { attitudeStatus: null },
+      { attitudeStatus: { [Op.in]: ["pending", "failed"] } },
+      { aiSource: "dev_tweet_ai" },
+    ],
+  };
 }
 
 async function isConfigDisabled() {
@@ -132,15 +152,31 @@ function createSocialListeningAiWorker({ redisClient, tickIntervalMs } = {}) {
     if (ticking) return { processing: true };
     ticking = true;
     const startedAt = Date.now();
-    const summary = { processedBoards: 0, skippedBoards: 0, contentAnalyzed: 0, contentFailed: 0, attitudeAnalyzed: 0, attitudeFailed: 0 };
+    const summary = {
+      processedBoards: 0,
+      skippedBoards: 0,
+      contentSelected: 0,
+      contentAnalyzed: 0,
+      contentFailed: 0,
+      attitudeSelected: 0,
+      attitudeAnalyzed: 0,
+      attitudeFailed: 0,
+    };
     try {
       const workerConfig = await getAiWorkerConfig();
       const maxBoards = clampInteger(workerConfig.maxBoardsPerTick, 3, 1, 20);
-      const boards = await EchohuntSocialListeningBoard.findAll({
-        where: { status: BOARD_STATUSES.MONITORING },
-        order: [["updatedAt", "ASC"]],
-        limit: Math.min(maxBoards * 10, 100),
+      const pendingBoardRows = await EchohuntSocialListeningPost.findAll({
+        attributes: ["boardId"],
+        where: buildPendingAiPostWhere(),
+        group: ["boardId"],
+        raw: true,
+        limit: Math.min(maxBoards * 20, 200),
       });
+      const pendingBoardIds = pendingBoardRows.map((item) => item.boardId).filter(Boolean);
+      const boards = pendingBoardIds.length ? await EchohuntSocialListeningBoard.findAll({
+        where: { id: { [Op.in]: pendingBoardIds }, status: BOARD_STATUSES.MONITORING },
+        order: [["updatedAt", "ASC"]],
+      }) : [];
       for (const board of boards) {
         if (summary.processedBoards >= maxBoards) break;
         const result = await withBoardLock(board.id, () => runBoardAi(board, workerConfig));
@@ -152,9 +188,17 @@ function createSocialListeningAiWorker({ redisClient, tickIntervalMs } = {}) {
           summary.skippedBoards += 1;
           continue;
         }
+        const contentSelected = result.content?.selected || 0;
+        const attitudeSelected = result.attitude?.selected || 0;
+        if (!contentSelected && !attitudeSelected) {
+          summary.skippedBoards += 1;
+          continue;
+        }
         summary.processedBoards += 1;
+        summary.contentSelected += contentSelected;
         summary.contentAnalyzed += result.content?.analyzed || 0;
         summary.contentFailed += result.content?.failed || 0;
+        summary.attitudeSelected += attitudeSelected;
         summary.attitudeAnalyzed += result.attitude?.analyzed || 0;
         summary.attitudeFailed += result.attitude?.failed || 0;
       }
@@ -175,16 +219,32 @@ function createSocialListeningAiWorker({ redisClient, tickIntervalMs } = {}) {
     }
   }
 
-  async function getNextTickIntervalMs() {
+  async function getIdleTickIntervalMs() {
     const config = await getAiWorkerConfig().catch(() => ({}));
     return Math.max(Number(config.tickIntervalMs || fallbackIntervalMs), 10 * 1000);
   }
 
+  function hasSelectedWork(summary = {}) {
+    return (
+      Number(summary.contentSelected || 0) > 0 ||
+      Number(summary.attitudeSelected || 0) > 0 ||
+      Number(summary.contentAnalyzed || 0) > 0 ||
+      Number(summary.contentFailed || 0) > 0 ||
+      Number(summary.attitudeAnalyzed || 0) > 0 ||
+      Number(summary.attitudeFailed || 0) > 0
+    );
+  }
+
+  async function getNextDelayMs(summary) {
+    if (hasSelectedWork(summary)) return AI_WORKER_ACTIVE_DELAY_MS;
+    return getIdleTickIntervalMs();
+  }
+
   function scheduleNext(delayMs) {
     timer = setTimeout(async () => {
-      await tick();
+      const result = await tick();
       if (!timer) return;
-      scheduleNext(await getNextTickIntervalMs());
+      scheduleNext(await getNextDelayMs(result));
     }, Math.max(delayMs, 1000));
     timer.unref?.();
   }

@@ -429,10 +429,10 @@ export function fetchSocialListeningSignals(boardId: string, query?: { page?: nu
   return apiRequest<{ success: boolean; data: SocialListeningPageData<SocialListeningAccountSignal> }>(withQuery(`${BASE_PATH}/boards/${boardId}/accounts`, query));
 }
 
-export function fetchSocialListeningPosts(boardId: string, query?: { page?: number; pageSize?: number; range?: string; sentiment?: string; source?: string; q?: string; sort?: string }) {
+export function fetchSocialListeningPosts(boardId: string, query?: { page?: number; pageSize?: number; range?: string; sentiment?: string; source?: string; q?: string; sort?: string; ai?: string }) {
   return apiRequest<{ success: boolean; data: SocialListeningPageData<SocialListeningPost> }>(withQuery(`${BASE_PATH}/boards/${boardId}/posts`, query));
 }
 
-export function buildSocialListeningExportUrl(boardId: string, query?: { range?: string; sentiment?: string; source?: string; q?: string; sort?: string }) {
+export function buildSocialListeningExportUrl(boardId: string, query?: { range?: string; sentiment?: string; source?: string; q?: string; sort?: string; ai?: string }) {
   return buildApiUrl(withQuery(`${BASE_PATH}/boards/${boardId}/posts/export`, query));
 }

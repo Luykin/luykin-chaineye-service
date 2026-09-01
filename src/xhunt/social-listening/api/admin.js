@@ -309,7 +309,7 @@ function buildAiProgressItem(done = 0, pending = 0, batchSize = 1, intervalMinut
 
 function buildBoardAiProgress(runtimeConfig = {}, stats = {}) {
   const worker = runtimeConfig.aiWorker || {};
-  const intervalMinutes = Math.max(1, Math.ceil(toFiniteNumber(worker.tickIntervalMs, 60000) / 60000));
+  const intervalMinutes = 1;
   const content = buildAiProgressItem(
     stats.contentAnalyzedPosts,
     stats.contentPendingPosts,
@@ -327,7 +327,7 @@ function buildBoardAiProgress(runtimeConfig = {}, stats = {}) {
     projectAttitude,
     intervalMinutes,
     estimatedMinutesRemaining: Math.max(content.estimatedMinutesRemaining, projectAttitude.estimatedMinutesRemaining),
-    assumption: "按独立 AI Worker 的每轮批大小估算；实际耗时会受 LLM 响应、并发、失败重试、账号数量和队列影响。",
+    assumption: "按独立 AI Worker 的每轮批大小估算；有待处理时会连续跑，清空后才按间隔检查；实际耗时会受 LLM 响应、并发、失败重试、账号数量和队列影响。",
   };
 }
 

@@ -18,6 +18,8 @@ function buildPostWhere(boardId, query = {}) {
   };
   const sentiment = String(query.sentiment || query.filter || "").trim().toLowerCase();
   if (["positive", "neutral", "negative", "unknown"].includes(sentiment)) where.sentiment = sentiment;
+  const aiFilter = String(query.ai || "").trim().toLowerCase();
+  if (["analyzed", "generated", "succeeded"].includes(aiFilter)) where.aiAnalyzedAt = { [Op.ne]: null };
   const source = String(query.source || "").trim().toLowerCase();
   if (["mention", "quote", "reply", "comment"].includes(source)) where.source = source;
   const q = String(query.q || "").trim();
@@ -55,6 +57,7 @@ function buildPostOrder(sort) {
   if (key === "views_desc") return [["viewsCount", "DESC"], ["postCreatedAt", "DESC"]];
   if (key === "engagement_desc") return [["likesCount", "DESC"], ["postCreatedAt", "DESC"]];
   if (key === "rank_asc") return [["authorGlobalRank", "ASC"], ["authorCnRank", "ASC"], ["postCreatedAt", "DESC"]];
+  if (key === "ai_recent") return [["aiAnalyzedAt", "DESC"], ["postCreatedAt", "DESC"]];
   return [["postCreatedAt", "DESC"]];
 }
 
