@@ -1,5 +1,5 @@
 const express = require("express");
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const { requirePermission } = require("../../../admin/middleware/adminAuth");
 const {
   EchohuntSocialListeningBoard,
@@ -25,6 +25,8 @@ const {
   serializeAccess,
   serializeJob,
   serializePost,
+  serializeAccountSignal,
+  enrichSignalAvatars,
   normalizePage,
   writeAudit,
 } = require("../services/board-service");
@@ -38,6 +40,56 @@ router.use(requirePermission(SOCIAL_LISTENING_PERMISSION));
 
 function getAdminId(req) {
   return req.adminUser?.id || null;
+}
+
+function normalizeAccountId(value) {
+  return String(value || "").trim();
+}
+
+function normalizeHandle(value) {
+  return String(value || "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+function applyExcludeOfficialAccount(where, board) {
+  const clauses = [];
+  const officialTwitterId = normalizeAccountId(board?.officialTwitterId);
+  const officialHandle = normalizeHandle(board?.officialHandle);
+  if (officialTwitterId) clauses.push({ twitterId: { [Op.ne]: officialTwitterId } });
+  if (officialHandle) {
+    clauses.push({
+      [Op.or]: [
+        { handle: null },
+        { handle: { [Op.notILike]: officialHandle } },
+      ],
+    });
+  }
+  if (clauses.length) where[Op.and] = [...(where[Op.and] || []), ...clauses];
+  return where;
+}
+
+function applyExcludeSelfMentionAlerts(where) {
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    literal(`
+      NOT (
+        "EchohuntSocialListeningAlert"."alertType" = 'influential_mention'
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(COALESCE("EchohuntSocialListeningAlert"."evidenceTweetIds", '[]'::jsonb)) AS evidence(tweet_id)
+          JOIN "EchohuntSocialListeningPosts" p
+            ON p."boardId" = "EchohuntSocialListeningAlert"."boardId"
+           AND p."tweetId" = evidence.tweet_id
+          JOIN "EchohuntSocialListeningBoards" b
+            ON b."id" = "EchohuntSocialListeningAlert"."boardId"
+          WHERE (
+            p."authorTwitterId" = b."officialTwitterId"
+            OR lower(coalesce(p."authorHandle", '')) = lower(coalesce(b."officialHandle", ''))
+          )
+        )
+      )
+    `),
+  ];
+  return where;
 }
 
 router.get("/monitored-accounts", async (req, res) => {
@@ -199,10 +251,15 @@ router.get("/boards/:boardId/posts/export", async (req, res) => {
 
 router.get("/boards/:boardId/accounts", async (req, res) => {
   try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = { boardId: req.params.boardId, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } };
+    const where = applyExcludeOfficialAccount(
+      { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } },
+      board
+    );
     if (req.query.type) where.signalType = String(req.query.type);
     const result = await EchohuntSocialListeningAccountSignal.findAndCountAll({
       where,
@@ -211,7 +268,8 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
       limit,
       raw: true,
     });
-    return res.json({ success: true, data: { rangeKey, items: result.rows, page, pageSize, total: result.count } });
+    const rows = await enrichSignalAvatars(result.rows);
+    return res.json({ success: true, data: { rangeKey, items: rows.map(serializeAccountSignal), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_SIGNALS_FAILED");
   }
@@ -219,10 +277,12 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
 
 router.get("/boards/:boardId/alerts", async (req, res) => {
   try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = { boardId: req.params.boardId, triggeredAt: { [Op.gte]: window.windowStartAt } };
+    const where = applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } });
     if (req.query.type) where.alertType = String(req.query.type);
     if (req.query.status) where.status = String(req.query.status);
     const result = await EchohuntSocialListeningAlert.findAndCountAll({
@@ -290,7 +350,7 @@ router.get("/jobs", async (req, res) => {
 router.get("/alerts", async (req, res) => {
   try {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
-    const where = {};
+    const where = applyExcludeSelfMentionAlerts({});
     if (req.query.boardId) where.boardId = String(req.query.boardId);
     if (req.query.type) where.alertType = String(req.query.type);
     if (req.query.status) where.status = String(req.query.status);

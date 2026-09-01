@@ -59,6 +59,24 @@ function isXhuntKolAccount(account = {}) {
     toNumber(account.cnRank) > 0;
 }
 
+function normalizeId(value) {
+  return String(value || "").trim();
+}
+
+function normalizeHandle(value) {
+  return String(value || "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+function isBoardOfficialAccount(board, account = {}) {
+  const officialTwitterId = normalizeId(board?.officialTwitterId);
+  const accountTwitterId = normalizeId(account.twitterId || account.authorTwitterId);
+  if (officialTwitterId && accountTwitterId && officialTwitterId === accountTwitterId) return true;
+
+  const officialHandle = normalizeHandle(board?.officialHandle);
+  const accountHandle = normalizeHandle(account.handle || account.authorHandle);
+  return Boolean(officialHandle && accountHandle && officialHandle === accountHandle);
+}
+
 function startOfHour(date) {
   const d = new Date(date);
   d.setUTCMinutes(0, 0, 0);
@@ -220,10 +238,24 @@ async function generateSnapshotsForBoard(board, options = {}) {
 async function generateInfluentialSignals(board, options = {}) {
   const since = options.since || new Date(Date.now() - 24 * 60 * 60 * 1000);
   const until = options.until || new Date();
+  const selfExclusions = [];
+  const officialTwitterId = normalizeId(board?.officialTwitterId);
+  const officialHandle = normalizeHandle(board?.officialHandle);
+  if (officialTwitterId) selfExclusions.push({ authorTwitterId: { [Op.ne]: officialTwitterId } });
+  if (officialHandle) {
+    selfExclusions.push({
+      [Op.or]: [
+        { authorHandle: null },
+        { authorHandle: { [Op.notILike]: officialHandle } },
+      ],
+    });
+  }
+
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
       boardId: board.id,
       postCreatedAt: { [Op.gte]: since, [Op.lt]: until },
+      ...(selfExclusions.length ? { [Op.and]: selfExclusions } : {}),
       [Op.or]: [
         { authorGlobalRank: { [Op.between]: [1, 10000] } },
         { authorCnRank: { [Op.between]: [1, 1500] } },
@@ -235,6 +267,7 @@ async function generateInfluentialSignals(board, options = {}) {
   });
 
   for (const post of posts) {
+    if (isBoardOfficialAccount(board, post)) continue;
     await EchohuntSocialListeningAccountSignal.upsert({
       boardId: board.id,
       twitterId: post.authorTwitterId,
@@ -265,7 +298,13 @@ async function generateInfluentialSignals(board, options = {}) {
       lastSeenAt: new Date(),
       titleZh: "高影响力账号提及",
       messageZh: `${post.authorName || post.authorHandle || post.authorTwitterId} 提及了 ${board.projectName}`,
-      currentValue: { globalRank: post.authorGlobalRank, cnRank: post.authorCnRank, views: post.viewsCount },
+      currentValue: {
+        authorTwitterId: post.authorTwitterId,
+        authorHandle: post.authorHandle,
+        globalRank: post.authorGlobalRank,
+        cnRank: post.authorCnRank,
+        views: post.viewsCount,
+      },
       baselineValue: null,
       sampleSize: 1,
       reason: "作者排名达到 Social Listening 预警阈值",
@@ -299,6 +338,7 @@ async function generateFollowSignals(board, options = {}) {
   for (const row of rows) {
     const account = row.account;
     if (!account?.twitterId) continue;
+    if (isBoardOfficialAccount(board, account)) continue;
     if (!isXhuntKolAccount(account)) continue;
     const displayName = account.name || account.handle || account.twitterId;
     await EchohuntSocialListeningAccountSignal.upsert({

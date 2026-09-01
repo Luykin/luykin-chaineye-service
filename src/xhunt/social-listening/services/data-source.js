@@ -113,6 +113,20 @@ function pickRank(user = {}) {
   };
 }
 
+function pickAvatarUrl(profile = {}) {
+  return profile.profile_image_url ||
+    profile.profile_image_url_https ||
+    profile.profileImageUrl ||
+    profile.profileImageUrlHttps ||
+    profile.avatar ||
+    profile.avatar_url ||
+    profile.avatarUrl ||
+    profile.image ||
+    profile.image_url ||
+    profile.imageUrl ||
+    null;
+}
+
 function serializeTwitterUser(row) {
   if (!row) return null;
   const profile = row.profile && typeof row.profile === "object" ? row.profile : {};
@@ -124,7 +138,7 @@ function serializeTwitterUser(row) {
     handleLower: String(row.username || handle || "").toLowerCase() || null,
     name: row.name || handle || null,
     description: profile.description || null,
-    avatar: profile.profile_image_url || null,
+    avatar: pickAvatarUrl(profile),
     banner: profile.profile_banner_url || null,
     verified: profile.verified ?? profile.is_blue_verified ?? null,
     followersCount: toNumberOrNull(profile.followers_count),
@@ -652,6 +666,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
         u.kol AS related_kol
       FROM relation_rows r
       JOIN dev.twitter_user u ON u.id::text = r.related_id
+      WHERE r.related_id <> $officialTwitterId
       ORDER BY r.occurred_at DESC
       LIMIT $limit
     `,

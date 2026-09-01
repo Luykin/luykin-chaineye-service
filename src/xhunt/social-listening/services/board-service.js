@@ -102,15 +102,78 @@ function getTwitterIdentityFromAuthCenter(authCenter) {
   };
 }
 
+function pickAvatarUrl(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function pickProfileAvatar(profile = {}) {
+  if (!profile || typeof profile !== "object") return null;
+  return pickAvatarUrl(
+    profile.profile_image_url,
+    profile.profile_image_url_https,
+    profile.profileImageUrl,
+    profile.profileImageUrlHttps,
+    profile.avatar,
+    profile.avatar_url,
+    profile.avatarUrl,
+    profile.image,
+    profile.image_url,
+    profile.imageUrl
+  );
+}
+
+function getBoardAvatar(row = {}) {
+  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+  const profileSnapshot = metadata.profileSnapshot && typeof metadata.profileSnapshot === "object" ? metadata.profileSnapshot : {};
+  const profile = profileSnapshot.profile && typeof profileSnapshot.profile === "object" ? profileSnapshot.profile : {};
+  return pickAvatarUrl(
+    row.projectAvatar,
+    metadata.projectAvatar,
+    metadata.avatar,
+    profileSnapshot.avatar,
+    pickProfileAvatar(profile)
+  );
+}
+
+async function ensureBoardAvatar(board) {
+  const row = toJson(board) || {};
+  if (getBoardAvatar(row) || !row.officialHandle) return board;
+
+  const account = await resolveTwitterUserByHandle(row.officialHandle).catch(() => null);
+  if (!account?.avatar) return board;
+
+  if (typeof board.update === "function") {
+    const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+    await board.update({
+      projectAvatar: account.avatar,
+      metadata: {
+        ...metadata,
+        profileSnapshot: metadata.profileSnapshot || account.raw || null,
+      },
+    }).catch(() => null);
+    return board;
+  }
+
+  row.projectAvatar = account.avatar;
+  return row;
+}
+
 function serializeBoard(record, extra = {}) {
   const row = toJson(record) || {};
+  const avatar = getBoardAvatar(row);
   return {
     id: row.id,
     officialTwitterId: row.officialTwitterId || null,
     officialHandle: row.officialHandle,
     projectName: row.projectName,
     projectDescription: row.projectDescription || null,
-    projectAvatar: row.projectAvatar || null,
+    projectAvatar: avatar,
+    avatar,
+    avatarUrl: avatar,
+    profileImageUrl: avatar,
     verified: row.verified,
     followersCount: row.followersCount === null || row.followersCount === undefined ? null : Number(row.followersCount),
     globalRank: row.globalRank || null,
@@ -172,6 +235,7 @@ function serializeJob(record) {
 
 function serializePost(record) {
   const row = toJson(record) || {};
+  const authorAvatar = pickAvatarUrl(row.authorAvatar, pickProfileAvatar(row.rawAuthor?.profile));
   const engagementCount = [row.likesCount, row.repostsCount, row.quotesCount, row.repliesCount]
     .map((v) => Number(v || 0))
     .reduce((a, b) => a + b, 0);
@@ -179,11 +243,17 @@ function serializePost(record) {
     id: row.id,
     tweetId: row.tweetId,
     tweetUrl: buildTweetUrl(row.authorHandle, row.tweetId),
+    authorTwitterId: row.authorTwitterId,
+    authorHandle: row.authorHandle,
+    authorName: row.authorName,
+    authorAvatar,
     author: {
       twitterId: row.authorTwitterId,
       handle: row.authorHandle,
       name: row.authorName,
-      avatar: row.authorAvatar,
+      avatar: authorAvatar,
+      avatarUrl: authorAvatar,
+      profileImageUrl: authorAvatar,
       followersCount: row.authorFollowersCount === null || row.authorFollowersCount === undefined ? null : Number(row.authorFollowersCount),
       globalRank: row.authorGlobalRank || null,
       cnRank: row.authorCnRank || null,
@@ -220,6 +290,47 @@ function serializePost(record) {
       aiSource: row.aiSource || null,
     },
   };
+}
+
+function serializeAccountSignal(record) {
+  const row = toJson(record) || {};
+  const avatar = pickAvatarUrl(row.avatar, row.avatarUrl, row.profileImageUrl);
+  return {
+    ...row,
+    avatar,
+    avatarUrl: avatar,
+    profileImageUrl: avatar,
+  };
+}
+
+async function enrichSignalAvatars(records = []) {
+  const rows = records.map((record) => toJson(record) || {});
+  const handles = Array.from(new Set(rows
+    .filter((row) => !pickAvatarUrl(row.avatar, row.avatarUrl, row.profileImageUrl))
+    .map((row) => normalizeTwitterHandle(row.handle))
+    .filter(Boolean)));
+  if (!handles.length) return rows;
+
+  const accountByHandle = new Map();
+  await Promise.all(handles.map(async (handle) => {
+    const account = await resolveTwitterUserByHandle(handle).catch(() => null);
+    if (account?.avatar) accountByHandle.set(handle, account);
+  }));
+  if (!accountByHandle.size) return rows;
+
+  return rows.map((row) => {
+    const handle = normalizeTwitterHandle(row.handle);
+    const account = handle ? accountByHandle.get(handle) : null;
+    if (!account?.avatar) return row;
+    return {
+      ...row,
+      avatar: row.avatar || account.avatar,
+      name: row.name || account.name,
+      followersCount: row.followersCount ?? account.followersCount,
+      globalRank: row.globalRank ?? account.globalRank,
+      cnRank: row.cnRank ?? account.cnRank,
+    };
+  });
 }
 
 async function writeAudit(payload, options = {}) {
@@ -515,7 +626,7 @@ async function listAccessibleBoards(authCenter) {
     }
     const board = access.board;
     if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) continue;
-    boards.push(serializeBoard(board, { accessId: access.id }));
+    boards.push(serializeBoard(await ensureBoardAvatar(board), { accessId: access.id }));
   }
   return boards;
 }
@@ -543,8 +654,9 @@ async function assertBoardAccess(authCenter, boardId) {
 }
 
 async function getBoardDetail(boardId, authCenter = null) {
-  const board = authCenter ? (await assertBoardAccess(authCenter, boardId)).board : await EchohuntSocialListeningBoard.findByPk(boardId);
+  let board = authCenter ? (await assertBoardAccess(authCenter, boardId)).board : await EchohuntSocialListeningBoard.findByPk(boardId);
   if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+  board = await ensureBoardAvatar(board);
   const [latestJob, accessCount, postCount] = await Promise.all([
     EchohuntSocialListeningJob.findOne({ where: { boardId }, order: [["createdAt", "DESC"]] }),
     EchohuntSocialListeningBoardAccess.count({ where: { boardId, status: ACCESS_STATUSES.ACTIVE } }),
@@ -605,6 +717,8 @@ module.exports = {
   serializeAccess,
   serializeJob,
   serializePost,
+  serializeAccountSignal,
+  enrichSignalAvatars,
   writeAudit,
   resolveMonitoredAccount,
   createMonitoredAccount,

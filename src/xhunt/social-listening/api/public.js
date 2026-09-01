@@ -1,5 +1,5 @@
 const express = require("express");
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const { authenticateAuthCenterToken } = require("../../auth-center/middleware/auth");
 const {
   EchohuntSocialListeningPost,
@@ -14,9 +14,10 @@ const {
   assertBoardAccess,
   getBoardDetail,
   createManualRefreshJob,
-  serializeBoard,
   serializeJob,
   serializePost,
+  serializeAccountSignal,
+  enrichSignalAvatars,
   normalizePage,
   parseTweetUrl,
 } = require("../services/board-service");
@@ -27,6 +28,56 @@ const { buildTweetUrl } = require("../utils/twitter");
 
 const router = express.Router();
 router.use(authenticateAuthCenterToken());
+
+function normalizeAccountId(value) {
+  return String(value || "").trim();
+}
+
+function normalizeHandle(value) {
+  return String(value || "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+function applyExcludeOfficialAccount(where, board) {
+  const clauses = [];
+  const officialTwitterId = normalizeAccountId(board?.officialTwitterId);
+  const officialHandle = normalizeHandle(board?.officialHandle);
+  if (officialTwitterId) clauses.push({ twitterId: { [Op.ne]: officialTwitterId } });
+  if (officialHandle) {
+    clauses.push({
+      [Op.or]: [
+        { handle: null },
+        { handle: { [Op.notILike]: officialHandle } },
+      ],
+    });
+  }
+  if (clauses.length) where[Op.and] = [...(where[Op.and] || []), ...clauses];
+  return where;
+}
+
+function applyExcludeSelfMentionAlerts(where) {
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    literal(`
+      NOT (
+        "EchohuntSocialListeningAlert"."alertType" = 'influential_mention'
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(COALESCE("EchohuntSocialListeningAlert"."evidenceTweetIds", '[]'::jsonb)) AS evidence(tweet_id)
+          JOIN "EchohuntSocialListeningPosts" p
+            ON p."boardId" = "EchohuntSocialListeningAlert"."boardId"
+           AND p."tweetId" = evidence.tweet_id
+          JOIN "EchohuntSocialListeningBoards" b
+            ON b."id" = "EchohuntSocialListeningAlert"."boardId"
+          WHERE (
+            p."authorTwitterId" = b."officialTwitterId"
+            OR lower(coalesce(p."authorHandle", '')) = lower(coalesce(b."officialHandle", ''))
+          )
+        )
+      )
+    `),
+  ];
+  return where;
+}
 
 router.get("/me/access-summary", async (req, res) => {
   try {
@@ -68,7 +119,7 @@ router.get("/boards/:boardId/overview", async (req, res) => {
     return res.json({
       success: true,
       data: {
-        board: serializeBoard(board),
+        board: await getBoardDetail(board.id, req.authCenter),
         rangeKey,
         state: snapshot ? "ready" : (board.status === "failed" ? "failed" : "processing"),
         snapshot: snapshot || null,
@@ -141,12 +192,16 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } };
+    const where = applyExcludeOfficialAccount(
+      { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } },
+      board
+    );
     if (req.query.type) where.signalType = String(req.query.type);
     const q = String(req.query.q || "").trim();
     if (q) where[Op.or] = [{ handle: { [Op.iLike]: `%${q.replace(/^@+/, "")}%` } }, { name: { [Op.iLike]: `%${q}%` } }];
     const result = await EchohuntSocialListeningAccountSignal.findAndCountAll({ where, order: [["occurredAt", "DESC"]], offset, limit, raw: true });
-    return res.json({ success: true, data: { rangeKey, items: result.rows, page, pageSize, total: result.count } });
+    const rows = await enrichSignalAvatars(result.rows);
+    return res.json({ success: true, data: { rangeKey, items: rows.map(serializeAccountSignal), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCOUNTS_FAILED");
   }
@@ -161,7 +216,8 @@ router.get("/boards/:boardId/accounts/:twitterId", async (req, res) => {
       EchohuntSocialListeningAccountSignal.findAll({ where: { boardId: board.id, twitterId: req.params.twitterId, occurredAt: { [Op.gte]: window.windowStartAt } }, order: [["occurredAt", "DESC"]], limit: 50, raw: true }),
       EchohuntSocialListeningPost.findAll({ where: { boardId: board.id, authorTwitterId: req.params.twitterId, postCreatedAt: { [Op.gte]: window.windowStartAt } }, order: [["postCreatedAt", "DESC"]], limit: 50 }),
     ]);
-    return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals, posts: posts.map(serializePost) } });
+    const enrichedSignals = await enrichSignalAvatars(signals);
+    return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals: enrichedSignals.map(serializeAccountSignal), posts: posts.map(serializePost) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCOUNT_DETAIL_FAILED");
   }
@@ -173,7 +229,7 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = { boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } };
+    const where = applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } });
     if (req.query.type) where.alertType = String(req.query.type);
     const result = await EchohuntSocialListeningAlert.findAndCountAll({ where, order: [["triggeredAt", "DESC"]], offset, limit, raw: true });
     return res.json({ success: true, data: { rangeKey, items: result.rows, page, pageSize, total: result.count } });
