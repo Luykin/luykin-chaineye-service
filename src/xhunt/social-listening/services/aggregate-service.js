@@ -962,6 +962,7 @@ async function generateAggregateAlerts(board, options = {}) {
 module.exports = {
   normalizeRangeKey,
   getWindowForRange,
+  buildSnapshotPayload,
   generateSnapshotsForBoard,
   generateInfluentialSignals,
   generateFollowSignals,
