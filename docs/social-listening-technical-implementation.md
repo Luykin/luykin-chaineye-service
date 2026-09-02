@@ -184,7 +184,8 @@ AI 字段当前来源：
 
 - `summaryZh/summaryEn`：来自一次综合 `tweetAnalysis` 的 `summary_cn/summary_en`。
 - `topics`：来自 `domain_tag/crypto_sub_tags/ai_sub_tags` 规整后的主题集合；自由文本 `tags` 仅作兼容记录，不作为主聚合口径。
-- `keywords`：入库保留命中关键词 + `hot_tags`；聚合词云只使用过滤后的讨论热词，排除项目名、官方 handle、token、aliases、召回 keywords。
+- `keywords`：入库保留命中关键词 + `hot_tags`；聚合词云只使用过滤后的讨论热词，排除项目名、官方 handle、token、aliases、召回 keywords，以及看板级 `metadata.wordCloudExcludeKeywords`。
+- `metadata.recallExcludeKeywords`：召回阶段排除词，命中后帖子不入库；用于必须排除的噪音文本。
 - `projectAttitudeScore/sentiment/sentimentSummaryZh`：来自 `score/sentiment/attitude_summary`。
 - `aiSource` 主口径：`social_listening_combined`。
 - `postZh`：当前不使用、不查询、不写入；如有错误日志说明存在旧引用。
@@ -219,9 +220,10 @@ AI 字段当前来源：
 
 匹配来源：
 
-- `mention`：正文或 `info.mentions` 命中官方 handle / 关键词。
-- `quote`：引用官方账号相关推文。
-- `reply/comment`：回复或会话命中官方账号相关会话。
+- 正文召回：`officialHandle / projectName / metadata.keywords / metadata.aliases / metadata.token` 合并为一组召回词，匹配 `dev.tweet.text`；不区分强词/弱词。
+- 关系召回：引用或回复官方账号近期推文时也会召回。
+- 召回排除：如 `dev.tweet.text` 命中 `metadata.recallExcludeKeywords`，即使命中召回词或引用/回复官方推文，也不入库。
+- `info.mentions`：当前主要用于入库后辅助标记来源类型，不是主召回入口。
 - `retweet`：默认不作为独立主口径，后续如纳入需明确标记。
 
 去重：`boardId + tweetId` 唯一。同一帖子命中多个来源时只入库一次，多来源可记录在 `rawTweet.matchedSources`。
@@ -505,7 +507,7 @@ POST /api/admin/social-listening/ai-worker/resume
 - 互动：likes + reposts + quotes + replies。
 - 情绪：只统计明确 positive/neutral/negative 的帖子；unknown 单独记录。
 - 主题：聚合 `topics`。
-- 词云：聚合过滤后的 AI 讨论热词，不直接展示召回关键词。
+- 词云：聚合过滤后的 AI 讨论热词，不直接展示召回关键词；可通过看板配置追加词云排除词。
 
 预警：
 

@@ -191,6 +191,16 @@ function buildBoardKeywords(board) {
   ]);
 }
 
+function buildBoardRecallExcludeKeywords(board) {
+  const metadata = board?.metadata && typeof board.metadata === "object" ? board.metadata : {};
+  const recall = metadata.recall && typeof metadata.recall === "object" ? metadata.recall : {};
+  return normalizeKeywords([
+    ...(Array.isArray(metadata.recallExcludeKeywords) ? metadata.recallExcludeKeywords : []),
+    ...(Array.isArray(metadata.excludeKeywords) ? metadata.excludeKeywords : []),
+    ...(Array.isArray(recall.excludeKeywords) ? recall.excludeKeywords : []),
+  ]);
+}
+
 async function fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, limit) {
   if (!isNumericId(board?.officialTwitterId)) return [];
   const rows = await queryReadonlyWithStatementTimeout(
@@ -217,7 +227,7 @@ async function fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, limit) {
   return rows.map((row) => String(row.id)).filter(Boolean);
 }
 
-async function fetchCandidateTweetPage(db, bind, keywordClause) {
+async function fetchCandidateTweetPage(db, bind, keywordClause, excludeClause) {
   return queryReadonlyWithStatementTimeout(
     db,
     `
@@ -225,14 +235,17 @@ async function fetchCandidateTweetPage(db, bind, keywordClause) {
         t.id::text AS id,
         t.create_time,
         (
-          ${keywordClause}
-          OR (
-            cardinality($officialTweetIds::text[]) > 0
-            AND (
-              t.quote_id::text = ANY($officialTweetIds::text[])
-              OR t.reply_id::text = ANY($officialTweetIds::text[])
+          (
+            ${keywordClause}
+            OR (
+              cardinality($officialTweetIds::text[]) > 0
+              AND (
+                t.quote_id::text = ANY($officialTweetIds::text[])
+                OR t.reply_id::text = ANY($officialTweetIds::text[])
+              )
             )
           )
+          AND NOT (${excludeClause})
         ) AS is_match
       FROM dev.tweet t
       WHERE t.create_time >= $startAt
@@ -391,10 +404,23 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
   const scanLimit = pageSize * maxPages;
   const officialPostLimit = clampInteger(options.officialPostScanLimit || scanConfig.officialPostScanLimit, scanConfig.officialPostScanLimit || 1000, 50, 5000);
   const keywords = buildBoardKeywords(board).slice(0, 10);
+  const recallExcludeKeywords = buildBoardRecallExcludeKeywords(board).slice(0, 20);
   const patterns = keywords.map(buildKeywordScanPattern);
+  const excludePatterns = recallExcludeKeywords.map((keyword, index) => ({
+    ...buildKeywordScanPattern(keyword, index),
+    key: `excludeKw${index}`,
+  }));
 
   const keywordClause = patterns.length
     ? patterns.map((item) => (
+      item.type === "regex"
+        ? `COALESCE(t.text, '') ~* $${item.key}`
+        : `t.text ILIKE $${item.key} ESCAPE '\\'`
+    )).join(" OR ")
+    : "FALSE";
+
+  const excludeClause = excludePatterns.length
+    ? excludePatterns.map((item) => (
       item.type === "regex"
         ? `COALESCE(t.text, '') ~* $${item.key}`
         : `t.text ILIKE $${item.key} ESCAPE '\\'`
@@ -407,6 +433,7 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
     maxPages,
     scanLimit,
     matchLimit: limit,
+    recallExcludeCount: recallExcludeKeywords.length,
     officialPostLimit,
     officialPostCount: 0,
     pagesScanned: 0,
@@ -434,8 +461,9 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
         officialTweetIds,
       };
       patterns.forEach((item) => { bind[item.key] = item.value; });
+      excludePatterns.forEach((item) => { bind[item.key] = item.value; });
 
-      const pageRows = await fetchCandidateTweetPage(db, bind, keywordClause);
+      const pageRows = await fetchCandidateTweetPage(db, bind, keywordClause, excludeClause);
       scanMeta.pagesScanned += 1;
       scanMeta.candidatesScanned += pageRows.length;
       if (!pageRows.length) {

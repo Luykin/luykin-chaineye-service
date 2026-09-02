@@ -351,6 +351,7 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
   const officialHandle = assertTwitterHandle(input.officialHandle || input.handle || resolved?.handleLower || resolved?.handle);
   const projectName = String(input.projectName || resolved?.name || officialHandle).trim().slice(0, 255);
   if (!projectName) throw publicError("PROJECT_NAME_REQUIRED", 400, "请填写项目名称。");
+  const inputMetadata = input.metadata && typeof input.metadata === "object" ? input.metadata : {};
   const keywords = normalizeKeywords([
     officialHandle,
     projectName,
@@ -372,9 +373,11 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
     createdByAdminId: adminId,
     updatedByAdminId: adminId,
     metadata: {
-      ...(input.metadata && typeof input.metadata === "object" ? input.metadata : {}),
+      ...inputMetadata,
       keywords,
       aliases: normalizeKeywords(input.aliases || []),
+      recallExcludeKeywords: normalizeKeywords(inputMetadata.recallExcludeKeywords || input.recallExcludeKeywords || []),
+      wordCloudExcludeKeywords: normalizeKeywords(inputMetadata.wordCloudExcludeKeywords || input.wordCloudExcludeKeywords || []),
       aiRuntime: {
         contentEnabled: false,
         projectAttitudeEnabled: false,
@@ -531,6 +534,13 @@ async function updateBoard(boardId, input = {}, adminId = null) {
   });
   if (Array.isArray(input.keywords)) patch.metadata.keywords = normalizeKeywords(input.keywords);
   if (Array.isArray(input.aliases)) patch.metadata.aliases = normalizeKeywords(input.aliases);
+  const inputMetadata = input.metadata && typeof input.metadata === "object" ? input.metadata : {};
+  if (Array.isArray(inputMetadata.wordCloudExcludeKeywords) || Array.isArray(input.wordCloudExcludeKeywords)) {
+    patch.metadata.wordCloudExcludeKeywords = normalizeKeywords(inputMetadata.wordCloudExcludeKeywords || input.wordCloudExcludeKeywords || []);
+  }
+  if (Array.isArray(inputMetadata.recallExcludeKeywords) || Array.isArray(input.recallExcludeKeywords)) {
+    patch.metadata.recallExcludeKeywords = normalizeKeywords(inputMetadata.recallExcludeKeywords || input.recallExcludeKeywords || []);
+  }
   if (input.status && Object.values(BOARD_STATUSES).includes(input.status)) patch.status = input.status;
   await board.update(patch);
   await writeAudit({ boardId: board.id, adminId, action: "board_update", payload: patch });

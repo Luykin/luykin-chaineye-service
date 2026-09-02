@@ -113,6 +113,8 @@ const FIELD_GUIDE = [
   { label: "关键词", table: "Boards.metadata.keywords", desc: "推文召回词，每行一个；会和官方 handle、项目名称合并后匹配 dev.tweet.text。" },
   { label: "别名", table: "Boards.metadata.aliases", desc: "项目常见别称、代币名、缩写；也会参与召回，适合写 ticker、旧品牌名。" },
   { label: "Token", table: "Boards.metadata.token", desc: "项目代币符号或合约简称，会追加到召回关键词里；不是 API 密钥。" },
+  { label: "召回排除词", table: "Boards.metadata.recallExcludeKeywords", desc: "命中后直接不入库，适合明显无关、诈骗、抽奖噪音等必须排除的文本。" },
+  { label: "词云排除词", table: "Boards.metadata.wordCloudExcludeKeywords", desc: "只影响词云，不影响召回；适合品牌词、官方账号、ticker、刷屏但没信息量的词。" },
   { label: "关注关系源", table: "Boards.metadata.followSources", desc: "说明关注/取关信号来自哪些来源表；实际匹配账号用 officialTwitterId，不需要额外填写项目 key。" },
   { label: "AI 项目名", table: "Boards.metadata.aiProjectName", desc: "覆盖项目态度 AI 中的 project 名称，适合项目名与品牌名/协议名不一致时使用。" },
   { label: "AI 提示语", table: "Boards.metadata.aiPrompts", desc: "把综合分析 Prompt 保存为可配置文本；旧拆分 Prompt 仅作兼容兜底。" },
@@ -453,6 +455,8 @@ function boardFormInitialValues(board?: SocialListeningBoard | null) {
     brandColor: board?.brandColor || undefined,
     keywords: Array.isArray(metadata.keywords) ? metadata.keywords.join("\n") : "",
     aliases: Array.isArray(metadata.aliases) ? metadata.aliases.join("\n") : "",
+    recallExcludeKeywords: Array.isArray(metadata.recallExcludeKeywords) ? metadata.recallExcludeKeywords.join("\n") : "",
+    wordCloudExcludeKeywords: Array.isArray(metadata.wordCloudExcludeKeywords) ? metadata.wordCloudExcludeKeywords.join("\n") : "",
     token: typeof metadata.token === "string" ? metadata.token : "",
     followSources: Array.isArray(metadata.followSources) ? metadata.followSources : ["twitter_user_follow", "twitter_user_unfollow", "project_follow"],
     aiProjectName: typeof metadata.aiProjectName === "string" ? metadata.aiProjectName : "",
@@ -485,6 +489,8 @@ function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedT
   };
   const metadata = {
     token: values.token || null,
+    recallExcludeKeywords: splitTextarea(String(values.recallExcludeKeywords || "")),
+    wordCloudExcludeKeywords: splitTextarea(String(values.wordCloudExcludeKeywords || "")),
     followSources: values.followSources || [],
     aiProjectName: values.aiProjectName || null,
     aiPrompts,
@@ -599,6 +605,8 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
                 <Descriptions.Item label="关系源表">{renderTagList(metadata.followSources)}</Descriptions.Item>
                 <Descriptions.Item label="关键词" span={2}>{renderTagList(metadata.keywords)}</Descriptions.Item>
                 <Descriptions.Item label="别名" span={2}>{renderTagList(metadata.aliases)}</Descriptions.Item>
+                <Descriptions.Item label="召回排除词" span={2}>{renderTagList(metadata.recallExcludeKeywords)}</Descriptions.Item>
+                <Descriptions.Item label="词云排除词" span={2}>{renderTagList(metadata.wordCloudExcludeKeywords)}</Descriptions.Item>
                 {board.lastFailureReason ? <Descriptions.Item label="失败原因" span={2}><Text type="danger">{board.lastFailureReason}</Text></Descriptions.Item> : null}
               </Descriptions>
             ),
@@ -705,6 +713,8 @@ function ConfigGuide({ board }: { board?: SocialListeningBoard | null }) {
           <Descriptions.Item label="Token">{getString(metadata.token) || "-"}</Descriptions.Item>
           <Descriptions.Item label="官方 Twitter ID">{board.officialTwitterId || "未解析"}</Descriptions.Item>
           <Descriptions.Item label="关注关系源" span={2}>{Array.isArray(metadata.followSources) ? metadata.followSources.join("、") : "-"}</Descriptions.Item>
+          <Descriptions.Item label="召回排除词" span={2}>{renderTagList(metadata.recallExcludeKeywords)}</Descriptions.Item>
+          <Descriptions.Item label="词云排除词" span={2}>{renderTagList(metadata.wordCloudExcludeKeywords)}</Descriptions.Item>
           <Descriptions.Item label="AI 项目名" span={2}>{getString(metadata.aiProjectName) || board.projectName}</Descriptions.Item>
           <Descriptions.Item label="AI Prompts" span={2}><pre className="social-listening-json-block">{jsonPreview(metadata.aiPrompts)}</pre></Descriptions.Item>
         </Descriptions>
@@ -2020,6 +2030,12 @@ export function SocialListeningPage() {
                 <Col span={12}><Form.Item name="token" label="Token" extra="项目代币符号，会追加到召回关键词；不是 API token。"><Input placeholder="可选，例如 ETH" /></Form.Item></Col>
                 <Col span={12}><Form.Item name="followSources" label="关注关系源" extra="关注/取关信号来源表。具体账号唯一身份使用解析得到的 officialTwitterId，不需要手填 project key。"><Select mode="multiple" options={FOLLOW_SOURCE_OPTIONS} placeholder="选择来源表" /></Form.Item></Col>
               </Row>
+              <Form.Item name="recallExcludeKeywords" label="召回排除词（每行一个）" extra="命中后这条推文直接不入库。只填必须排除的明显噪音；例如 scam、fake airdrop、单独刷屏词。">
+                <TextArea rows={3} placeholder={"scam giveaway\nfake airdrop"} />
+              </Form.Item>
+              <Form.Item name="wordCloudExcludeKeywords" label="词云排除词（每行一个）" extra="只影响词云展示，不影响推文召回和 AI 分析。适合填品牌词、官方账号、ticker、容易刷屏但没有信息量的词。">
+                <TextArea rows={3} placeholder={"binance\nbnb\ncz_binance"} />
+              </Form.Item>
               <Collapse
                 className="social-listening-ai-collapse"
                 bordered={false}

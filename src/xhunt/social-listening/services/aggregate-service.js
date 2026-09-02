@@ -164,11 +164,15 @@ function normalizeWordKey(value) {
 
 function getBoardDiscussionKeywordExclusions(board = {}) {
   const metadata = board.metadata && typeof board.metadata === "object" ? board.metadata : {};
+  const wordCloud = metadata.wordCloud && typeof metadata.wordCloud === "object" ? metadata.wordCloud : {};
   const values = [
     board.officialHandle,
     board.projectName,
     ...(Array.isArray(metadata.keywords) ? metadata.keywords : []),
     ...(Array.isArray(metadata.aliases) ? metadata.aliases : []),
+    ...(Array.isArray(metadata.wordCloudExcludeKeywords) ? metadata.wordCloudExcludeKeywords : []),
+    ...(Array.isArray(metadata.wordCloudExcludedKeywords) ? metadata.wordCloudExcludedKeywords : []),
+    ...(Array.isArray(wordCloud.excludeKeywords) ? wordCloud.excludeKeywords : []),
     ...(metadata.token ? [metadata.token] : []),
   ];
   return new Set(values.map(normalizeWordKey).filter(Boolean));
