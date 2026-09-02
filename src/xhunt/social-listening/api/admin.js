@@ -30,7 +30,7 @@ const {
   normalizePage,
   writeAudit,
 } = require("../services/board-service");
-const { normalizeRangeKey, getWindowForRange } = require("../services/aggregate-service");
+const { normalizeRangeKey, getWindowForRange, appendDerivedNegativeContentAlert } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { enableSocialListeningScheduler } = require("../services/scheduler");
 const {
@@ -844,7 +844,10 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
       limit,
       raw: true,
     });
-    return res.json({ success: true, data: { rangeKey, items: result.rows, page, pageSize, total: result.count } });
+    const derived = offset === 0 && (!req.query.status || String(req.query.status) === "active")
+      ? await appendDerivedNegativeContentAlert(board, window, result.rows, { type: req.query.type })
+      : { rows: result.rows, appended: false };
+    return res.json({ success: true, data: { rangeKey, items: derived.rows.slice(0, limit), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_BOARD_ALERTS_FAILED");
   }

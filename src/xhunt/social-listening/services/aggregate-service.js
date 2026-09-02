@@ -618,6 +618,90 @@ async function upsertAggregateAlert(board, payload) {
   return 1;
 }
 
+function getRangeLabel(rangeKey) {
+  if (rangeKey === "24H") return "最近 24 小时";
+  if (rangeKey === "30D") return "最近 30 天";
+  return "最近 7 天";
+}
+
+async function buildDerivedNegativeContentAlertForRange(board, window, options = {}) {
+  if (!board?.id || !window?.windowStartAt || !window?.windowEndAt) return null;
+  const where = {
+    boardId: board.id,
+    sentiment: SENTIMENTS.NEGATIVE,
+    postCreatedAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt },
+  };
+  const evidenceLimit = Math.min(Math.max(Number(options.evidenceLimit || 20), 1), 50);
+  const [negativeCount, negativeAuthorCount, negativeViews, evidencePosts] = await Promise.all([
+    EchohuntSocialListeningPost.count({ where }),
+    EchohuntSocialListeningPost.count({ where, distinct: true, col: "authorTwitterId" }).catch(() => 0),
+    EchohuntSocialListeningPost.sum("viewsCount", { where }).catch(() => 0),
+    EchohuntSocialListeningPost.findAll({
+      where,
+      attributes: ["tweetId", "postCreatedAt", "viewsCount"],
+      order: [["postCreatedAt", "DESC"]],
+      limit: evidenceLimit,
+      raw: true,
+    }),
+  ]);
+  if (!negativeCount) return null;
+
+  const runtimeConfig = await getSocialListeningRuntimeConfig().catch(() => ({}));
+  const alertConfig = runtimeConfig.alert || {};
+  const minNegativePosts = Math.max(Number(alertConfig.concentratedNegativeMinPosts || 3), 1);
+  const minNegativeAuthors = Math.max(Number(alertConfig.concentratedNegativeMinAuthors || 2), 1);
+  const minNegativeViews = Math.max(Number(alertConfig.concentratedNegativeMinViews || 0), 0);
+  const views = toNumber(negativeViews);
+  const isConcentratedNegative = negativeCount >= minNegativePosts && negativeAuthorCount >= minNegativeAuthors;
+  const latestPostAt = evidencePosts[0]?.postCreatedAt || window.windowEndAt;
+  const detectedAt = window.windowEndAt;
+  const rangeKey = normalizeRangeKey(window.rangeKey);
+  const rangeLabel = getRangeLabel(rangeKey);
+
+  return {
+    id: `derived-${ALERT_TYPES.NEGATIVE_CONTENT}-${board.id}-${rangeKey}`,
+    boardId: board.id,
+    alertType: ALERT_TYPES.NEGATIVE_CONTENT,
+    severity: isConcentratedNegative || views >= Math.max(minNegativeViews * 2, 50000) ? "high" : "medium",
+    dedupeKey: `${ALERT_TYPES.NEGATIVE_CONTENT}:${rangeKey}:${new Date(window.windowStartAt).toISOString()}`,
+    triggeredAt: detectedAt,
+    lastSeenAt: detectedAt,
+    titleZh: isConcentratedNegative ? "集中负面内容风险" : "负面内容风险",
+    messageZh: `${rangeLabel}识别到 ${negativeCount} 条负面讨论，来自 ${negativeAuthorCount || 1} 个账号。`,
+    currentValue: {
+      count: negativeCount,
+      negativeCount,
+      authorCount: negativeAuthorCount,
+      views,
+      rangeKey,
+      windowStartAt: window.windowStartAt,
+      windowEndAt: window.windowEndAt,
+      latestPostAt,
+      derivedFromSentiment: true,
+    },
+    baselineValue: null,
+    sampleSize: negativeCount,
+    reason: "根据所选时间范围内已识别为负面的讨论派生，确保内容风险与概览统计口径一致。",
+    evidenceTweetIds: evidencePosts.map((post) => post.tweetId).filter(Boolean),
+    status: "active",
+    createdAt: detectedAt,
+    updatedAt: detectedAt,
+  };
+}
+
+async function appendDerivedNegativeContentAlert(board, window, alerts, options = {}) {
+  const rows = Array.isArray(alerts) ? alerts : [];
+  const requestedType = options.type ? String(options.type) : "";
+  if (requestedType && requestedType !== ALERT_TYPES.NEGATIVE_CONTENT) return { rows, appended: false };
+  if (rows.some((alert) => alert.alertType === ALERT_TYPES.NEGATIVE_CONTENT)) return { rows, appended: false };
+  const derivedAlert = await buildDerivedNegativeContentAlertForRange(board, window, options);
+  if (!derivedAlert) return { rows, appended: false };
+  return {
+    rows: [...rows, derivedAlert].sort((a, b) => new Date(b.triggeredAt).getTime() - new Date(a.triggeredAt).getTime()),
+    appended: true,
+  };
+}
+
 async function generateAggregateAlerts(board, options = {}) {
   const now = options.now || new Date();
   const currentEndAt = options.until || now;
@@ -734,4 +818,6 @@ module.exports = {
   generateInfluentialSignals,
   generateFollowSignals,
   generateAggregateAlerts,
+  buildDerivedNegativeContentAlertForRange,
+  appendDerivedNegativeContentAlert,
 };

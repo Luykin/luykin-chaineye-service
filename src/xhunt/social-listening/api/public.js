@@ -21,7 +21,7 @@ const {
   normalizePage,
   parseTweetUrl,
 } = require("../services/board-service");
-const { normalizeRangeKey, getWindowForRange } = require("../services/aggregate-service");
+const { normalizeRangeKey, getWindowForRange, appendDerivedNegativeContentAlert } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { sendJsonError, publicError } = require("../services/errors");
 const { buildTweetUrl } = require("../utils/twitter");
@@ -232,7 +232,10 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
     const where = applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } });
     if (req.query.type) where.alertType = String(req.query.type);
     const result = await EchohuntSocialListeningAlert.findAndCountAll({ where, order: [["triggeredAt", "DESC"]], offset, limit, raw: true });
-    return res.json({ success: true, data: { rangeKey, items: result.rows, page, pageSize, total: result.count } });
+    const derived = offset === 0
+      ? await appendDerivedNegativeContentAlert(board, window, result.rows, { type: req.query.type })
+      : { rows: result.rows, appended: false };
+    return res.json({ success: true, data: { rangeKey, items: derived.rows.slice(0, limit), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ALERTS_FAILED");
   }
