@@ -21,7 +21,12 @@ const {
   normalizePage,
   parseTweetUrl,
 } = require("../services/board-service");
-const { normalizeRangeKey, getWindowForRange, appendDerivedNegativeContentAlert } = require("../services/aggregate-service");
+const {
+  normalizeRangeKey,
+  getWindowForRange,
+  enrichSnapshotMetricComparisons,
+  appendDerivedNegativeContentAlert,
+} = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { sendJsonError, publicError } = require("../services/errors");
 const { buildTweetUrl } = require("../utils/twitter");
@@ -115,6 +120,7 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
+    const enrichedSnapshot = await enrichSnapshotMetricComparisons(snapshot, board.id);
     res.set("Cache-Control", "private, max-age=30");
     return res.json({
       success: true,
@@ -122,7 +128,7 @@ router.get("/boards/:boardId/overview", async (req, res) => {
         board: await getBoardDetail(board.id, req.authCenter),
         rangeKey,
         state: snapshot ? "ready" : (board.status === "failed" ? "failed" : "processing"),
-        snapshot: snapshot || null,
+        snapshot: enrichedSnapshot || null,
       },
     });
   } catch (error) {

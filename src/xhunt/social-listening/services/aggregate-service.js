@@ -372,6 +372,127 @@ function buildSentimentComposition(posts) {
   return composition;
 }
 
+function summarizeMetricPosts(posts) {
+  const authorIds = new Set(posts.map((post) => post.authorTwitterId).filter(Boolean));
+  const sentimentComposition = buildSentimentComposition(posts);
+  return posts.reduce((acc, post) => {
+    acc.discussionCount += 1;
+    acc.viewsCount += toNumber(post.viewsCount);
+    acc.engagementCount += getEngagement(post);
+    return acc;
+  }, {
+    discussionCount: 0,
+    accountCount: authorIds.size,
+    viewsCount: 0,
+    engagementCount: 0,
+    sentimentAnalyzedCount: sentimentComposition.analyzed,
+    sentimentUnknownCount: sentimentComposition.unknown,
+    positiveRatio: sentimentComposition.positiveRatio,
+    negativeRatio: sentimentComposition.negativeRatio,
+  });
+}
+
+function buildMetricChange(currentValue, previousValue) {
+  const current = toNumber(currentValue);
+  const previous = toNumber(previousValue);
+  return {
+    current,
+    previous,
+    absoluteChange: current - previous,
+    changeRatio: previous > 0 ? (current - previous) / previous : null,
+  };
+}
+
+function buildRatioMetricChange(currentValue, previousValue) {
+  const current = currentValue === null || currentValue === undefined ? null : Number(currentValue);
+  const previous = previousValue === null || previousValue === undefined ? null : Number(previousValue);
+  return {
+    current,
+    previous,
+    absoluteChange: Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null,
+    percentagePointChange: Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null,
+    changeRatio: Number.isFinite(current) && Number.isFinite(previous) && previous > 0 ? (current - previous) / previous : null,
+  };
+}
+
+function buildMetricComparisons(currentMetrics, previousMetrics, previousWindow) {
+  return {
+    previousWindowStartAt: previousWindow.windowStartAt,
+    previousWindowEndAt: previousWindow.windowEndAt,
+    previousMetrics: {
+      discussionCount: previousMetrics.discussionCount,
+      accountCount: previousMetrics.accountCount,
+      viewsCount: previousMetrics.viewsCount,
+      engagementCount: previousMetrics.engagementCount,
+      positiveRatio: previousMetrics.positiveRatio,
+      sentimentAnalyzedCount: previousMetrics.sentimentAnalyzedCount,
+      sentimentUnknownCount: previousMetrics.sentimentUnknownCount,
+    },
+    changes: {
+      discussionCount: buildMetricChange(currentMetrics.discussionCount, previousMetrics.discussionCount),
+      accountCount: buildMetricChange(currentMetrics.accountCount, previousMetrics.accountCount),
+      viewsCount: buildMetricChange(currentMetrics.viewsCount, previousMetrics.viewsCount),
+      engagementCount: buildMetricChange(currentMetrics.engagementCount, previousMetrics.engagementCount),
+      positiveRatio: buildRatioMetricChange(currentMetrics.positiveRatio, previousMetrics.positiveRatio),
+    },
+  };
+}
+
+function getPreviousWindow(window) {
+  const windowStartAt = new Date(window.windowStartAt);
+  const windowEndAt = new Date(window.windowEndAt);
+  const durationMs = windowEndAt.getTime() - windowStartAt.getTime();
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return null;
+  return {
+    windowStartAt: new Date(windowStartAt.getTime() - durationMs),
+    windowEndAt: windowStartAt,
+  };
+}
+
+async function fetchMetricPosts(boardId, windowStartAt, windowEndAt) {
+  return EchohuntSocialListeningPost.findAll({
+    where: {
+      boardId,
+      postCreatedAt: { [Op.gte]: windowStartAt, [Op.lt]: windowEndAt },
+    },
+    attributes: [
+      "authorTwitterId",
+      "postCreatedAt",
+      "viewsCount",
+      "likesCount",
+      "repostsCount",
+      "quotesCount",
+      "repliesCount",
+      "sentiment",
+    ],
+    raw: true,
+  });
+}
+
+async function enrichSnapshotMetricComparisons(snapshot, boardId) {
+  if (!snapshot) return snapshot;
+  const windowStartAt = new Date(snapshot.windowStartAt);
+  const windowEndAt = new Date(snapshot.windowEndAt);
+  if (Number.isNaN(windowStartAt.getTime()) || Number.isNaN(windowEndAt.getTime())) return snapshot;
+  const previousWindow = getPreviousWindow({ windowStartAt, windowEndAt });
+  if (!previousWindow) return snapshot;
+  const previousPosts = await fetchMetricPosts(boardId || snapshot.boardId, previousWindow.windowStartAt, previousWindow.windowEndAt);
+  const previousMetrics = summarizeMetricPosts(previousPosts);
+  const metrics = snapshot.metrics && typeof snapshot.metrics === "object" ? snapshot.metrics : {};
+  const sentimentComposition = snapshot.sentimentComposition && typeof snapshot.sentimentComposition === "object" ? snapshot.sentimentComposition : {};
+  const currentMetrics = {
+    ...metrics,
+    positiveRatio: metrics.positiveRatio ?? sentimentComposition.positiveRatio,
+  };
+  return {
+    ...snapshot,
+    metrics: {
+      ...metrics,
+      ...buildMetricComparisons(currentMetrics, previousMetrics, previousWindow),
+    },
+  };
+}
+
 async function buildSnapshotPayload(board, rangeKey, options = {}) {
   const now = options.now || new Date();
   const window = getWindowForRange(rangeKey, now);
@@ -385,18 +506,19 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   });
 
   const authorIds = new Set(posts.map((post) => post.authorTwitterId).filter(Boolean));
-  const metrics = posts.reduce((acc, post) => {
-    acc.discussionCount += 1;
-    acc.viewsCount += toNumber(post.viewsCount);
-    acc.engagementCount += getEngagement(post);
-    return acc;
-  }, { discussionCount: 0, accountCount: authorIds.size, viewsCount: 0, engagementCount: 0 });
-
   const sentimentComposition = buildSentimentComposition(posts);
+  const metrics = summarizeMetricPosts(posts);
   metrics.sentimentAnalyzedCount = sentimentComposition.analyzed;
   metrics.sentimentUnknownCount = sentimentComposition.unknown;
+  metrics.positiveRatio = sentimentComposition.positiveRatio;
   metrics.negativeRatio = sentimentComposition.negativeRatio;
   metrics.partial = board.coverageStartAt ? new Date(board.coverageStartAt) > window.windowStartAt : true;
+
+  const previousWindow = getPreviousWindow(window);
+  if (previousWindow) {
+    const previousPosts = await fetchMetricPosts(board.id, previousWindow.windowStartAt, previousWindow.windowEndAt);
+    Object.assign(metrics, buildMetricComparisons(metrics, summarizeMetricPosts(previousPosts), previousWindow));
+  }
 
   const topicMap = new Map();
   const wordMap = new Map();
@@ -818,6 +940,7 @@ module.exports = {
   generateInfluentialSignals,
   generateFollowSignals,
   generateAggregateAlerts,
+  enrichSnapshotMetricComparisons,
   buildDerivedNegativeContentAlertForRange,
   appendDerivedNegativeContentAlert,
 };

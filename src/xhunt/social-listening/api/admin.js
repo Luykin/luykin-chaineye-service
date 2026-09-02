@@ -30,7 +30,12 @@ const {
   normalizePage,
   writeAudit,
 } = require("../services/board-service");
-const { normalizeRangeKey, getWindowForRange, appendDerivedNegativeContentAlert } = require("../services/aggregate-service");
+const {
+  normalizeRangeKey,
+  getWindowForRange,
+  enrichSnapshotMetricComparisons,
+  appendDerivedNegativeContentAlert,
+} = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { enableSocialListeningScheduler } = require("../services/scheduler");
 const {
@@ -753,13 +758,14 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
+    const enrichedSnapshot = await enrichSnapshotMetricComparisons(snapshot, board.id);
     return res.json({
       success: true,
       data: {
         board: await getBoardDetail(board.id),
         rangeKey,
         state: snapshot ? "ready" : (board.status === "failed" ? "failed" : "processing"),
-        snapshot: snapshot || null,
+        snapshot: enrichedSnapshot || null,
       },
     });
   } catch (error) {
