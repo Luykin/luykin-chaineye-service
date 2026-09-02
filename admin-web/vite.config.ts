@@ -13,6 +13,14 @@ export default defineConfig(({ mode }) => {
     base: mode === "production" ? "/static/admin-web/" : "/",
     publicDir: mode === "production" ? false : "public",
     plugins: [react()],
+    esbuild: {
+      // Avoid emitting template literals that contain raw newlines in the production bundle.
+      // They are valid modern JS, but can be broken by some edge/minify layers and cause
+      // browser-side "Invalid or unexpected token" before React mounts.
+      supported: {
+        "template-literal": false,
+      },
+    },
     build: {
       outDir: "public/static/admin-web",
       emptyOutDir: true,
