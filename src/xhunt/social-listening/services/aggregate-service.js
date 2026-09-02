@@ -471,11 +471,12 @@ function getPreviousWindow(window) {
   };
 }
 
-async function fetchMetricPosts(boardId, windowStartAt, windowEndAt) {
+async function fetchMetricPosts(boardId, windowStartAt, windowEndAt, options = {}) {
   return EchohuntSocialListeningPost.findAll({
     where: {
       boardId,
       postCreatedAt: { [Op.gte]: windowStartAt, [Op.lt]: windowEndAt },
+      ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
     },
     attributes: [
       "authorTwitterId",
@@ -498,7 +499,7 @@ async function enrichSnapshotMetricComparisons(snapshot, boardId, options = {}) 
   if (Number.isNaN(windowStartAt.getTime()) || Number.isNaN(windowEndAt.getTime())) return snapshot;
   const previousWindow = getPreviousWindow({ windowStartAt, windowEndAt });
   if (!previousWindow) return snapshot;
-  const previousPosts = await fetchMetricPosts(boardId || snapshot.boardId, previousWindow.windowStartAt, previousWindow.windowEndAt);
+  const previousPosts = await fetchMetricPosts(boardId || snapshot.boardId, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
   const previousMetrics = summarizeMetricPosts(getMetricPosts(previousPosts, options));
   const metrics = snapshot.metrics && typeof snapshot.metrics === "object" ? snapshot.metrics : {};
   const sentimentComposition = snapshot.sentimentComposition && typeof snapshot.sentimentComposition === "object" ? snapshot.sentimentComposition : {};
@@ -522,6 +523,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     where: {
       boardId: board.id,
       postCreatedAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt },
+      ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
     },
     order: [["postCreatedAt", "ASC"]],
     raw: true,
@@ -539,7 +541,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
 
   const previousWindow = getPreviousWindow(window);
   if (previousWindow) {
-    const previousPosts = await fetchMetricPosts(board.id, previousWindow.windowStartAt, previousWindow.windowEndAt);
+    const previousPosts = await fetchMetricPosts(board.id, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
     Object.assign(metrics, buildMetricComparisons(metrics, summarizeMetricPosts(getMetricPosts(previousPosts, options)), previousWindow));
   }
 

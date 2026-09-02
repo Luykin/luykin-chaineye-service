@@ -24,6 +24,7 @@ const {
 const {
   normalizeRangeKey,
   getWindowForRange,
+  enrichSnapshotMetricComparisons,
   buildSnapshotPayload,
   EFFECTIVE_SENTIMENTS,
   appendDerivedNegativeContentAlert,
@@ -174,7 +175,9 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
-    const snapshot = await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
+    const snapshot = storedSnapshot
+      ? await enrichSnapshotMetricComparisons(storedSnapshot, board.id, { excludeUnknownSentiment: true })
+      : await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
     res.set("Cache-Control", "private, max-age=30");
     return res.json({
       success: true,
