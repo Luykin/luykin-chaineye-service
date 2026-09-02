@@ -45,6 +45,28 @@ function isInfluentialRank(globalRank, cnRank) {
     (toNumber(cnRank) > 0 && toNumber(cnRank) <= 1500);
 }
 
+const EFFECTIVE_SENTIMENTS = Object.freeze([
+  SENTIMENTS.POSITIVE,
+  SENTIMENTS.NEUTRAL,
+  SENTIMENTS.NEGATIVE,
+]);
+
+function isEffectiveSentiment(value) {
+  return EFFECTIVE_SENTIMENTS.includes(String(value || "").trim().toLowerCase());
+}
+
+function filterEffectiveSentimentPosts(posts) {
+  return Array.isArray(posts) ? posts.filter((post) => isEffectiveSentiment(post?.sentiment)) : [];
+}
+
+function shouldExcludeUnknownSentiment(options = {}) {
+  return options.excludeUnknownSentiment !== false;
+}
+
+function getMetricPosts(posts, options = {}) {
+  return shouldExcludeUnknownSentiment(options) ? filterEffectiveSentimentPosts(posts) : posts;
+}
+
 function hasXhuntKolFlag(account = {}) {
   const kol = account.raw?.kol && typeof account.raw.kol === "object" ? account.raw.kol : {};
   return Object.values(kol).some((snapshot) => (
@@ -469,7 +491,7 @@ async function fetchMetricPosts(boardId, windowStartAt, windowEndAt) {
   });
 }
 
-async function enrichSnapshotMetricComparisons(snapshot, boardId) {
+async function enrichSnapshotMetricComparisons(snapshot, boardId, options = {}) {
   if (!snapshot) return snapshot;
   const windowStartAt = new Date(snapshot.windowStartAt);
   const windowEndAt = new Date(snapshot.windowEndAt);
@@ -477,7 +499,7 @@ async function enrichSnapshotMetricComparisons(snapshot, boardId) {
   const previousWindow = getPreviousWindow({ windowStartAt, windowEndAt });
   if (!previousWindow) return snapshot;
   const previousPosts = await fetchMetricPosts(boardId || snapshot.boardId, previousWindow.windowStartAt, previousWindow.windowEndAt);
-  const previousMetrics = summarizeMetricPosts(previousPosts);
+  const previousMetrics = summarizeMetricPosts(getMetricPosts(previousPosts, options));
   const metrics = snapshot.metrics && typeof snapshot.metrics === "object" ? snapshot.metrics : {};
   const sentimentComposition = snapshot.sentimentComposition && typeof snapshot.sentimentComposition === "object" ? snapshot.sentimentComposition : {};
   const currentMetrics = {
@@ -505,9 +527,10 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     raw: true,
   });
 
-  const authorIds = new Set(posts.map((post) => post.authorTwitterId).filter(Boolean));
-  const sentimentComposition = buildSentimentComposition(posts);
-  const metrics = summarizeMetricPosts(posts);
+  const metricPosts = getMetricPosts(posts, options);
+  const authorIds = new Set(metricPosts.map((post) => post.authorTwitterId).filter(Boolean));
+  const sentimentComposition = buildSentimentComposition(metricPosts);
+  const metrics = summarizeMetricPosts(metricPosts);
   metrics.sentimentAnalyzedCount = sentimentComposition.analyzed;
   metrics.sentimentUnknownCount = sentimentComposition.unknown;
   metrics.positiveRatio = sentimentComposition.positiveRatio;
@@ -517,12 +540,12 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   const previousWindow = getPreviousWindow(window);
   if (previousWindow) {
     const previousPosts = await fetchMetricPosts(board.id, previousWindow.windowStartAt, previousWindow.windowEndAt);
-    Object.assign(metrics, buildMetricComparisons(metrics, summarizeMetricPosts(previousPosts), previousWindow));
+    Object.assign(metrics, buildMetricComparisons(metrics, summarizeMetricPosts(getMetricPosts(previousPosts, options)), previousWindow));
   }
 
   const topicMap = new Map();
   const wordMap = new Map();
-  posts.forEach((post) => {
+  metricPosts.forEach((post) => {
     aggregateListValues(topicMap, post.topics, post, { source: "topics" });
     aggregateListValues(wordMap, filterDiscussionKeywords(post.keywords, board), post, { source: "ai_hot_tags" });
   });
@@ -530,7 +553,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   const topTopics = sortAggregate(topicMap, 20);
   const wordCloud = sortAggregate(wordMap, 50);
 
-  const influentialCount = posts.filter((post) => isInfluentialRank(post.authorGlobalRank, post.authorCnRank)).length;
+  const influentialCount = metricPosts.filter((post) => isInfluentialRank(post.authorGlobalRank, post.authorCnRank)).length;
 
   const activeAlertCount = await EchohuntSocialListeningAlert.count({
     where: { boardId: board.id, status: "active", triggeredAt: { [Op.gte]: window.windowStartAt } },
@@ -544,13 +567,13 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     windowEndAt: window.windowEndAt,
     processedThrough: board.processedThrough || now,
     metrics,
-    volumeSeries: buildSeries(posts, window.bucketSize).map((item) => ({
+    volumeSeries: buildSeries(metricPosts, window.bucketSize).map((item) => ({
       bucket: item.bucket,
       volume: item.volume,
       views: item.views,
       engagement: item.engagement,
     })),
-    sentimentSeries: buildSeries(posts, window.bucketSize).map((item) => ({
+    sentimentSeries: buildSeries(metricPosts, window.bucketSize).map((item) => ({
       bucket: item.bucket,
       positive: item.positive,
       neutral: item.neutral,
@@ -559,9 +582,9 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     })),
     sentimentComposition,
     topics: topTopics,
-    topicTrends: buildTopicTrends(posts, topTopics, window),
+    topicTrends: buildTopicTrends(metricPosts, topTopics, window),
     wordCloud,
-    viewpoints: buildViewpoints(posts, board),
+    viewpoints: buildViewpoints(metricPosts, board),
     accountSummary: {
       activeAccounts: authorIds.size,
       influentialMentionCount: influentialCount,
@@ -606,6 +629,7 @@ async function generateInfluentialSignals(board, options = {}) {
     where: {
       boardId: board.id,
       postCreatedAt: { [Op.gte]: since, [Op.lt]: until },
+      sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS },
       ...(selfExclusions.length ? { [Op.and]: selfExclusions } : {}),
       [Op.or]: [
         { authorGlobalRank: { [Op.between]: [1, 10000] } },
@@ -846,31 +870,33 @@ async function generateAggregateAlerts(board, options = {}) {
     }),
   ]);
 
+  const effectiveCurrentPosts = filterEffectiveSentimentPosts(currentPosts);
+  const effectiveBaselinePosts = filterEffectiveSentimentPosts(baselinePosts);
   const baselineHour = bucketStart.getUTCHours();
-  const sameHourBaseline = baselinePosts.filter((post) => new Date(post.postCreatedAt).getUTCHours() === baselineHour);
+  const sameHourBaseline = effectiveBaselinePosts.filter((post) => new Date(post.postCreatedAt).getUTCHours() === baselineHour);
   const baselineAvg = sameHourBaseline.length / baselineDays;
   const minVolume = Math.max(Number(alertConfig.volumeSpikeMinPosts || 5), 1);
   const volumeMultiplier = Math.max(Number(alertConfig.volumeSpikeMultiplier || 2), 1);
   let alerts = 0;
 
-  if (currentPosts.length >= minVolume && baselineAvg > 0 && currentPosts.length >= baselineAvg * volumeMultiplier) {
+  if (effectiveCurrentPosts.length >= minVolume && baselineAvg > 0 && effectiveCurrentPosts.length >= baselineAvg * volumeMultiplier) {
     alerts += await upsertAggregateAlert(board, {
       alertType: ALERT_TYPES.VOLUME_SPIKE,
-      severity: currentPosts.length >= baselineAvg * volumeMultiplier * 1.5 ? "high" : "medium",
+      severity: effectiveCurrentPosts.length >= baselineAvg * volumeMultiplier * 1.5 ? "high" : "medium",
       dedupeKey: `${ALERT_TYPES.VOLUME_SPIKE}:${bucketStart.toISOString()}`,
       triggeredAt: currentStartAt,
       lastSeenAt: now,
       titleZh: "讨论量异常升高",
-      messageZh: `最近 1 小时讨论量 ${currentPosts.length} 条，达到同小时历史基线 ${baselineAvg.toFixed(1)} 条的 ${volumeMultiplier} 倍以上。`,
-      currentValue: { count: currentPosts.length, windowStartAt: currentStartAt, windowEndAt: currentEndAt },
+      messageZh: `最近 1 小时有效讨论量 ${effectiveCurrentPosts.length} 条，达到同小时历史基线 ${baselineAvg.toFixed(1)} 条的 ${volumeMultiplier} 倍以上。`,
+      currentValue: { count: effectiveCurrentPosts.length, windowStartAt: currentStartAt, windowEndAt: currentEndAt },
       baselineValue: { average: baselineAvg, days: baselineDays, sameHourSampleSize: sameHourBaseline.length },
-      sampleSize: currentPosts.length,
-      reason: "最近 1 小时讨论量显著高于过去 7 天同小时段基线",
-      evidenceTweetIds: currentPosts.slice(0, 20).map((post) => post.tweetId),
+      sampleSize: effectiveCurrentPosts.length,
+      reason: "最近 1 小时有效讨论量显著高于过去 7 天同小时段基线",
+      evidenceTweetIds: effectiveCurrentPosts.slice(0, 20).map((post) => post.tweetId),
     });
   }
 
-  const currentNegative = getNegativeRatio(currentPosts);
+  const currentNegative = getNegativeRatio(effectiveCurrentPosts);
   const baselineNegative = getNegativeRatio(sameHourBaseline);
   const minAnalyzed = Math.max(Number(alertConfig.negativeSpikeMinAnalyzed || 20), 1);
   const ratioDelta = Number(alertConfig.negativeShareSpikeDelta ?? 0.2);
@@ -893,11 +919,11 @@ async function generateAggregateAlerts(board, options = {}) {
       baselineValue: { ...baselineNegative, days: baselineDays },
       sampleSize: currentNegative.analyzed,
       reason: "负面情绪占比相对历史同小时段基线上升超过阈值",
-      evidenceTweetIds: currentPosts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE).slice(0, 20).map((post) => post.tweetId),
+      evidenceTweetIds: effectiveCurrentPosts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE).slice(0, 20).map((post) => post.tweetId),
     });
   }
 
-  const negativePosts = currentPosts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE);
+  const negativePosts = effectiveCurrentPosts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE);
   const negativeAuthors = new Set(negativePosts.map((post) => post.authorTwitterId).filter(Boolean));
   const negativeViews = negativePosts.reduce((sum, post) => sum + toNumber(post.viewsCount), 0);
   const minNegativePosts = Math.max(Number(alertConfig.concentratedNegativeMinPosts || 3), 1);
@@ -941,6 +967,9 @@ module.exports = {
   generateFollowSignals,
   generateAggregateAlerts,
   enrichSnapshotMetricComparisons,
+  EFFECTIVE_SENTIMENTS,
+  isEffectiveSentiment,
+  filterEffectiveSentimentPosts,
   buildDerivedNegativeContentAlertForRange,
   appendDerivedNegativeContentAlert,
 };

@@ -4,12 +4,12 @@ const {
   EchohuntSocialListeningPost,
   EchohuntSocialListeningAccessAuditLog,
 } = require("../../../models/postgres-start");
-const { normalizeRangeKey, getWindowForRange } = require("./aggregate-service");
+const { normalizeRangeKey, getWindowForRange, EFFECTIVE_SENTIMENTS } = require("./aggregate-service");
 const { serializePost } = require("./board-service");
 const { publicError } = require("./errors");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
-function buildPostWhere(boardId, query = {}) {
+function buildPostWhere(boardId, query = {}, options = {}) {
   const rangeKey = normalizeRangeKey(query.range);
   const window = getWindowForRange(rangeKey);
   const sortKey = String(query.sort || "").trim().toLowerCase();
@@ -20,7 +20,15 @@ function buildPostWhere(boardId, query = {}) {
     where.postCreatedAt = { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt };
   }
   const sentiment = String(query.sentiment || query.filter || "").trim().toLowerCase();
-  if (["positive", "neutral", "negative", "unknown"].includes(sentiment)) where.sentiment = sentiment;
+  if (options.excludeUnknownSentiment) {
+    where.sentiment = sentiment === "unknown"
+      ? "__excluded_unknown__"
+      : EFFECTIVE_SENTIMENTS.includes(sentiment)
+        ? sentiment
+        : { [Op.in]: EFFECTIVE_SENTIMENTS };
+  } else if ([...EFFECTIVE_SENTIMENTS, "unknown"].includes(sentiment)) {
+    where.sentiment = sentiment;
+  }
   if (["analyzed", "generated", "succeeded"].includes(aiFilter)) where.aiAnalyzedAt = { [Op.ne]: null };
   const source = String(query.source || "").trim().toLowerCase();
   if (["mention", "quote", "reply", "comment"].includes(source)) where.source = source;
@@ -61,7 +69,7 @@ function buildPostOrder(sort) {
   return [["postCreatedAt", "DESC"]];
 }
 
-async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null) {
+async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null, options = {}) {
   const runtimeConfig = await getSocialListeningRuntimeConfig();
   const exportConfig = runtimeConfig.export || {};
   const exportMaxRows = exportConfig.maxRows || 10000;
@@ -75,7 +83,7 @@ async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null
     if (ok === null) throw publicError("EXPORT_RATE_LIMITED", 429, "导出太频繁，请稍后再试。", { retryAfter: cooldownSeconds });
   }
 
-  const { where, rangeKey } = buildPostWhere(board.id, query);
+  const { where, rangeKey } = buildPostWhere(board.id, query, options);
   const total = await EchohuntSocialListeningPost.count({ where });
   if (total > exportMaxRows) {
     throw publicError("EXPORT_TOO_LARGE", 400, `导出数据超过 ${exportMaxRows} 行，请缩短时间范围或增加筛选条件。`);

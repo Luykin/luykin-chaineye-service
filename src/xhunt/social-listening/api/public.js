@@ -24,7 +24,8 @@ const {
 const {
   normalizeRangeKey,
   getWindowForRange,
-  enrichSnapshotMetricComparisons,
+  buildSnapshotPayload,
+  EFFECTIVE_SENTIMENTS,
   appendDerivedNegativeContentAlert,
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
@@ -40,6 +41,59 @@ function normalizeAccountId(value) {
 
 function normalizeHandle(value) {
   return String(value || "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+function getEffectiveSentimentSqlList() {
+  return EFFECTIVE_SENTIMENTS.map((item) => `'${String(item).replace(/'/g, "''")}'`).join(", ");
+}
+
+function applyExcludeUnknownMentionSignals(where) {
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    {
+      [Op.or]: [
+        { signalType: { [Op.ne]: "influential_mention" } },
+        { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } },
+      ],
+    },
+  ];
+  return where;
+}
+
+function applyExcludeUnknownMentionAlerts(where) {
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    literal(`
+      NOT (
+        "EchohuntSocialListeningAlert"."alertType" = 'influential_mention'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(COALESCE("EchohuntSocialListeningAlert"."evidenceTweetIds", '[]'::jsonb)) AS evidence(tweet_id)
+          JOIN "EchohuntSocialListeningPosts" p
+            ON p."boardId" = "EchohuntSocialListeningAlert"."boardId"
+           AND p."tweetId" = evidence.tweet_id
+          WHERE p."sentiment" IN (${getEffectiveSentimentSqlList()})
+        )
+      )
+    `),
+  ];
+  return where;
+}
+
+function applyExcludeUnknownRelatedPostEvents(where) {
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    literal(`
+      NOT EXISTS (
+        SELECT 1
+        FROM "EchohuntSocialListeningPosts" p
+        WHERE p."boardId" = "EchohuntSocialListeningKeyEvent"."boardId"
+          AND p."tweetId" = "EchohuntSocialListeningKeyEvent"."tweetId"
+          AND (p."sentiment" IS NULL OR p."sentiment" NOT IN (${getEffectiveSentimentSqlList()}))
+      )
+    `),
+  ];
+  return where;
 }
 
 function applyExcludeOfficialAccount(where, board) {
@@ -115,20 +169,20 @@ router.get("/boards/:boardId/overview", async (req, res) => {
   try {
     const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
     const rangeKey = normalizeRangeKey(req.query.range);
-    const snapshot = await EchohuntSocialListeningSnapshot.findOne({
+    const storedSnapshot = await EchohuntSocialListeningSnapshot.findOne({
       where: { boardId: board.id, rangeKey },
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
-    const enrichedSnapshot = await enrichSnapshotMetricComparisons(snapshot, board.id);
+    const snapshot = await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
     res.set("Cache-Control", "private, max-age=30");
     return res.json({
       success: true,
       data: {
         board: await getBoardDetail(board.id, req.authCenter),
         rangeKey,
-        state: snapshot ? "ready" : (board.status === "failed" ? "failed" : "processing"),
-        snapshot: enrichedSnapshot || null,
+        state: storedSnapshot ? "ready" : (board.status === "failed" ? "failed" : (snapshot ? "ready" : "processing")),
+        snapshot: snapshot || null,
       },
     });
   } catch (error) {
@@ -140,7 +194,7 @@ router.get("/boards/:boardId/posts", async (req, res) => {
   try {
     const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
     const { page, pageSize, offset, limit } = normalizePage(req.query);
-    const { where, rangeKey } = buildPostWhere(board.id, req.query);
+    const { where, rangeKey } = buildPostWhere(board.id, req.query, { excludeUnknownSentiment: true });
     const result = await EchohuntSocialListeningPost.findAndCountAll({
       where,
       order: buildPostOrder(req.query.sort),
@@ -169,7 +223,7 @@ router.get("/boards/:boardId/posts/export", async (req, res) => {
     const result = await exportPostsXlsx(board, req.query, {
       type: "user",
       authCenterUserId: req.authCenter.user.id,
-    }, req.redisClient);
+    }, req.redisClient, { excludeUnknownSentiment: true });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(result.filename)}"`);
     return res.send(result.buffer);
@@ -198,10 +252,10 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = applyExcludeOfficialAccount(
+    const where = applyExcludeUnknownMentionSignals(applyExcludeOfficialAccount(
       { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } },
       board
-    );
+    ));
     if (req.query.type) where.signalType = String(req.query.type);
     const q = String(req.query.q || "").trim();
     if (q) where[Op.or] = [{ handle: { [Op.iLike]: `%${q.replace(/^@+/, "")}%` } }, { name: { [Op.iLike]: `%${q}%` } }];
@@ -219,8 +273,26 @@ router.get("/boards/:boardId/accounts/:twitterId", async (req, res) => {
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
     const [signals, posts] = await Promise.all([
-      EchohuntSocialListeningAccountSignal.findAll({ where: { boardId: board.id, twitterId: req.params.twitterId, occurredAt: { [Op.gte]: window.windowStartAt } }, order: [["occurredAt", "DESC"]], limit: 50, raw: true }),
-      EchohuntSocialListeningPost.findAll({ where: { boardId: board.id, authorTwitterId: req.params.twitterId, postCreatedAt: { [Op.gte]: window.windowStartAt } }, order: [["postCreatedAt", "DESC"]], limit: 50 }),
+      EchohuntSocialListeningAccountSignal.findAll({
+        where: applyExcludeUnknownMentionSignals({
+          boardId: board.id,
+          twitterId: req.params.twitterId,
+          occurredAt: { [Op.gte]: window.windowStartAt },
+        }),
+        order: [["occurredAt", "DESC"]],
+        limit: 50,
+        raw: true,
+      }),
+      EchohuntSocialListeningPost.findAll({
+        where: {
+          boardId: board.id,
+          authorTwitterId: req.params.twitterId,
+          postCreatedAt: { [Op.gte]: window.windowStartAt },
+          sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS },
+        },
+        order: [["postCreatedAt", "DESC"]],
+        limit: 50,
+      }),
     ]);
     const enrichedSignals = await enrichSignalAvatars(signals);
     return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals: enrichedSignals.map(serializeAccountSignal), posts: posts.map(serializePost) } });
@@ -235,7 +307,7 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } });
+    const where = applyExcludeUnknownMentionAlerts(applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } }));
     if (req.query.type) where.alertType = String(req.query.type);
     const result = await EchohuntSocialListeningAlert.findAndCountAll({ where, order: [["triggeredAt", "DESC"]], offset, limit, raw: true });
     const derived = offset === 0
@@ -250,7 +322,10 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
 router.get("/boards/:boardId/alerts/:alertId", async (req, res) => {
   try {
     const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
-    const alert = await EchohuntSocialListeningAlert.findOne({ where: { id: req.params.alertId, boardId: board.id }, raw: true });
+    const alert = await EchohuntSocialListeningAlert.findOne({
+      where: applyExcludeUnknownMentionAlerts({ id: req.params.alertId, boardId: board.id }),
+      raw: true,
+    });
     if (!alert) throw publicError("ALERT_NOT_FOUND", 404, "预警不存在。");
     return res.json({ success: true, data: alert });
   } catch (error) {
@@ -264,7 +339,7 @@ router.get("/boards/:boardId/events", async (req, res) => {
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
     const items = await EchohuntSocialListeningKeyEvent.findAll({
-      where: { boardId: board.id, authCenterUserId: req.authCenter.user.id, eventAt: { [Op.gte]: window.windowStartAt } },
+      where: applyExcludeUnknownRelatedPostEvents({ boardId: board.id, authCenterUserId: req.authCenter.user.id, eventAt: { [Op.gte]: window.windowStartAt } }),
       order: [["eventAt", "DESC"]],
       raw: true,
     });
@@ -280,6 +355,9 @@ router.post("/boards/:boardId/events", async (req, res) => {
     const parsed = parseTweetUrl(req.body?.tweetUrl || req.body?.tweetId);
     if (!parsed?.tweetId) throw publicError("INVALID_TWEET_URL", 400, "请输入合法的 X 帖子链接。")
     const relatedPost = await EchohuntSocialListeningPost.findOne({ where: { boardId: board.id, tweetId: parsed.tweetId }, raw: true });
+    if (relatedPost && !EFFECTIVE_SENTIMENTS.includes(String(relatedPost.sentiment || "").toLowerCase())) {
+      throw publicError("IRRELEVANT_TWEET_EVENT_NOT_ALLOWED", 400, "无关/未表态的帖子不支持加入前台关键事件。");
+    }
     const event = await EchohuntSocialListeningKeyEvent.create({
       boardId: board.id,
       authCenterUserId: req.authCenter.user.id,
