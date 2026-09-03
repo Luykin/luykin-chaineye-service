@@ -92,6 +92,8 @@ const STATUS_OPTIONS = [
   { value: "deleted", label: "已删除" },
 ];
 
+const MONITORING_CAPACITY_NOTICE = "当前配置下，高流量账号约6～8个仍较稳，10个开始吃力，15个易堆积；低流量账号可到30～50个。主要风险是刷新滞后、AI排队和快照膨胀。";
+
 const RANGE_OPTIONS = [
   { value: "24H", label: "24H" },
   { value: "7D", label: "7D" },
@@ -1730,6 +1732,7 @@ export function SocialListeningPage() {
   const [drawerBoard, setDrawerBoard] = useState<SocialListeningBoard | null>(null);
   const [drawerInitialTab, setDrawerInitialTab] = useState("workflow");
   const [formOpen, setFormOpen] = useState(false);
+  const [capacityNoticeOpen, setCapacityNoticeOpen] = useState(false);
   const [resolved, setResolved] = useState<ResolvedTwitterAccount | null>(null);
   const [form] = Form.useForm();
 
@@ -1824,6 +1827,11 @@ export function SocialListeningPage() {
   const deleteMutation = useMutation({ mutationFn: deleteSocialListeningBoard, onSuccess: () => { messageApi.success("已删除"); void boardsQuery.refetch(); }, onError: (error: Error) => messageApi.error(error.message || "删除失败") });
 
   function openCreate() {
+    setCapacityNoticeOpen(true);
+  }
+
+  function continueCreateAfterNotice() {
+    setCapacityNoticeOpen(false);
     setEditingBoard(null);
     setResolved(null);
     form.setFieldsValue(boardFormInitialValues(null));
@@ -2005,6 +2013,18 @@ export function SocialListeningPage() {
         </Card>
 
       </Space>
+
+      <Modal
+        title="新增监控容量提醒"
+        open={capacityNoticeOpen}
+        onCancel={() => setCapacityNoticeOpen(false)}
+        onOk={continueCreateAfterNotice}
+        okText="我知道了，继续新增"
+        cancelText="取消"
+        width={560}
+      >
+        <Alert type="warning" showIcon message="容量估算" description={MONITORING_CAPACITY_NOTICE} />
+      </Modal>
 
       <Modal title={editingBoard ? "编辑被监控账号" : "新增被监控账号"} open={formOpen} onCancel={() => setFormOpen(false)} onOk={() => form.submit()} confirmLoading={saveMutation.isPending} okText="保存配置" cancelText="取消" width={1120}>
         <Alert className="social-listening-modal-alert" type="info" showIcon message="新增后默认暂停" description="保存只写入配置，不会立刻跑任务。确认字段后，在列表点击「恢复」才会创建补数任务。" />
