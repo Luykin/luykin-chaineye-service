@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const {
   EchohuntSocialListeningPost,
   EchohuntSocialListeningSnapshot,
@@ -6,7 +6,7 @@ const {
   EchohuntSocialListeningAccountSignal,
 } = require("../../../models/postgres-start");
 const { RANGE_CONFIG, RANGE_KEYS, SENTIMENTS, ALERT_TYPES, ACCOUNT_SIGNAL_TYPES } = require("../constants");
-const { fetchFollowSignalsForBoard } = require("./data-source");
+const { fetchFollowSignalsForBoard, pickRank } = require("./data-source");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
 function normalizeRangeKey(value) {
@@ -43,6 +43,38 @@ function getEngagement(post) {
 function isInfluentialRank(globalRank, cnRank) {
   return (toNumber(globalRank) > 0 && toNumber(globalRank) <= 10000) ||
     (toNumber(cnRank) > 0 && toNumber(cnRank) <= 1500);
+}
+
+function getPostDisplayRank(post = {}) {
+  const rank = pickRank(post.rawAuthor || {});
+  return {
+    globalRank: rank.globalRank ?? post.authorGlobalRank ?? null,
+    cnRank: rank.cnRank ?? post.authorCnRank ?? null,
+  };
+}
+
+function isInfluentialPost(post = {}) {
+  const rank = getPostDisplayRank(post);
+  return isInfluentialRank(rank.globalRank, rank.cnRank);
+}
+
+function buildRawAuthorRankLiteral() {
+  return literal(`
+    (
+      (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}') ~ '^[0-9]+$'
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}')::int BETWEEN 1 AND 10000))
+      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}') ~ '^[0-9]+$'
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}')::int BETWEEN 1 AND 10000))
+      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}') ~ '^[0-9]+$'
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}')::int BETWEEN 1 AND 10000))
+      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolCnRank}') ~ '^[0-9]+$'
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolCnRank}')::int BETWEEN 1 AND 1500))
+      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,cnRank}') ~ '^[0-9]+$'
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,cnRank}')::int BETWEEN 1 AND 1500))
+      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolChineseRank}') ~ '^[0-9]+$'
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolChineseRank}')::int BETWEEN 1 AND 1500))
+    )
+  `);
 }
 
 const EFFECTIVE_SENTIMENTS = Object.freeze([
@@ -492,6 +524,19 @@ async function fetchMetricPosts(boardId, windowStartAt, windowEndAt, options = {
   });
 }
 
+async function countInfluentialMetricPosts(boardId, windowStartAt, windowEndAt, options = {}) {
+  const posts = await EchohuntSocialListeningPost.findAll({
+    where: {
+      boardId,
+      postCreatedAt: { [Op.gte]: windowStartAt, [Op.lt]: windowEndAt },
+      ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
+    },
+    attributes: ["authorGlobalRank", "authorCnRank", "rawAuthor", "sentiment"],
+    raw: true,
+  });
+  return getMetricPosts(posts, options).filter(isInfluentialPost).length;
+}
+
 async function enrichSnapshotMetricComparisons(snapshot, boardId, options = {}) {
   if (!snapshot) return snapshot;
   const windowStartAt = new Date(snapshot.windowStartAt);
@@ -499,10 +544,13 @@ async function enrichSnapshotMetricComparisons(snapshot, boardId, options = {}) 
   if (Number.isNaN(windowStartAt.getTime()) || Number.isNaN(windowEndAt.getTime())) return snapshot;
   const previousWindow = getPreviousWindow({ windowStartAt, windowEndAt });
   if (!previousWindow) return snapshot;
-  const previousPosts = await fetchMetricPosts(boardId || snapshot.boardId, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
+  const effectiveBoardId = boardId || snapshot.boardId;
+  const previousPosts = await fetchMetricPosts(effectiveBoardId, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
   const previousMetrics = summarizeMetricPosts(getMetricPosts(previousPosts, options));
   const metrics = snapshot.metrics && typeof snapshot.metrics === "object" ? snapshot.metrics : {};
   const sentimentComposition = snapshot.sentimentComposition && typeof snapshot.sentimentComposition === "object" ? snapshot.sentimentComposition : {};
+  const accountSummary = snapshot.accountSummary && typeof snapshot.accountSummary === "object" ? snapshot.accountSummary : {};
+  const influentialMentionCount = await countInfluentialMetricPosts(effectiveBoardId, windowStartAt, windowEndAt, options);
   const currentMetrics = {
     ...metrics,
     positiveRatio: metrics.positiveRatio ?? sentimentComposition.positiveRatio,
@@ -512,6 +560,10 @@ async function enrichSnapshotMetricComparisons(snapshot, boardId, options = {}) 
     metrics: {
       ...metrics,
       ...buildMetricComparisons(currentMetrics, previousMetrics, previousWindow),
+    },
+    accountSummary: {
+      ...accountSummary,
+      influentialMentionCount,
     },
   };
 }
@@ -555,7 +607,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   const topTopics = sortAggregate(topicMap, 20);
   const wordCloud = sortAggregate(wordMap, 50);
 
-  const influentialCount = metricPosts.filter((post) => isInfluentialRank(post.authorGlobalRank, post.authorCnRank)).length;
+  const influentialCount = metricPosts.filter(isInfluentialPost).length;
 
   const activeAlertCount = await EchohuntSocialListeningAlert.count({
     where: { boardId: board.id, status: "active", triggeredAt: { [Op.gte]: window.windowStartAt } },
@@ -636,6 +688,7 @@ async function generateInfluentialSignals(board, options = {}) {
       [Op.or]: [
         { authorGlobalRank: { [Op.between]: [1, 10000] } },
         { authorCnRank: { [Op.between]: [1, 1500] } },
+        buildRawAuthorRankLiteral(),
       ],
     },
     order: [["postCreatedAt", "DESC"]],
@@ -645,6 +698,8 @@ async function generateInfluentialSignals(board, options = {}) {
 
   for (const post of posts) {
     if (isBoardOfficialAccount(board, post)) continue;
+    const rank = getPostDisplayRank(post);
+    if (!isInfluentialRank(rank.globalRank, rank.cnRank)) continue;
     await EchohuntSocialListeningAccountSignal.upsert({
       boardId: board.id,
       twitterId: post.authorTwitterId,
@@ -652,8 +707,8 @@ async function generateInfluentialSignals(board, options = {}) {
       name: post.authorName,
       avatar: post.authorAvatar,
       followersCount: post.authorFollowersCount,
-      globalRank: post.authorGlobalRank,
-      cnRank: post.authorCnRank,
+      globalRank: rank.globalRank,
+      cnRank: rank.cnRank,
       signalType: ACCOUNT_SIGNAL_TYPES.INFLUENTIAL_MENTION,
       occurredAt: post.postCreatedAt,
       mentionCount: 1,
@@ -663,13 +718,13 @@ async function generateInfluentialSignals(board, options = {}) {
       topics: post.topics,
       postIds: [post.tweetId],
       summaryZh: post.summaryZh || post.text,
-      rankSnapshot: { globalRank: post.authorGlobalRank, cnRank: post.authorCnRank },
+      rankSnapshot: { globalRank: rank.globalRank, cnRank: rank.cnRank },
     }, { conflictFields: ["boardId", "signalType", "twitterId", "occurredAt"] }).catch(() => null);
 
     await EchohuntSocialListeningAlert.upsert({
       boardId: board.id,
       alertType: ALERT_TYPES.INFLUENTIAL_MENTION,
-      severity: toNumber(post.authorGlobalRank) > 0 && toNumber(post.authorGlobalRank) <= 1000 ? "high" : "medium",
+      severity: toNumber(rank.globalRank) > 0 && toNumber(rank.globalRank) <= 1000 ? "high" : "medium",
       dedupeKey: `${ALERT_TYPES.INFLUENTIAL_MENTION}:${post.tweetId}`,
       triggeredAt: post.postCreatedAt,
       lastSeenAt: new Date(),
@@ -678,8 +733,8 @@ async function generateInfluentialSignals(board, options = {}) {
       currentValue: {
         authorTwitterId: post.authorTwitterId,
         authorHandle: post.authorHandle,
-        globalRank: post.authorGlobalRank,
-        cnRank: post.authorCnRank,
+        globalRank: rank.globalRank,
+        cnRank: rank.cnRank,
         views: post.viewsCount,
       },
       baselineValue: null,

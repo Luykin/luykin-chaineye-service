@@ -27,6 +27,7 @@ const {
   serializePost,
   serializeAccountSignal,
   enrichSignalAvatars,
+  enrichInfluentialAlertRanks,
   normalizePage,
   writeAudit,
 } = require("../services/board-service");
@@ -853,7 +854,8 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
     const derived = offset === 0 && (!req.query.status || String(req.query.status) === "active")
       ? await appendDerivedNegativeContentAlert(board, window, result.rows, { type: req.query.type })
       : { rows: result.rows, appended: false };
-    return res.json({ success: true, data: { rangeKey, items: derived.rows.slice(0, limit), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
+    const items = await enrichInfluentialAlertRanks(derived.rows.slice(0, limit), board.id);
+    return res.json({ success: true, data: { rangeKey, items, page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_BOARD_ALERTS_FAILED");
   }
@@ -923,7 +925,8 @@ router.get("/alerts", async (req, res) => {
       limit,
       raw: true,
     });
-    return res.json({ success: true, data: { items: result.rows, page, pageSize, total: result.count } });
+    const items = await enrichInfluentialAlertRanks(result.rows);
+    return res.json({ success: true, data: { items, page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_ALERTS_FAILED");
   }

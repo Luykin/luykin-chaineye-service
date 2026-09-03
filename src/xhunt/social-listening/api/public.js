@@ -17,7 +17,9 @@ const {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  getPostDisplayRank,
   enrichSignalAvatars,
+  enrichInfluentialAlertRanks,
   normalizePage,
   parseTweetUrl,
 } = require("../services/board-service");
@@ -110,6 +112,7 @@ function parseEventAt(value) {
 
 function snapshotFromRelatedPost(post) {
   if (!post) return null;
+  const rank = getPostDisplayRank(post);
   return {
     tweetId: post.tweetId,
     tweetUrl: buildTweetUrl(post.authorHandle, post.tweetId),
@@ -117,7 +120,7 @@ function snapshotFromRelatedPost(post) {
     authorHandle: post.authorHandle || null,
     authorName: post.authorName || null,
     authorAvatar: post.authorAvatar || null,
-    authorGlobalRank: post.authorGlobalRank || null,
+    authorGlobalRank: rank.globalRank,
     postCreatedAt: post.postCreatedAt || null,
     text: post.text || post.summaryZh || null,
     source: "social_listening_post",
@@ -454,7 +457,8 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
     const derived = offset === 0
       ? await appendDerivedNegativeContentAlert(board, window, result.rows, { type: req.query.type })
       : { rows: result.rows, appended: false };
-    return res.json({ success: true, data: { rangeKey, items: derived.rows.slice(0, limit), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
+    const items = await enrichInfluentialAlertRanks(derived.rows.slice(0, limit), board.id);
+    return res.json({ success: true, data: { rangeKey, items, page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ALERTS_FAILED");
   }
@@ -468,7 +472,8 @@ router.get("/boards/:boardId/alerts/:alertId", async (req, res) => {
       raw: true,
     });
     if (!alert) throw publicError("ALERT_NOT_FOUND", 404, "预警不存在。");
-    return res.json({ success: true, data: alert });
+    const [item] = await enrichInfluentialAlertRanks([alert], board.id);
+    return res.json({ success: true, data: item || alert });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ALERT_FAILED");
   }

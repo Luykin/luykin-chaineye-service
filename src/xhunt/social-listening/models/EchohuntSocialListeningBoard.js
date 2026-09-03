@@ -48,7 +48,7 @@ module.exports = (sequelize) => {
       globalRank: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        comment: "官方账号全球 KOL 排名快照；优先 feature.rank.kolGlobalRank/kolRank",
+        comment: "官方账号全球 KOL 排名快照；优先 feature.rank.kolRank",
       },
       cnRank: {
         type: DataTypes.INTEGER,

@@ -93,24 +93,34 @@ function toNumberOrNull(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+function pickPositiveRank(...values) {
+  for (const value of values) {
+    const num = toNumberOrNull(value);
+    if (num !== null && num > 0) return num;
+  }
+  return null;
+}
+
 function pickRank(user = {}) {
   const featureRank = user.feature?.rank || {};
   const kol = user.kol || {};
   const snap = kol.snap_20250606 || {};
   return {
-    globalRank: toNumberOrNull(
-      featureRank.kolGlobalRank ??
-        featureRank.kolRank ??
-        featureRank.globalRank ??
-        snap.global?.rank
+    // EchoHunt 前台“全球排名”对应 XHunt KOL 总榜 kolRank；kolGlobalRank 是另一套更宽泛的全球字段，
+    // 不能优先用于“全球 #”展示，否则会把 DeFiTeddy 这类账号展示成 #47.9K 而不是 #1.8K。
+    globalRank: pickPositiveRank(
+      featureRank.kolRank,
+      featureRank.globalRank,
+      featureRank.kolGlobalRank,
+      snap.global?.rank
     ),
-    cnRank: toNumberOrNull(
-      featureRank.kolCnRank ??
-        featureRank.cnRank ??
-        featureRank.kolChineseRank ??
-        snap.cn?.rank
+    cnRank: pickPositiveRank(
+      featureRank.kolCnRank,
+      featureRank.cnRank,
+      featureRank.kolChineseRank,
+      snap.cn?.rank
     ),
-    rawRank: featureRank,
+    rawRank: Object.keys(featureRank).length ? featureRank : null,
   };
 }
 
@@ -815,6 +825,7 @@ module.exports = {
   getReadonlyDbOrThrow,
   resolveTwitterUserByHandle,
   serializeTwitterUser,
+  pickRank,
   buildBoardKeywords,
   mapTweetRowToPostPayload,
   fetchTweetRowById,

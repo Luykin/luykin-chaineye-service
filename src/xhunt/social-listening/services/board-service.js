@@ -23,7 +23,7 @@ const {
 } = require("../constants");
 const { assertTwitterHandle, normalizeTwitterHandle, parseTweetUrl, buildTweetUrl } = require("../utils/twitter");
 const { normalizeKeywords } = require("../utils/text-normalize");
-const { resolveTwitterUserByHandle } = require("./data-source");
+const { resolveTwitterUserByHandle, pickRank } = require("./data-source");
 const { publicError } = require("./errors");
 const { getHistoryRange } = require("./ingest-service");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
@@ -163,6 +163,8 @@ async function ensureBoardAvatar(board) {
 
 function serializeBoard(record, extra = {}) {
   const row = toJson(record) || {};
+  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+  const boardRank = pickRank(metadata.profileSnapshot || {});
   const avatar = getBoardAvatar(row);
   return {
     id: row.id,
@@ -176,8 +178,8 @@ function serializeBoard(record, extra = {}) {
     profileImageUrl: avatar,
     verified: row.verified,
     followersCount: row.followersCount === null || row.followersCount === undefined ? null : Number(row.followersCount),
-    globalRank: row.globalRank || null,
-    cnRank: row.cnRank || null,
+    globalRank: boardRank.globalRank ?? row.globalRank ?? null,
+    cnRank: boardRank.cnRank ?? row.cnRank ?? null,
     brandColor: row.brandColor || null,
     status: row.status,
     coverageStartAt: row.coverageStartAt || null,
@@ -187,7 +189,7 @@ function serializeBoard(record, extra = {}) {
     lastFailureReason: row.lastFailureReason || null,
     createdByAdminId: row.createdByAdminId || null,
     updatedByAdminId: row.updatedByAdminId || null,
-    metadata: row.metadata || {},
+    metadata,
     createdAt: row.createdAt || null,
     updatedAt: row.updatedAt || null,
     ...extra,
@@ -233,9 +235,18 @@ function serializeJob(record) {
   };
 }
 
+function getPostDisplayRank(post = {}) {
+  const rank = pickRank(post.rawAuthor || {});
+  return {
+    globalRank: rank.globalRank ?? post.authorGlobalRank ?? null,
+    cnRank: rank.cnRank ?? post.authorCnRank ?? null,
+  };
+}
+
 function serializePost(record) {
   const row = toJson(record) || {};
   const authorAvatar = pickAvatarUrl(row.authorAvatar, pickProfileAvatar(row.rawAuthor?.profile));
+  const authorRank = getPostDisplayRank(row);
   const engagementCount = [row.likesCount, row.repostsCount, row.quotesCount, row.repliesCount]
     .map((v) => Number(v || 0))
     .reduce((a, b) => a + b, 0);
@@ -255,8 +266,8 @@ function serializePost(record) {
       avatarUrl: authorAvatar,
       profileImageUrl: authorAvatar,
       followersCount: row.authorFollowersCount === null || row.authorFollowersCount === undefined ? null : Number(row.authorFollowersCount),
-      globalRank: row.authorGlobalRank || null,
-      cnRank: row.authorCnRank || null,
+      globalRank: authorRank.globalRank ?? row.authorGlobalRank ?? null,
+      cnRank: authorRank.cnRank ?? row.authorCnRank ?? null,
       isCn: row.authorIsCn,
     },
     postCreatedAt: row.postCreatedAt,
@@ -307,7 +318,6 @@ function serializeAccountSignal(record) {
 async function enrichSignalAvatars(records = []) {
   const rows = records.map((record) => toJson(record) || {});
   const handles = Array.from(new Set(rows
-    .filter((row) => !pickAvatarUrl(row.avatar, row.avatarUrl, row.profileImageUrl))
     .map((row) => normalizeTwitterHandle(row.handle))
     .filter(Boolean)));
   if (!handles.length) return rows;
@@ -315,21 +325,57 @@ async function enrichSignalAvatars(records = []) {
   const accountByHandle = new Map();
   await Promise.all(handles.map(async (handle) => {
     const account = await resolveTwitterUserByHandle(handle).catch(() => null);
-    if (account?.avatar) accountByHandle.set(handle, account);
+    if (account) accountByHandle.set(handle, account);
   }));
   if (!accountByHandle.size) return rows;
 
   return rows.map((row) => {
     const handle = normalizeTwitterHandle(row.handle);
     const account = handle ? accountByHandle.get(handle) : null;
-    if (!account?.avatar) return row;
+    if (!account) return row;
     return {
       ...row,
       avatar: row.avatar || account.avatar,
       name: row.name || account.name,
       followersCount: row.followersCount ?? account.followersCount,
-      globalRank: row.globalRank ?? account.globalRank,
-      cnRank: row.cnRank ?? account.cnRank,
+      globalRank: account.globalRank ?? row.globalRank,
+      cnRank: account.cnRank ?? row.cnRank,
+    };
+  });
+}
+
+async function enrichInfluentialAlertRanks(records = [], defaultBoardId = null) {
+  const rows = records.map((record) => toJson(record) || {}).filter(Boolean);
+  const influentialAlerts = rows.filter((alert) => alert.alertType === "influential_mention");
+  const tweetIds = Array.from(new Set(influentialAlerts
+    .flatMap((alert) => Array.isArray(alert.evidenceTweetIds) ? alert.evidenceTweetIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)));
+  const boardIds = Array.from(new Set(influentialAlerts
+    .map((alert) => String(alert.boardId || defaultBoardId || "").trim())
+    .filter(Boolean)));
+  if (!tweetIds.length || !boardIds.length) return rows;
+
+  const posts = await EchohuntSocialListeningPost.findAll({
+    where: { boardId: { [Op.in]: boardIds }, tweetId: { [Op.in]: tweetIds } },
+    attributes: ["boardId", "tweetId", "authorGlobalRank", "authorCnRank", "rawAuthor"],
+    raw: true,
+  }).catch(() => []);
+  const rankByKey = new Map(posts.map((post) => [`${post.boardId}:${post.tweetId}`, getPostDisplayRank(post)]));
+
+  return rows.map((alert) => {
+    if (alert.alertType !== "influential_mention") return alert;
+    const boardId = String(alert.boardId || defaultBoardId || "").trim();
+    const evidenceTweetIds = Array.isArray(alert.evidenceTweetIds) ? alert.evidenceTweetIds : [];
+    const rank = evidenceTweetIds.map((id) => rankByKey.get(`${boardId}:${String(id)}`)).find(Boolean);
+    if (!rank) return alert;
+    return {
+      ...alert,
+      currentValue: {
+        ...(alert.currentValue || {}),
+        globalRank: rank.globalRank ?? alert.currentValue?.globalRank ?? null,
+        cnRank: rank.cnRank ?? alert.currentValue?.cnRank ?? null,
+      },
     };
   });
 }
@@ -733,7 +779,9 @@ module.exports = {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  getPostDisplayRank,
   enrichSignalAvatars,
+  enrichInfluentialAlertRanks,
   writeAudit,
   resolveMonitoredAccount,
   createMonitoredAccount,

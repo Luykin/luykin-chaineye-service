@@ -1,5 +1,5 @@
 const XLSX = require("xlsx");
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const {
   EchohuntSocialListeningPost,
   EchohuntSocialListeningAccessAuditLog,
@@ -8,6 +8,27 @@ const { normalizeRangeKey, getWindowForRange, EFFECTIVE_SENTIMENTS } = require("
 const { serializePost } = require("./board-service");
 const { publicError } = require("./errors");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
+
+function rankOrderLiteral(paths, column) {
+  const clauses = paths.map((path) => `
+      WHEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'${path}') ~ '^[0-9]+$'
+        AND ("EchohuntSocialListeningPost"."rawAuthor"#>>'${path}')::int > 0
+      THEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'${path}')::int`).join("");
+  return literal(`
+    CASE${clauses}
+      WHEN "EchohuntSocialListeningPost"."${column}" > 0 THEN "EchohuntSocialListeningPost"."${column}"
+      ELSE 2147483647
+    END
+  `);
+}
+
+function buildRankAscOrder() {
+  return [
+    [rankOrderLiteral(["{feature,rank,kolRank}", "{feature,rank,globalRank}", "{feature,rank,kolGlobalRank}"], "authorGlobalRank"), "ASC"],
+    [rankOrderLiteral(["{feature,rank,kolCnRank}", "{feature,rank,cnRank}", "{feature,rank,kolChineseRank}"], "authorCnRank"), "ASC"],
+    ["postCreatedAt", "DESC"],
+  ];
+}
 
 function buildPostWhere(boardId, query = {}, options = {}) {
   const rangeKey = normalizeRangeKey(query.range);
@@ -64,7 +85,7 @@ function buildPostOrder(sort) {
   const key = String(sort || "time_desc").toLowerCase();
   if (key === "views_desc") return [["viewsCount", "DESC"], ["postCreatedAt", "DESC"]];
   if (key === "engagement_desc") return [["likesCount", "DESC"], ["postCreatedAt", "DESC"]];
-  if (key === "rank_asc") return [["authorGlobalRank", "ASC"], ["authorCnRank", "ASC"], ["postCreatedAt", "DESC"]];
+  if (key === "rank_asc") return buildRankAscOrder();
   if (key === "ai_recent") return [["aiAnalyzedAt", "DESC"], ["postCreatedAt", "DESC"]];
   return [["postCreatedAt", "DESC"]];
 }

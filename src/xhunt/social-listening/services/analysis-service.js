@@ -56,6 +56,24 @@ function getAiTextLengthOrder() {
   return literal('length(coalesce("text", "normalizedText", \'\'))');
 }
 
+function getAiRankOrder() {
+  return literal(`
+    CASE
+      WHEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}') ~ '^[0-9]+$'
+        AND ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}')::int > 0
+      THEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}')::int
+      WHEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}') ~ '^[0-9]+$'
+        AND ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}')::int > 0
+      THEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}')::int
+      WHEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}') ~ '^[0-9]+$'
+        AND ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}')::int > 0
+      THEN ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}')::int
+      WHEN "EchohuntSocialListeningPost"."authorGlobalRank" > 0 THEN "EchohuntSocialListeningPost"."authorGlobalRank"
+      ELSE 2147483647
+    END
+  `);
+}
+
 function summarizeError(error) {
   return String(error?.message || error).slice(0, 1000);
 }
@@ -588,7 +606,7 @@ async function analyzePendingPostAi(board, options = {}) {
     },
     order: [
       [getAiTextLengthOrder(), "ASC"],
-      ["authorGlobalRank", "ASC"],
+      [getAiRankOrder(), "ASC"],
       ["viewsCount", "DESC"],
       ["postCreatedAt", "DESC"],
     ],
@@ -724,7 +742,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
     },
     order: [
       [getAiTextLengthOrder(), "ASC"],
-      ["authorGlobalRank", "ASC"],
+      [getAiRankOrder(), "ASC"],
       ["viewsCount", "DESC"],
       ["postCreatedAt", "DESC"],
     ],
@@ -836,7 +854,7 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
     },
     order: [
       [getAiTextLengthOrder(), "ASC"],
-      ["authorGlobalRank", "ASC"],
+      [getAiRankOrder(), "ASC"],
       ["viewsCount", "DESC"],
       ["postCreatedAt", "DESC"],
     ],
