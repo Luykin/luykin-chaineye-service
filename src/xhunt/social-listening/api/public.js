@@ -97,6 +97,32 @@ function applyExcludeUnknownRelatedPostEvents(where) {
   return where;
 }
 
+function buildKeyEventPayloadFromPost(board, parsed, relatedPost, body = {}, currentEvent = null) {
+  return {
+    tweetUrl: parsed.url || buildTweetUrl(parsed.handle || relatedPost?.authorHandle || currentEvent?.authorHandle, parsed.tweetId),
+    tweetId: parsed.tweetId,
+    eventType: body?.eventType ? String(body.eventType).slice(0, 64) : (currentEvent?.eventType || "custom"),
+    title: body?.title !== undefined ? String(body.title || "").slice(0, 255) || null : (currentEvent?.title || null),
+    authorTwitterId: relatedPost?.authorTwitterId || (currentEvent?.authorTwitterId || null),
+    authorHandle: relatedPost?.authorHandle || parsed.handle || (currentEvent?.authorHandle || null),
+    authorName: relatedPost?.authorName || (currentEvent?.authorName || null),
+    authorAvatar: relatedPost?.authorAvatar || (currentEvent?.authorAvatar || null),
+    authorGlobalRank: relatedPost?.authorGlobalRank || (currentEvent?.authorGlobalRank || null),
+    eventAt: relatedPost?.postCreatedAt || (currentEvent?.eventAt || new Date()),
+    metadata: { ...(currentEvent?.metadata || {}), note: body?.note !== undefined ? body.note : currentEvent?.metadata?.note || null },
+  };
+}
+
+async function resolveKeyEventTweet(board, rawValue) {
+  const parsed = parseTweetUrl(rawValue);
+  if (!parsed?.tweetId) throw publicError("INVALID_TWEET_URL", 400, "请输入合法的 X 帖子链接。");
+  const relatedPost = await EchohuntSocialListeningPost.findOne({ where: { boardId: board.id, tweetId: parsed.tweetId }, raw: true });
+  if (relatedPost && !EFFECTIVE_SENTIMENTS.includes(String(relatedPost.sentiment || "").toLowerCase())) {
+    throw publicError("IRRELEVANT_TWEET_EVENT_NOT_ALLOWED", 400, "无关/未表态的帖子不支持加入前台关键事件。");
+  }
+  return { parsed, relatedPost };
+}
+
 function applyExcludeOfficialAccount(where, board) {
   const clauses = [];
   const officialTwitterId = normalizeAccountId(board?.officialTwitterId);
@@ -355,27 +381,12 @@ router.get("/boards/:boardId/events", async (req, res) => {
 router.post("/boards/:boardId/events", async (req, res) => {
   try {
     const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
-    const parsed = parseTweetUrl(req.body?.tweetUrl || req.body?.tweetId);
-    if (!parsed?.tweetId) throw publicError("INVALID_TWEET_URL", 400, "请输入合法的 X 帖子链接。")
-    const relatedPost = await EchohuntSocialListeningPost.findOne({ where: { boardId: board.id, tweetId: parsed.tweetId }, raw: true });
-    if (relatedPost && !EFFECTIVE_SENTIMENTS.includes(String(relatedPost.sentiment || "").toLowerCase())) {
-      throw publicError("IRRELEVANT_TWEET_EVENT_NOT_ALLOWED", 400, "无关/未表态的帖子不支持加入前台关键事件。");
-    }
+    const { parsed, relatedPost } = await resolveKeyEventTweet(board, req.body?.tweetUrl || req.body?.tweetId);
     const event = await EchohuntSocialListeningKeyEvent.create({
       boardId: board.id,
       authCenterUserId: req.authCenter.user.id,
       xhuntUserId: req.authCenter.user.xhuntUserId || null,
-      tweetUrl: parsed.url || buildTweetUrl(parsed.handle || relatedPost?.authorHandle, parsed.tweetId),
-      tweetId: parsed.tweetId,
-      eventType: String(req.body?.eventType || "custom").slice(0, 64),
-      title: req.body?.title ? String(req.body.title).slice(0, 255) : null,
-      authorTwitterId: relatedPost?.authorTwitterId || null,
-      authorHandle: relatedPost?.authorHandle || parsed.handle || null,
-      authorName: relatedPost?.authorName || null,
-      authorAvatar: relatedPost?.authorAvatar || null,
-      authorGlobalRank: relatedPost?.authorGlobalRank || null,
-      eventAt: relatedPost?.postCreatedAt || new Date(),
-      metadata: { note: req.body?.note || null },
+      ...buildKeyEventPayloadFromPost(board, parsed, relatedPost, req.body),
     });
     return res.json({ success: true, data: event });
   } catch (error) {
@@ -385,14 +396,23 @@ router.post("/boards/:boardId/events", async (req, res) => {
 
 router.patch("/boards/:boardId/events/:eventId", async (req, res) => {
   try {
-    await assertBoardAccess(req.authCenter, req.params.boardId);
+    const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
     const event = await EchohuntSocialListeningKeyEvent.findOne({ where: { id: req.params.eventId, boardId: req.params.boardId, authCenterUserId: req.authCenter.user.id } });
-    if (!event) throw publicError("EVENT_NOT_FOUND", 404, "关键事件不存在。")
-    await event.update({
-      eventType: req.body?.eventType ? String(req.body.eventType).slice(0, 64) : event.eventType,
-      title: req.body?.title !== undefined ? String(req.body.title || "").slice(0, 255) || null : event.title,
-      metadata: { ...(event.metadata || {}), note: req.body?.note !== undefined ? req.body.note : event.metadata?.note },
-    });
+    if (!event) throw publicError("EVENT_NOT_FOUND", 404, "关键事件不存在。");
+
+    const nextTweetValue = req.body?.tweetUrl !== undefined || req.body?.tweetId !== undefined
+      ? (req.body?.tweetUrl || req.body?.tweetId)
+      : null;
+    if (nextTweetValue) {
+      const { parsed, relatedPost } = await resolveKeyEventTweet(board, nextTweetValue);
+      await event.update(buildKeyEventPayloadFromPost(board, parsed, relatedPost, req.body, event));
+    } else {
+      await event.update({
+        eventType: req.body?.eventType ? String(req.body.eventType).slice(0, 64) : event.eventType,
+        title: req.body?.title !== undefined ? String(req.body.title || "").slice(0, 255) || null : event.title,
+        metadata: { ...(event.metadata || {}), note: req.body?.note !== undefined ? req.body.note : event.metadata?.note || null },
+      });
+    }
     return res.json({ success: true, data: event });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_EVENT_UPDATE_FAILED");
