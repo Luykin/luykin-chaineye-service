@@ -535,10 +535,20 @@ router.patch("/boards/:boardId/events/:eventId", async (req, res) => {
 
 router.delete("/boards/:boardId/events/:eventId", async (req, res) => {
   try {
-    await assertBoardAccess(req.authCenter, req.params.boardId);
-    const count = await EchohuntSocialListeningKeyEvent.destroy({ where: { id: req.params.eventId, boardId: req.params.boardId, authCenterUserId: req.authCenter.user.id } });
-    if (!count) throw publicError("EVENT_NOT_FOUND", 404, "关键事件不存在。")
-    return res.json({ success: true });
+    const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
+    const event = await EchohuntSocialListeningKeyEvent.findOne({
+      where: { id: req.params.eventId, boardId: board.id },
+      raw: true,
+    });
+    if (!event) return res.json({ success: true, data: { deleted: false, reason: "not_found" } });
+    if (String(event.authCenterUserId || "") !== String(req.authCenter.user.id || "")) {
+      throw publicError("EVENT_NOT_FOUND", 404, "关键事件不存在。");
+    }
+
+    const count = await EchohuntSocialListeningKeyEvent.destroy({
+      where: { id: req.params.eventId, boardId: board.id, authCenterUserId: req.authCenter.user.id },
+    });
+    return res.json({ success: true, data: { deleted: count > 0, reason: count > 0 ? "deleted" : "already_deleted" } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_EVENT_DELETE_FAILED");
   }
