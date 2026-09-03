@@ -92,7 +92,7 @@ const STATUS_OPTIONS = [
   { value: "deleted", label: "已删除" },
 ];
 
-const MONITORING_CAPACITY_NOTICE = "当前配置下，高流量账号约6～8个仍较稳，10个开始吃力，15个易堆积；低流量账号可到30～50个。主要风险是刷新滞后、AI排队和快照膨胀。";
+const MONITORING_CAPACITY_NOTICE = "当前配置下：高流量账号建议≤8个，10个开始吃力，15个易堆积；低流量账号约30～50个。主要风险是刷新滞后、AI排队。";
 
 const RANGE_OPTIONS = [
   { value: "24H", label: "24H" },
