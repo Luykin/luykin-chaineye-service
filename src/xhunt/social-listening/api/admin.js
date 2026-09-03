@@ -34,7 +34,6 @@ const {
 const {
   normalizeRangeKey,
   getWindowForRange,
-  enrichSnapshotMetricComparisons,
   appendDerivedNegativeContentAlert,
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
@@ -759,14 +758,17 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
-    const enrichedSnapshot = await enrichSnapshotMetricComparisons(snapshot, board.id);
+    const accountSummary = snapshot?.accountSummary && typeof snapshot.accountSummary === "object" ? snapshot.accountSummary : {};
+    const responseSnapshot = snapshot ? { ...snapshot } : null;
+    if (responseSnapshot && Array.isArray(snapshot.topViewedPosts)) responseSnapshot.topViewedPosts = snapshot.topViewedPosts;
+    else if (responseSnapshot && Array.isArray(accountSummary.topViewedPosts)) responseSnapshot.topViewedPosts = accountSummary.topViewedPosts;
     return res.json({
       success: true,
       data: {
         board: await getBoardDetail(board.id),
         rangeKey,
         state: snapshot ? "ready" : (board.status === "failed" ? "failed" : "processing"),
-        snapshot: enrichedSnapshot || null,
+        snapshot: responseSnapshot,
       },
     });
   } catch (error) {

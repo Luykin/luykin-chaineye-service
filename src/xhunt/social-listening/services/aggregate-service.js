@@ -8,6 +8,7 @@ const {
 const { RANGE_CONFIG, RANGE_KEYS, SENTIMENTS, ALERT_TYPES, ACCOUNT_SIGNAL_TYPES } = require("../constants");
 const { fetchFollowSignalsForBoard, pickRank } = require("./data-source");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
+const { buildTweetUrl } = require("../utils/twitter");
 
 function normalizeRangeKey(value) {
   const range = String(value || "7D").toUpperCase();
@@ -387,6 +388,60 @@ function sortAggregate(map, limit) {
     .slice(0, limit);
 }
 
+function buildSnapshotPost(post = {}) {
+  const rank = getPostDisplayRank(post);
+  const engagementCount = getEngagement(post);
+  return {
+    id: post.id,
+    tweetId: post.tweetId,
+    tweetUrl: buildTweetUrl(post.authorHandle, post.tweetId),
+    authorTwitterId: post.authorTwitterId || null,
+    authorHandle: post.authorHandle || null,
+    authorName: post.authorName || null,
+    authorAvatar: post.authorAvatar || null,
+    author: {
+      twitterId: post.authorTwitterId || null,
+      handle: post.authorHandle || null,
+      name: post.authorName || null,
+      avatar: post.authorAvatar || null,
+      avatarUrl: post.authorAvatar || null,
+      profileImageUrl: post.authorAvatar || null,
+      followersCount: post.authorFollowersCount === null || post.authorFollowersCount === undefined ? null : Number(post.authorFollowersCount),
+      globalRank: rank.globalRank ?? post.authorGlobalRank ?? null,
+      cnRank: rank.cnRank ?? post.authorCnRank ?? null,
+      isCn: post.authorIsCn,
+    },
+    postCreatedAt: post.postCreatedAt,
+    text: post.text || null,
+    source: post.source || "mention",
+    sentiment: post.sentiment || SENTIMENTS.UNKNOWN,
+    metrics: {
+      views: toNumber(post.viewsCount),
+      likes: toNumber(post.likesCount),
+      reposts: toNumber(post.repostsCount),
+      quotes: toNumber(post.quotesCount),
+      replies: toNumber(post.repliesCount),
+      engagement: engagementCount,
+    },
+    projectAttitudeScore: post.projectAttitudeScore === null || post.projectAttitudeScore === undefined ? null : Number(post.projectAttitudeScore),
+    sentimentSummaryZh: post.sentimentSummaryZh || null,
+    topics: post.topics || [],
+    keywords: post.keywords || [],
+    summaryZh: post.summaryZh || null,
+    summaryEn: post.summaryEn || null,
+    titleZh: post.titleZh || null,
+    titleEn: post.titleEn || null,
+  };
+}
+
+function buildTopViewedPosts(posts, limit = 20) {
+  return [...posts]
+    .filter((post) => toNumber(post.viewsCount) > 0)
+    .sort((a, b) => (toNumber(b.viewsCount) - toNumber(a.viewsCount)) || (new Date(b.postCreatedAt).getTime() - new Date(a.postCreatedAt).getTime()))
+    .slice(0, limit)
+    .map(buildSnapshotPost);
+}
+
 function buildSeries(posts, bucketSize) {
   const bucketMap = new Map();
   posts.forEach((post) => {
@@ -525,16 +580,18 @@ async function fetchMetricPosts(boardId, windowStartAt, windowEndAt, options = {
 }
 
 async function countInfluentialMetricPosts(boardId, windowStartAt, windowEndAt, options = {}) {
-  const posts = await EchohuntSocialListeningPost.findAll({
+  return EchohuntSocialListeningPost.count({
     where: {
       boardId,
       postCreatedAt: { [Op.gte]: windowStartAt, [Op.lt]: windowEndAt },
       ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
+      [Op.or]: [
+        { authorGlobalRank: { [Op.between]: [1, 10000] } },
+        { authorCnRank: { [Op.between]: [1, 1500] } },
+        buildRawAuthorRankLiteral(),
+      ],
     },
-    attributes: ["authorGlobalRank", "authorCnRank", "rawAuthor", "sentiment"],
-    raw: true,
   });
-  return getMetricPosts(posts, options).filter(isInfluentialPost).length;
 }
 
 async function enrichSnapshotMetricComparisons(snapshot, boardId, options = {}) {
@@ -642,6 +699,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     accountSummary: {
       activeAccounts: authorIds.size,
       influentialMentionCount: influentialCount,
+      topViewedPosts: buildTopViewedPosts(metricPosts, 20),
     },
     alertSummary: {
       activeCount: activeAlertCount,

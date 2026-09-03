@@ -26,7 +26,6 @@ const {
 const {
   normalizeRangeKey,
   getWindowForRange,
-  enrichSnapshotMetricComparisons,
   buildSnapshotPayload,
   EFFECTIVE_SENTIMENTS,
   appendDerivedNegativeContentAlert,
@@ -255,6 +254,15 @@ function applyExcludeOfficialAccount(where, board) {
   return where;
 }
 
+function buildSnapshotResponse(snapshot) {
+  if (!snapshot) return null;
+  const accountSummary = snapshot.accountSummary && typeof snapshot.accountSummary === "object" ? snapshot.accountSummary : {};
+  const response = { ...snapshot };
+  if (Array.isArray(snapshot.topViewedPosts)) response.topViewedPosts = snapshot.topViewedPosts;
+  else if (Array.isArray(accountSummary.topViewedPosts)) response.topViewedPosts = accountSummary.topViewedPosts;
+  return response;
+}
+
 function applyExcludeSelfMentionAlerts(where) {
   where[Op.and] = [
     ...(where[Op.and] || []),
@@ -317,16 +325,16 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       raw: true,
     });
     const snapshot = storedSnapshot
-      ? await enrichSnapshotMetricComparisons(storedSnapshot, board.id, { excludeUnknownSentiment: true })
+      ? storedSnapshot
       : await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
     res.set("Cache-Control", "private, max-age=30");
     return res.json({
       success: true,
       data: {
-        board: await getBoardDetail(board.id, req.authCenter),
+        board: await getBoardDetail(board.id),
         rangeKey,
         state: storedSnapshot ? "ready" : (board.status === "failed" ? "failed" : (snapshot ? "ready" : "processing")),
-        snapshot: snapshot || null,
+        snapshot: buildSnapshotResponse(snapshot),
       },
     });
   } catch (error) {
