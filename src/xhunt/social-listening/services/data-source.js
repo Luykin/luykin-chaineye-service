@@ -1,3 +1,4 @@
+const axios = require("axios");
 const { QueryTypes } = require("sequelize");
 const {
   getPostgresReadOnlyInstance,
@@ -297,6 +298,108 @@ async function fetchTweetRowsByIds(db, tweetIds, limit) {
     `,
     { bind: { tweetIds, limit }, type: QueryTypes.SELECT }
   );
+}
+
+
+async function fetchTweetRowById(tweetId) {
+  const db = getReadonlyDbOrThrow();
+  const rows = await fetchTweetRowsByIds(db, [String(tweetId)], 1);
+  return rows[0] || null;
+}
+
+function getSocialListeningCrawlerUrl() {
+  const fullUrl = String(process.env.SOCIAL_LISTENING_CRAWLER_URL || "").trim();
+  if (fullUrl) return fullUrl;
+  const baseUrl = String(
+    process.env.SOCIAL_LISTENING_CRAWLER_BASE_URL ||
+      process.env.CRYPTOHUNT_CRAWLER_BASE_URL ||
+      process.env.CRAWLER_TWITTER_BASE_URL ||
+      ""
+  ).trim().replace(/\/+$/, "");
+  return baseUrl ? `${baseUrl}/crawler` : "";
+}
+
+function findCrawlerTweetPayload(value, tweetId) {
+  if (!value || typeof value !== "object") return null;
+  const id = String(value.id || value.tweet_id || "");
+  if (id && id === String(tweetId)) return value;
+  if (value.tweet && typeof value.tweet === "object") {
+    const tweet = findCrawlerTweetPayload(value.tweet, tweetId);
+    if (tweet) return tweet;
+  }
+  if (Array.isArray(value.tweets)) {
+    for (const item of value.tweets) {
+      const tweet = findCrawlerTweetPayload(item, tweetId);
+      if (tweet) return tweet;
+    }
+  }
+  if (value.data && typeof value.data === "object") {
+    const tweet = findCrawlerTweetPayload(value.data, tweetId);
+    if (tweet) return tweet;
+  }
+  return null;
+}
+
+function pickCrawlerEventTime(tweet = {}) {
+  const candidates = [tweet.time_parsed, tweet.created_at, tweet.create_time];
+  for (const value of candidates) {
+    if (!value) continue;
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  const timestamp = Number(tweet.timestamp || tweet.createdAtTimestamp || 0);
+  if (Number.isFinite(timestamp) && timestamp > 0) {
+    const date = new Date(timestamp > 10_000_000_000 ? timestamp : timestamp * 1000);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
+function buildCrawlerTweetEventSnapshot(tweet = {}, parsed = {}) {
+  const profile = tweet.user_profile && typeof tweet.user_profile === "object" ? tweet.user_profile : {};
+  const authorHandle = String(profile.username || tweet.username || parsed.handle || "").replace(/^@+/, "").toLowerCase() || null;
+  const tweetId = String(tweet.id || parsed.tweetId || "");
+  const eventAt = pickCrawlerEventTime(tweet);
+  return {
+    tweetId,
+    tweetUrl: tweet.permanent_url || (tweetId ? `https://x.com/${authorHandle || "i/web"}/status/${tweetId}` : parsed.url || null),
+    authorTwitterId: profile.id || tweet.user_id || null,
+    authorHandle,
+    authorName: profile.name || tweet.name || authorHandle,
+    authorAvatar: profile.profile_image_url || null,
+    authorGlobalRank: null,
+    postCreatedAt: eventAt,
+    text: tweet.text || null,
+    source: "crawler",
+    metrics: {
+      views: toNumberOrNull(tweet.views),
+      likes: toNumberOrNull(tweet.likes),
+      reposts: toNumberOrNull(tweet.retweet_count),
+      quotes: toNumberOrNull(tweet.quote_count),
+      replies: toNumberOrNull(tweet.reply_count),
+      bookmarks: toNumberOrNull(tweet.bookmark_count),
+    },
+    raw: tweet,
+  };
+}
+
+async function fetchTweetSnapshotFromCrawler(tweetId, parsed = {}) {
+  const crawlerUrl = getSocialListeningCrawlerUrl();
+  if (!crawlerUrl) return null;
+  const response = await axios.post(crawlerUrl, {
+    endpoint: "tweet_detail",
+    tweet_id: String(tweetId),
+  }, {
+    timeout: Number(process.env.SOCIAL_LISTENING_CRAWLER_TIMEOUT_MS || 18000),
+    headers: { "Content-Type": "application/json" },
+  });
+  const body = response.data || {};
+  const code = Number(body.code || body.status || 200);
+  if (code && code !== 200) return null;
+  const tweet = findCrawlerTweetPayload(body.data ?? body, tweetId);
+  if (!tweet) return null;
+  const snapshot = buildCrawlerTweetEventSnapshot(tweet, parsed);
+  return snapshot.postCreatedAt ? snapshot : null;
 }
 
 function buildInitialAiFields(matchedKeywords = []) {
@@ -714,6 +817,8 @@ module.exports = {
   serializeTwitterUser,
   buildBoardKeywords,
   mapTweetRowToPostPayload,
+  fetchTweetRowById,
+  fetchTweetSnapshotFromCrawler,
   fetchCandidateTweetsForBoard,
   fetchFollowSignalsForBoard,
 };

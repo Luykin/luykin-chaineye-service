@@ -12,6 +12,8 @@ function sendJsonError(res, error, fallback = "SOCIAL_LISTENING_ERROR") {
     success: false,
     error: error.message || fallback,
     message: error.publicMessage || error.message || fallback,
+    ...(error.details ? { details: error.details } : {}),
+    ...(error.manualRequired ? { manualRequired: true } : {}),
   });
 }
 

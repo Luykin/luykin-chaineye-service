@@ -32,6 +32,11 @@ const {
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { sendJsonError, publicError } = require("../services/errors");
 const { buildTweetUrl } = require("../utils/twitter");
+const {
+  mapTweetRowToPostPayload,
+  fetchTweetRowById,
+  fetchTweetSnapshotFromCrawler,
+} = require("../services/data-source");
 
 const router = express.Router();
 router.use(authenticateAuthCenterToken());
@@ -97,30 +102,137 @@ function applyExcludeUnknownRelatedPostEvents(where) {
   return where;
 }
 
-function buildKeyEventPayloadFromPost(board, parsed, relatedPost, body = {}, currentEvent = null) {
+function parseEventAt(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function snapshotFromRelatedPost(post) {
+  if (!post) return null;
   return {
-    tweetUrl: parsed.url || buildTweetUrl(parsed.handle || relatedPost?.authorHandle || currentEvent?.authorHandle, parsed.tweetId),
-    tweetId: parsed.tweetId,
-    eventType: body?.eventType ? String(body.eventType).slice(0, 64) : (currentEvent?.eventType || "custom"),
-    title: body?.title !== undefined ? String(body.title || "").slice(0, 255) || null : (currentEvent?.title || null),
-    authorTwitterId: relatedPost?.authorTwitterId || (currentEvent?.authorTwitterId || null),
-    authorHandle: relatedPost?.authorHandle || parsed.handle || (currentEvent?.authorHandle || null),
-    authorName: relatedPost?.authorName || (currentEvent?.authorName || null),
-    authorAvatar: relatedPost?.authorAvatar || (currentEvent?.authorAvatar || null),
-    authorGlobalRank: relatedPost?.authorGlobalRank || (currentEvent?.authorGlobalRank || null),
-    eventAt: relatedPost?.postCreatedAt || (currentEvent?.eventAt || new Date()),
-    metadata: { ...(currentEvent?.metadata || {}), note: body?.note !== undefined ? body.note : currentEvent?.metadata?.note || null },
+    tweetId: post.tweetId,
+    tweetUrl: buildTweetUrl(post.authorHandle, post.tweetId),
+    authorTwitterId: post.authorTwitterId || null,
+    authorHandle: post.authorHandle || null,
+    authorName: post.authorName || null,
+    authorAvatar: post.authorAvatar || null,
+    authorGlobalRank: post.authorGlobalRank || null,
+    postCreatedAt: post.postCreatedAt || null,
+    text: post.text || post.summaryZh || null,
+    source: "social_listening_post",
+    metrics: {
+      views: post.viewsCount || null,
+      likes: post.likesCount || null,
+      reposts: post.repostsCount || null,
+      quotes: post.quotesCount || null,
+      replies: post.repliesCount || null,
+    },
   };
 }
 
-async function resolveKeyEventTweet(board, rawValue) {
+function snapshotFromTweetRow(board, row, parsed) {
+  if (!row) return null;
+  const postPayload = mapTweetRowToPostPayload(board, row);
+  return {
+    tweetId: postPayload.tweetId || parsed.tweetId,
+    tweetUrl: buildTweetUrl(postPayload.authorHandle || parsed.handle, postPayload.tweetId || parsed.tweetId),
+    authorTwitterId: postPayload.authorTwitterId || null,
+    authorHandle: postPayload.authorHandle || parsed.handle || null,
+    authorName: postPayload.authorName || null,
+    authorAvatar: postPayload.authorAvatar || null,
+    authorGlobalRank: postPayload.authorGlobalRank || null,
+    postCreatedAt: postPayload.postCreatedAt || null,
+    text: postPayload.text || null,
+    source: "tweet_db",
+    metrics: {
+      views: postPayload.viewsCount || null,
+      likes: postPayload.likesCount || null,
+      reposts: postPayload.repostsCount || null,
+      quotes: postPayload.quotesCount || null,
+      replies: postPayload.repliesCount || null,
+    },
+  };
+}
+
+function buildManualEventSnapshot(parsed, body = {}, currentEvent = null) {
+  const eventAt = parseEventAt(body.eventAt || body.manualEventAt);
+  if (!eventAt) {
+    throw publicError("MANUAL_EVENT_AT_REQUIRED", 400, "手动添加关键事件时，请填写帖子发布时间。", {
+      manualRequired: true,
+      details: { manualRequired: true, tweetId: parsed.tweetId, tweetUrl: parsed.url || buildTweetUrl(parsed.handle, parsed.tweetId) },
+    });
+  }
+  return {
+    tweetId: parsed.tweetId,
+    tweetUrl: parsed.url || buildTweetUrl(parsed.handle || currentEvent?.authorHandle, parsed.tweetId),
+    authorTwitterId: currentEvent?.authorTwitterId || null,
+    authorHandle: parsed.handle || currentEvent?.authorHandle || null,
+    authorName: currentEvent?.authorName || null,
+    authorAvatar: currentEvent?.authorAvatar || null,
+    authorGlobalRank: currentEvent?.authorGlobalRank || null,
+    postCreatedAt: eventAt,
+    text: body.tweetText || currentEvent?.metadata?.tweetText || null,
+    source: "manual",
+    metrics: null,
+  };
+}
+
+function buildKeyEventPayloadFromSnapshot(board, parsed, snapshot, body = {}, currentEvent = null) {
+  const metadata = {
+    ...(currentEvent?.metadata || {}),
+    note: body?.note !== undefined ? body.note : currentEvent?.metadata?.note || null,
+    tweetText: snapshot?.text || currentEvent?.metadata?.tweetText || null,
+    source: snapshot?.source || currentEvent?.metadata?.source || null,
+    tweetSnapshot: snapshot?.metrics || currentEvent?.metadata?.tweetSnapshot || null,
+    hydratedAt: snapshot?.source && snapshot.source !== "manual" ? new Date().toISOString() : currentEvent?.metadata?.hydratedAt || null,
+  };
+  return {
+    tweetUrl: snapshot?.tweetUrl || parsed.url || buildTweetUrl(parsed.handle || snapshot?.authorHandle || currentEvent?.authorHandle, parsed.tweetId),
+    tweetId: parsed.tweetId,
+    eventType: body?.eventType ? String(body.eventType).slice(0, 64) : (currentEvent?.eventType || "custom"),
+    title: body?.title !== undefined ? String(body.title || "").slice(0, 255) || null : (currentEvent?.title || null),
+    authorTwitterId: snapshot?.authorTwitterId || (currentEvent?.authorTwitterId || null),
+    authorHandle: snapshot?.authorHandle || parsed.handle || (currentEvent?.authorHandle || null),
+    authorName: snapshot?.authorName || (currentEvent?.authorName || null),
+    authorAvatar: snapshot?.authorAvatar || (currentEvent?.authorAvatar || null),
+    authorGlobalRank: snapshot?.authorGlobalRank || (currentEvent?.authorGlobalRank || null),
+    eventAt: snapshot?.postCreatedAt || currentEvent?.eventAt,
+    metadata,
+  };
+}
+
+async function resolveKeyEventTweet(board, rawValue, body = {}, currentEvent = null) {
   const parsed = parseTweetUrl(rawValue);
   if (!parsed?.tweetId) throw publicError("INVALID_TWEET_URL", 400, "请输入合法的 X 帖子链接。");
+
   const relatedPost = await EchohuntSocialListeningPost.findOne({ where: { boardId: board.id, tweetId: parsed.tweetId }, raw: true });
-  if (relatedPost && !EFFECTIVE_SENTIMENTS.includes(String(relatedPost.sentiment || "").toLowerCase())) {
-    throw publicError("IRRELEVANT_TWEET_EVENT_NOT_ALLOWED", 400, "无关/未表态的帖子不支持加入前台关键事件。");
+  if (relatedPost) {
+    if (!EFFECTIVE_SENTIMENTS.includes(String(relatedPost.sentiment || "").toLowerCase())) {
+      throw publicError("IRRELEVANT_TWEET_EVENT_NOT_ALLOWED", 400, "无关/未表态的帖子不支持加入前台关键事件。");
+    }
+    return { parsed, snapshot: snapshotFromRelatedPost(relatedPost) };
   }
-  return { parsed, relatedPost };
+
+  const tweetRow = await fetchTweetRowById(parsed.tweetId).catch((error) => {
+    console.warn("[SocialListening] 读取帖子库事件信息失败:", error.message);
+    return null;
+  });
+  if (tweetRow) return { parsed, snapshot: snapshotFromTweetRow(board, tweetRow, parsed) };
+
+  const manual = body?.manual === true || body?.manual === "true" || body?.confirmManual === true || body?.confirmManual === "true";
+  if (manual) return { parsed, snapshot: buildManualEventSnapshot(parsed, body, currentEvent) };
+
+  const crawlerSnapshot = await fetchTweetSnapshotFromCrawler(parsed.tweetId, parsed).catch((error) => {
+    console.warn("[SocialListening] 爬虫补齐关键事件帖子失败:", error.message);
+    return null;
+  });
+  if (crawlerSnapshot) return { parsed, snapshot: crawlerSnapshot };
+
+  throw publicError("TWEET_EVENT_DETAIL_REQUIRED", 409, "暂时无法自动读取这条 X 帖子的发布时间和基础信息。请确认是否继续手动添加；手动添加需要填写帖子发布时间。", {
+    manualRequired: true,
+    details: { manualRequired: true, tweetId: parsed.tweetId, tweetUrl: parsed.url || buildTweetUrl(parsed.handle, parsed.tweetId) },
+  });
 }
 
 function applyExcludeOfficialAccount(where, board) {
@@ -381,12 +493,12 @@ router.get("/boards/:boardId/events", async (req, res) => {
 router.post("/boards/:boardId/events", async (req, res) => {
   try {
     const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
-    const { parsed, relatedPost } = await resolveKeyEventTweet(board, req.body?.tweetUrl || req.body?.tweetId);
+    const { parsed, snapshot } = await resolveKeyEventTweet(board, req.body?.tweetUrl || req.body?.tweetId, req.body);
     const event = await EchohuntSocialListeningKeyEvent.create({
       boardId: board.id,
       authCenterUserId: req.authCenter.user.id,
       xhuntUserId: req.authCenter.user.xhuntUserId || null,
-      ...buildKeyEventPayloadFromPost(board, parsed, relatedPost, req.body),
+      ...buildKeyEventPayloadFromSnapshot(board, parsed, snapshot, req.body),
     });
     return res.json({ success: true, data: event });
   } catch (error) {
@@ -404,12 +516,14 @@ router.patch("/boards/:boardId/events/:eventId", async (req, res) => {
       ? (req.body?.tweetUrl || req.body?.tweetId)
       : null;
     if (nextTweetValue) {
-      const { parsed, relatedPost } = await resolveKeyEventTweet(board, nextTweetValue);
-      await event.update(buildKeyEventPayloadFromPost(board, parsed, relatedPost, req.body, event));
+      const { parsed, snapshot } = await resolveKeyEventTweet(board, nextTweetValue, req.body, event);
+      await event.update(buildKeyEventPayloadFromSnapshot(board, parsed, snapshot, req.body, event));
     } else {
+      const nextEventAt = parseEventAt(req.body?.eventAt || req.body?.manualEventAt);
       await event.update({
         eventType: req.body?.eventType ? String(req.body.eventType).slice(0, 64) : event.eventType,
         title: req.body?.title !== undefined ? String(req.body.title || "").slice(0, 255) || null : event.title,
+        ...(nextEventAt ? { eventAt: nextEventAt } : {}),
         metadata: { ...(event.metadata || {}), note: req.body?.note !== undefined ? req.body.note : event.metadata?.note || null },
       });
     }
