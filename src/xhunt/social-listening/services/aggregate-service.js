@@ -217,6 +217,20 @@ function normalizeWordKey(value) {
     .replace(/[\s_\-.,!?，。！？:：;；()[\]{}"'“”‘’`]+/g, "");
 }
 
+function isLowerCaseDisplayName(value) {
+  const text = String(value || "").trim();
+  return Boolean(text) && text === text.toLowerCase() && /[a-z]/.test(text);
+}
+
+function pickAggregateDisplayName(currentName, nextName) {
+  const current = String(currentName || "").trim();
+  const next = String(nextName || "").trim();
+  if (!current) return next;
+  if (!next) return current;
+  if (isLowerCaseDisplayName(current) && !isLowerCaseDisplayName(next)) return next;
+  return current;
+}
+
 function getBoardDiscussionKeywordExclusions(board = {}) {
   const metadata = board.metadata && typeof board.metadata === "object" ? board.metadata : {};
   const wordCloud = metadata.wordCloud && typeof metadata.wordCloud === "object" ? metadata.wordCloud : {};
@@ -257,8 +271,13 @@ function aggregateListValues(map, values, post, options = {}) {
   list.forEach((value) => {
     const item = normalizeAggregateItem(value);
     if (!item?.name) return;
+    const key = normalizeWordKey(item.name);
+    if (!key) return;
     const sentiment = post.sentiment || SENTIMENTS.UNKNOWN;
-    incrementMap(map, item.name, (current) => {
+    incrementMap(map, key, (current) => {
+      const name = pickAggregateDisplayName(current.name, item.name);
+      const word = pickAggregateDisplayName(current.word, item.word);
+      const wordZh = current.wordZh || item.wordZh;
       const sentimentCounts = {
         ...(current.sentimentCounts || {}),
         [sentiment]: toNumber(current.sentimentCounts?.[sentiment]) + 1,
@@ -268,11 +287,11 @@ function aggregateListValues(map, values, post, options = {}) {
       pushLimited(postIds, post.id, 100);
       pushLimited(tweetIds, post.tweetId, 100);
       return {
-        name: item.name,
-        word: item.word,
-        wordZh: item.wordZh,
-        topic: item.name,
-        topicZh: item.wordZh,
+        name,
+        word,
+        wordZh,
+        topic: name,
+        topicZh: wordZh,
         count: toNumber(current.count) + 1,
         views: toNumber(current.views) + toNumber(post.viewsCount),
         engagement: toNumber(current.engagement) + getEngagement(post),
