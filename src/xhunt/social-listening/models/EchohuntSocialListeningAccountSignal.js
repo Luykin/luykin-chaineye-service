@@ -22,6 +22,7 @@ module.exports = (sequelize) => {
       topics: { type: DataTypes.JSONB, allowNull: true, comment: "相关动态主题摘要" },
       postIds: { type: DataTypes.JSONB, allowNull: true, comment: "相关 Social Listening post id 或 tweet id 列表" },
       summaryZh: { type: DataTypes.TEXT, allowNull: true, comment: "动态中文摘要" },
+      summaryEn: { type: DataTypes.TEXT, allowNull: true, comment: "动态英文摘要" },
       rankSnapshot: { type: DataTypes.JSONB, allowNull: true, comment: "排名快照与来源详情" },
     },
     {

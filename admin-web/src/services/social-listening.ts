@@ -66,8 +66,12 @@ export interface SocialListeningAlert {
   boardId: string;
   alertType: string;
   severity: string;
+  title?: string | null;
   titleZh: string;
+  titleEn?: string | null;
+  message?: string | null;
   messageZh: string;
+  messageEn?: string | null;
   triggeredAt: string;
   lastSeenAt: string;
   status: string;
@@ -96,6 +100,7 @@ export interface SocialListeningAccountSignal {
   topics?: string[] | null;
   postIds?: string[] | null;
   summaryZh?: string | null;
+  summaryEn?: string | null;
   rankSnapshot?: Record<string, unknown> | null;
   createdAt?: string | null;
   updatedAt?: string | null;

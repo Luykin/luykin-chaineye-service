@@ -795,6 +795,7 @@ async function generateInfluentialSignals(board, options = {}) {
       topics: post.topics,
       postIds: [post.tweetId],
       summaryZh: post.summaryZh || post.text,
+      summaryEn: post.summaryEn || `${post.authorName || post.authorHandle || post.authorTwitterId} mentioned ${board.projectName}.`,
       rankSnapshot: { globalRank: rank.globalRank, cnRank: rank.cnRank },
     }, { conflictFields: ["boardId", "signalType", "twitterId", "occurredAt"] }).catch(() => null);
 
@@ -806,10 +807,13 @@ async function generateInfluentialSignals(board, options = {}) {
       triggeredAt: post.postCreatedAt,
       lastSeenAt: new Date(),
       titleZh: "高影响力账号提及",
+      titleEn: "Influential account mention",
       messageZh: `${post.authorName || post.authorHandle || post.authorTwitterId} 提及了 ${board.projectName}`,
+      messageEn: `${post.authorName || post.authorHandle || post.authorTwitterId} mentioned ${board.projectName}.`,
       currentValue: {
         authorTwitterId: post.authorTwitterId,
         authorHandle: post.authorHandle,
+        authorName: post.authorName,
         globalRank: rank.globalRank,
         cnRank: rank.cnRank,
         views: post.viewsCount,
@@ -832,6 +836,16 @@ function describeFollowSignal(signalType, accountName, boardName) {
   if (signalType === ACCOUNT_SIGNAL_TYPES.ACCOUNT_UNFOLLOWED_PROJECT) return `${name} 取关了 ${boardName}`;
   if (signalType === ACCOUNT_SIGNAL_TYPES.PROJECT_UNFOLLOWED_ACCOUNT) return `${boardName} 取关了 ${name}`;
   return `${name} 关注关系发生变化`;
+}
+
+function describeFollowSignalEn(signalType, accountName, boardName) {
+  const name = accountName || "A key account";
+  const project = boardName || "this monitored project";
+  if (signalType === ACCOUNT_SIGNAL_TYPES.ACCOUNT_FOLLOWED_PROJECT) return `${name} followed ${project}.`;
+  if (signalType === ACCOUNT_SIGNAL_TYPES.PROJECT_FOLLOWED_ACCOUNT) return `${project} followed ${name}.`;
+  if (signalType === ACCOUNT_SIGNAL_TYPES.ACCOUNT_UNFOLLOWED_PROJECT) return `${name} unfollowed ${project}.`;
+  if (signalType === ACCOUNT_SIGNAL_TYPES.PROJECT_UNFOLLOWED_ACCOUNT) return `${project} unfollowed ${name}.`;
+  return `${name}'s relationship with ${project} changed.`;
 }
 
 async function generateFollowSignals(board, options = {}) {
@@ -868,6 +882,7 @@ async function generateFollowSignals(board, options = {}) {
       topics: null,
       postIds: [],
       summaryZh: describeFollowSignal(row.signalType, displayName, board.projectName),
+      summaryEn: describeFollowSignalEn(row.signalType, displayName, board.projectName),
       rankSnapshot: {
         globalRank: account.globalRank,
         cnRank: account.cnRank,
@@ -904,6 +919,12 @@ function getRangeLabel(rangeKey) {
   return "最近 7 天";
 }
 
+function getRangeLabelEn(rangeKey) {
+  if (rangeKey === "24H") return "the last 24 hours";
+  if (rangeKey === "30D") return "the last 30 days";
+  return "the last 7 days";
+}
+
 async function buildDerivedNegativeContentAlertForRange(board, window, options = {}) {
   if (!board?.id || !window?.windowStartAt || !window?.windowEndAt) return null;
   const where = {
@@ -937,6 +958,7 @@ async function buildDerivedNegativeContentAlertForRange(board, window, options =
   const detectedAt = window.windowEndAt;
   const rangeKey = normalizeRangeKey(window.rangeKey);
   const rangeLabel = getRangeLabel(rangeKey);
+  const rangeLabelEn = getRangeLabelEn(rangeKey);
 
   return {
     id: `derived-${ALERT_TYPES.NEGATIVE_CONTENT}-${board.id}-${rangeKey}`,
@@ -947,7 +969,9 @@ async function buildDerivedNegativeContentAlertForRange(board, window, options =
     triggeredAt: detectedAt,
     lastSeenAt: detectedAt,
     titleZh: isConcentratedNegative ? "集中负面内容风险" : "负面内容风险",
+    titleEn: isConcentratedNegative ? "Concentrated negative content risk" : "Negative content risk",
     messageZh: `${rangeLabel}识别到 ${negativeCount} 条负面讨论，来自 ${negativeAuthorCount || 1} 个账号。`,
+    messageEn: `${negativeCount} negative discussions from ${negativeAuthorCount || 1} account${Number(negativeAuthorCount || 1) === 1 ? "" : "s"} were detected in ${rangeLabelEn}.`,
     currentValue: {
       count: negativeCount,
       negativeCount,
@@ -1021,7 +1045,9 @@ async function generateAggregateAlerts(board, options = {}) {
       triggeredAt: currentStartAt,
       lastSeenAt: now,
       titleZh: "讨论量异常升高",
+      titleEn: "Discussion volume spike",
       messageZh: `最近 1 小时有效讨论量 ${effectiveCurrentPosts.length} 条，达到同小时历史基线 ${baselineAvg.toFixed(1)} 条的 ${volumeMultiplier} 倍以上。`,
+      messageEn: `Effective discussion volume reached ${effectiveCurrentPosts.length} in the last hour, at least ${volumeMultiplier}x the historical same-hour baseline of ${baselineAvg.toFixed(1)}.`,
       currentValue: { count: effectiveCurrentPosts.length, windowStartAt: currentStartAt, windowEndAt: currentEndAt },
       baselineValue: { average: baselineAvg, days: baselineDays, sameHourSampleSize: sameHourBaseline.length },
       sampleSize: effectiveCurrentPosts.length,
@@ -1048,7 +1074,9 @@ async function generateAggregateAlerts(board, options = {}) {
       triggeredAt: currentStartAt,
       lastSeenAt: now,
       titleZh: "负面占比异常升高",
+      titleEn: "Negative sentiment share spike",
       messageZh: `最近 1 小时负面占比 ${(currentNegative.ratio * 100).toFixed(1)}%，较历史基线上升 ${((currentNegative.ratio - baselineNegative.ratio) * 100).toFixed(1)} 个百分点。`,
+      messageEn: `Negative sentiment share reached ${(currentNegative.ratio * 100).toFixed(1)}% in the last hour, up ${((currentNegative.ratio - baselineNegative.ratio) * 100).toFixed(1)} percentage points from the historical baseline.`,
       currentValue: currentNegative,
       baselineValue: { ...baselineNegative, days: baselineDays },
       sampleSize: currentNegative.analyzed,
@@ -1081,7 +1109,9 @@ async function generateAggregateAlerts(board, options = {}) {
       triggeredAt: currentStartAt,
       lastSeenAt: now,
       titleZh: isConcentratedNegative ? "集中负面内容风险" : "负面内容风险",
+      titleEn: isConcentratedNegative ? "Concentrated negative content risk" : "Negative content risk",
       messageZh: `最近 1 小时识别到 ${negativePosts.length} 条负面讨论，来自 ${negativeAuthors.size} 个账号。`,
+      messageEn: `${negativePosts.length} negative discussions from ${negativeAuthors.size} account${negativeAuthors.size === 1 ? "" : "s"} were detected in the last hour.`,
       currentValue: { count: negativePosts.length, negativeCount: negativePosts.length, authorCount: negativeAuthors.size, views: negativeViews },
       baselineValue: null,
       sampleSize: negativePosts.length,

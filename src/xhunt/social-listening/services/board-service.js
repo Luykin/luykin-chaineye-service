@@ -15,6 +15,8 @@ const {
 } = require("../../../models/postgres-start");
 const {
   ACCESS_STATUSES,
+  ACCOUNT_SIGNAL_TYPES,
+  ALERT_TYPES,
   BOARD_STATUSES,
   JOB_STATUSES,
   JOB_TYPES,
@@ -304,6 +306,19 @@ function serializePost(record) {
   };
 }
 
+function getSignalDisplayName(row = {}) {
+  return row.name || row.handle || row.twitterId || "Key account";
+}
+
+function describeAccountSignalEn(row = {}) {
+  const name = getSignalDisplayName(row);
+  if (row.signalType === ACCOUNT_SIGNAL_TYPES.ACCOUNT_FOLLOWED_PROJECT) return `${name} followed this monitored project.`;
+  if (row.signalType === ACCOUNT_SIGNAL_TYPES.PROJECT_FOLLOWED_ACCOUNT) return `This monitored project followed ${name}.`;
+  if (row.signalType === ACCOUNT_SIGNAL_TYPES.ACCOUNT_UNFOLLOWED_PROJECT) return `${name} unfollowed this monitored project.`;
+  if (row.signalType === ACCOUNT_SIGNAL_TYPES.PROJECT_UNFOLLOWED_ACCOUNT) return `This monitored project unfollowed ${name}.`;
+  return `${name} mentioned this monitored project.`;
+}
+
 function serializeAccountSignal(record) {
   const row = toJson(record) || {};
   const avatar = pickAvatarUrl(row.avatar, row.avatarUrl, row.profileImageUrl);
@@ -312,6 +327,75 @@ function serializeAccountSignal(record) {
     avatar,
     avatarUrl: avatar,
     profileImageUrl: avatar,
+    summaryEn: row.summaryEn || describeAccountSignalEn(row),
+  };
+}
+
+function formatAlertPercent(value) {
+  const num = Number(value || 0);
+  if (!Number.isFinite(num)) return "0.0%";
+  return `${(num * 100).toFixed(1)}%`;
+}
+
+function buildAlertI18nFallback(alert = {}) {
+  const currentValue = alert.currentValue && typeof alert.currentValue === "object" ? alert.currentValue : {};
+  const baselineValue = alert.baselineValue && typeof alert.baselineValue === "object" ? alert.baselineValue : {};
+  if (alert.alertType === ALERT_TYPES.INFLUENTIAL_MENTION) {
+    const author = currentValue.authorName || currentValue.authorHandle || currentValue.authorTwitterId || "An influential account";
+    return {
+      titleEn: "Influential account mention",
+      messageEn: `${author} mentioned this monitored project.`,
+    };
+  }
+  if (alert.alertType === ALERT_TYPES.NEGATIVE_CONTENT) {
+    const count = currentValue.negativeCount ?? currentValue.count ?? alert.sampleSize ?? 0;
+    const authorCount = currentValue.authorCount ?? 1;
+    return {
+      titleEn: alert.titleZh === "集中负面内容风险" ? "Concentrated negative content risk" : "Negative content risk",
+      messageEn: `${count} negative discussions from ${authorCount} account${Number(authorCount) === 1 ? "" : "s"} were detected in the selected range.`,
+    };
+  }
+  if (alert.alertType === ALERT_TYPES.VOLUME_SPIKE) {
+    const count = currentValue.count ?? alert.sampleSize ?? 0;
+    const average = baselineValue.average;
+    return {
+      titleEn: "Discussion volume spike",
+      messageEn: average
+        ? `Effective discussion volume reached ${count}, above the historical same-hour baseline of ${Number(average).toFixed(1)}.`
+        : `Effective discussion volume reached ${count}, above the historical baseline.`,
+    };
+  }
+  if (alert.alertType === ALERT_TYPES.NEGATIVE_SHARE_SPIKE) {
+    const currentRatio = currentValue.ratio;
+    const baselineRatio = baselineValue.ratio;
+    return {
+      titleEn: "Negative sentiment share spike",
+      messageEn: `Negative sentiment share rose to ${formatAlertPercent(currentRatio)}${baselineRatio === undefined || baselineRatio === null ? "." : `, above the historical baseline of ${formatAlertPercent(baselineRatio)}.`}`,
+    };
+  }
+  return {
+    titleEn: alert.titleEn || alert.titleZh || "Social Listening alert",
+    messageEn: alert.messageEn || alert.messageZh || "",
+  };
+}
+
+function serializeAlert(record, options = {}) {
+  const row = toJson(record) || {};
+  const fallback = buildAlertI18nFallback(row);
+  const titleZh = row.titleZh || row.titleEn || fallback.titleEn || "";
+  const messageZh = row.messageZh || row.messageEn || fallback.messageEn || "";
+  const titleEn = row.titleEn || fallback.titleEn || titleZh;
+  const messageEn = row.messageEn || fallback.messageEn || messageZh;
+  const lang = String(options.lang || "").toLowerCase();
+  const useZh = lang.startsWith("zh");
+  return {
+    ...row,
+    titleZh,
+    titleEn,
+    messageZh,
+    messageEn,
+    title: useZh ? titleZh : titleEn,
+    message: useZh ? messageZh : messageEn,
   };
 }
 
@@ -779,6 +863,7 @@ module.exports = {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  serializeAlert,
   getPostDisplayRank,
   enrichSignalAvatars,
   enrichInfluentialAlertRanks,

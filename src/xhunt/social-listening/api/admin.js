@@ -26,6 +26,7 @@ const {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  serializeAlert,
   enrichSignalAvatars,
   enrichInfluentialAlertRanks,
   normalizePage,
@@ -857,7 +858,7 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
       ? await appendDerivedNegativeContentAlert(board, window, result.rows, { type: req.query.type })
       : { rows: result.rows, appended: false };
     const items = await enrichInfluentialAlertRanks(derived.rows.slice(0, limit), board.id);
-    return res.json({ success: true, data: { rangeKey, items, page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
+    return res.json({ success: true, data: { rangeKey, items: items.map((item) => serializeAlert(item, { lang: req.query.lang })), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_BOARD_ALERTS_FAILED");
   }
@@ -928,7 +929,7 @@ router.get("/alerts", async (req, res) => {
       raw: true,
     });
     const items = await enrichInfluentialAlertRanks(result.rows);
-    return res.json({ success: true, data: { items, page, pageSize, total: result.count } });
+    return res.json({ success: true, data: { items: items.map((item) => serializeAlert(item, { lang: req.query.lang })), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_ALERTS_FAILED");
   }

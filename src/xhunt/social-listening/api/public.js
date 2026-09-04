@@ -17,6 +17,7 @@ const {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  serializeAlert,
   getPostDisplayRank,
   enrichSignalAvatars,
   enrichInfluentialAlertRanks,
@@ -466,7 +467,7 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
       ? await appendDerivedNegativeContentAlert(board, window, result.rows, { type: req.query.type })
       : { rows: result.rows, appended: false };
     const items = await enrichInfluentialAlertRanks(derived.rows.slice(0, limit), board.id);
-    return res.json({ success: true, data: { rangeKey, items, page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
+    return res.json({ success: true, data: { rangeKey, items: items.map((item) => serializeAlert(item, { lang: req.query.lang })), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ALERTS_FAILED");
   }
@@ -481,7 +482,7 @@ router.get("/boards/:boardId/alerts/:alertId", async (req, res) => {
     });
     if (!alert) throw publicError("ALERT_NOT_FOUND", 404, "预警不存在。");
     const [item] = await enrichInfluentialAlertRanks([alert], board.id);
-    return res.json({ success: true, data: item || alert });
+    return res.json({ success: true, data: serializeAlert(item || alert, { lang: req.query.lang }) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ALERT_FAILED");
   }
