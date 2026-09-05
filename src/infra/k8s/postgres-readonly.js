@@ -18,19 +18,17 @@ const { Sequelize, QueryTypes } = require("sequelize");
  * - K8S_PG_READ_SSL：是否启用 SSL，true 时打开。
  * - K8S_PG_READ_SSL_REJECT_UNAUTHORIZED：SSL 是否校验证书，默认校验，显式 false 时跳过。
  * - K8S_PG_READ_LOGGING：是否打印 Sequelize SQL 日志，默认关闭。
+ *
+ * 业务隔离连接池：
+ * - getPostgresReadOnlyInstance("social-listening") 会创建独立只读池，避免和 KOL / Admin 查询抢连接。
+ * - 可用 K8S_PG_READ_SOCIAL_LISTENING_POOL_MAX 等作用域变量覆盖通用配置。
  */
 
-// 只读 Sequelize 实例，全局复用一个连接池；不加载业务模型，也不执行 sync。
-let pgReadInstance = null;
+// 只读 Sequelize 实例按业务作用域拆分连接池；不加载业务模型，也不执行 sync。
+const pgReadInstances = new Map();
 
-// 记录只读从库初始化状态，业务接口用它判断是否可以提供服务。
-let setupState = {
-  configured: false,
-  ready: false,
-  checkedAt: null,
-  server: null,
-  error: null,
-};
+// 只读从库初始化状态同样按业务作用域拆分，避免 scoped pool 复用 default ready 状态。
+const pgReadSetupStates = new Map();
 
 // 按顺序读取环境变量，前面的命名优先级更高。
 function getEnvValue(names = []) {
@@ -41,34 +39,96 @@ function getEnvValue(names = []) {
   return "";
 }
 
+function normalizeScope(scope) {
+  const normalized = String(scope || "default")
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+  return normalized || "DEFAULT";
+}
+
+function getScopeName(scope) {
+  return normalizeScope(scope).toLowerCase().replace(/_/g, "-");
+}
+
+function getApplicationName(scope) {
+  const scopeName = getScopeName(scope);
+  return scopeName === "default" ? "xhunt-pg-readonly" : `xhunt-pg-readonly-${scopeName}`;
+}
+
+function createSetupState(scope = "default") {
+  return {
+    scope: getScopeName(scope),
+    configured: false,
+    ready: false,
+    checkedAt: null,
+    server: null,
+    error: null,
+  };
+}
+
+function getSetupState(scope = "default") {
+  const scopeKey = normalizeScope(scope);
+  if (!pgReadSetupStates.has(scopeKey)) {
+    pgReadSetupStates.set(scopeKey, createSetupState(scope));
+  }
+  return pgReadSetupStates.get(scopeKey);
+}
+
 // 统一读取 K8S_PG_READ_*；fallbackNames 只做历史环境变量兼容。
 function getK8sPgReadEnv(suffix, fallbackNames = []) {
   return getEnvValue([`K8S_PG_READ_${suffix}`, ...fallbackNames]);
 }
 
+function getScopedK8sPgReadEnv(scope, suffix, fallbackNames = []) {
+  const normalizedScope = normalizeScope(scope);
+  if (normalizedScope === "DEFAULT") {
+    return getK8sPgReadEnv(suffix, fallbackNames);
+  }
+  return getEnvValue([
+    `K8S_PG_READ_${normalizedScope}_${suffix}`,
+    `PG_READ_${normalizedScope}_${suffix}`,
+    `K8S_PG_READ_${suffix}`,
+    ...fallbackNames,
+    `PG_READ_${suffix}`,
+  ]);
+}
+
 // 连接串模式：K8s Secret 直接注入完整只读从库 URL。
-function getK8sReadUrl() {
-  return getK8sPgReadEnv("DATABASE_URL", [
+function getK8sReadUrl(scope = "default") {
+  const normalizedScope = normalizeScope(scope);
+  if (normalizedScope === "DEFAULT") {
+    return getK8sPgReadEnv("DATABASE_URL", [
+      "PG_READ_DATABASE_URL",
+      "DATABASE_URL_READ",
+    ]);
+  }
+  return getEnvValue([
+    `K8S_PG_READ_${normalizedScope}_DATABASE_URL`,
+    `PG_READ_${normalizedScope}_DATABASE_URL`,
+    `DATABASE_URL_READ_${normalizedScope}`,
+    "K8S_PG_READ_DATABASE_URL",
     "PG_READ_DATABASE_URL",
     "DATABASE_URL_READ",
   ]);
 }
 
 // 拆分字段模式：没有完整连接串时，用 host/database/username/password 组装连接。
-function getK8sReadObjectConfig() {
-  const host = getK8sPgReadEnv("HOST", ["PG_READ_HOST"]);
-  const database = getK8sPgReadEnv("DATABASE", ["PG_READ_DATABASE", "PG_DATABASE"]);
-  const username = getK8sPgReadEnv("USERNAME", ["PG_READ_USERNAME"]);
-  const password = getK8sPgReadEnv("PASSWORD", ["PG_READ_PASSWORD"]);
+function getK8sReadObjectConfig(scope = "default") {
+  const host = getScopedK8sPgReadEnv(scope, "HOST", ["PG_READ_HOST"]);
+  const database = getScopedK8sPgReadEnv(scope, "DATABASE", ["PG_READ_DATABASE", "PG_DATABASE"]);
+  const username = getScopedK8sPgReadEnv(scope, "USERNAME", ["PG_READ_USERNAME"]);
+  const password = getScopedK8sPgReadEnv(scope, "PASSWORD", ["PG_READ_PASSWORD"]);
 
   if (!host || !database || !username || !password) {
     return null;
   }
 
-  const port = Number(getK8sPgReadEnv("PORT", ["PG_READ_PORT"]) || 5432);
+  const port = Number(getScopedK8sPgReadEnv(scope, "PORT", ["PG_READ_PORT"]) || 5432);
 
   return {
-    dialect: getK8sPgReadEnv("DIALECT", ["PG_READ_DIALECT", "PG_DIALECT"]) || "postgres",
+    dialect: getScopedK8sPgReadEnv(scope, "DIALECT", ["PG_READ_DIALECT", "PG_DIALECT"]) || "postgres",
     host,
     port: Number.isFinite(port) && port > 0 ? Math.floor(port) : 5432,
     database,
@@ -78,14 +138,14 @@ function getK8sReadObjectConfig() {
 }
 
 // 只判断配置是否存在，不主动连库；用于 API 启动和接口前置检查。
-function isPostgresReadOnlyConfigured() {
-  return Boolean(getK8sReadUrl() || getK8sReadObjectConfig());
+function isPostgresReadOnlyConfigured(scope = "default") {
+  return Boolean(getK8sReadUrl(scope) || getK8sReadObjectConfig(scope));
 }
 
 // 连接级保护：强制默认只读、设置 statement_timeout，避免慢 SQL 或误写拖垮从库。
-function buildDialectOptions() {
+function buildDialectOptions(scope = "default") {
   const statementTimeout = Number(
-    getK8sPgReadEnv("STATEMENT_TIMEOUT_MS", ["PG_READ_STATEMENT_TIMEOUT_MS"]) || 1500
+    getScopedK8sPgReadEnv(scope, "STATEMENT_TIMEOUT_MS", ["PG_READ_STATEMENT_TIMEOUT_MS"]) || 1500
   );
   const safeStatementTimeout = Number.isFinite(statementTimeout) && statementTimeout > 0
     ? statementTimeout
@@ -98,14 +158,14 @@ function buildDialectOptions() {
       "-c default_transaction_read_only=on",
       `-c statement_timeout=${safeStatementTimeout}`,
       "-c idle_in_transaction_session_timeout=3000",
-      "-c application_name=xhunt-pg-readonly",
+      `-c application_name=${getApplicationName(scope)}`,
     ].join(" "),
   };
 
-  if (getK8sPgReadEnv("SSL", ["PG_READ_SSL", "PG_SSL"]) === "true") {
+  if (getScopedK8sPgReadEnv(scope, "SSL", ["PG_READ_SSL", "PG_SSL"]) === "true") {
     dialectOptions.ssl = {
       require: true,
-      rejectUnauthorized: getK8sPgReadEnv("SSL_REJECT_UNAUTHORIZED", [
+      rejectUnauthorized: getScopedK8sPgReadEnv(scope, "SSL_REJECT_UNAUTHORIZED", [
         "PG_READ_SSL_REJECT_UNAUTHORIZED",
         "PG_SSL_REJECT_UNAUTHORIZED",
       ]) !== "false",
@@ -115,29 +175,29 @@ function buildDialectOptions() {
   return dialectOptions;
 }
 
-function createPostgresReadOnlyInstance() {
+function createPostgresReadOnlyInstance(scope = "default") {
   // 只读从库连接池保持保守配置，避免新增能力对从库造成过大连接压力。
   const commonOptions = {
     dialect: "postgres",
-    logging: getK8sPgReadEnv("LOGGING", ["PG_READ_LOGGING"]) === "true",
+    logging: getScopedK8sPgReadEnv(scope, "LOGGING", ["PG_READ_LOGGING"]) === "true",
     timezone: "+00:00",
     pool: {
-      max: Number(getK8sPgReadEnv("POOL_MAX", ["PG_READ_POOL_MAX"]) || 3),
-      min: Number(getK8sPgReadEnv("POOL_MIN", ["PG_READ_POOL_MIN"]) || 0),
+      max: Number(getScopedK8sPgReadEnv(scope, "POOL_MAX", ["PG_READ_POOL_MAX"]) || 3),
+      min: Number(getScopedK8sPgReadEnv(scope, "POOL_MIN", ["PG_READ_POOL_MIN"]) || 0),
       idle: 10000,
       acquire: 10000,
     },
-    dialectOptions: buildDialectOptions(),
+    dialectOptions: buildDialectOptions(scope),
   };
 
   // 优先使用完整连接串，便于 K8s Secret 统一管理。
-  const readUrl = getK8sReadUrl();
+  const readUrl = getK8sReadUrl(scope);
   if (readUrl) {
     return new Sequelize(readUrl, commonOptions);
   }
 
   // 没有连接串时，退到拆分字段模式。
-  const objectConfig = getK8sReadObjectConfig();
+  const objectConfig = getK8sReadObjectConfig(scope);
   if (!objectConfig) {
     const error = new Error(
       "K8s PG read-only env incomplete: require K8S_PG_READ_DATABASE_URL or K8S_PG_READ_HOST/K8S_PG_READ_DATABASE/K8S_PG_READ_USERNAME/K8S_PG_READ_PASSWORD"
@@ -155,36 +215,43 @@ function createPostgresReadOnlyInstance() {
   });
 }
 
-function getPostgresReadOnlyInstance() {
+function getPostgresReadOnlyInstance(scope = "default") {
   // 未配置时直接抛业务可识别错误，接口层会转成 503。
-  if (!isPostgresReadOnlyConfigured()) {
+  if (!isPostgresReadOnlyConfigured(scope)) {
     const error = new Error("PG read-only connection is not configured");
     error.code = "PG_READ_NOT_CONFIGURED";
     throw error;
   }
 
   // 懒创建实例：模块 require 时不连库，setup 或首次查询时再创建。
-  if (!pgReadInstance) {
-    pgReadInstance = createPostgresReadOnlyInstance();
+  const scopeKey = normalizeScope(scope);
+  if (!pgReadInstances.has(scopeKey)) {
+    pgReadInstances.set(scopeKey, createPostgresReadOnlyInstance(scope));
   }
 
-  return pgReadInstance;
+  return pgReadInstances.get(scopeKey);
 }
 
-async function setupK8sPostgresReadOnlyConnection() {
+async function setupK8sPostgresReadOnlyConnection(scope = "default") {
+  const scopeKey = normalizeScope(scope);
+  const scopeName = getScopeName(scope);
+  const setupState = getSetupState(scope);
+
   // 每次 setup 都刷新状态，便于接口层准确判断只读从库是否 ready。
-  setupState.configured = isPostgresReadOnlyConfigured();
+  setupState.scope = scopeName;
+  setupState.configured = isPostgresReadOnlyConfigured(scope);
   setupState.checkedAt = new Date().toISOString();
   setupState.error = null;
 
   if (!setupState.configured) {
     setupState.ready = false;
-    console.warn("[PG ReadOnly] skip setup: K8S_PG_READ_DATABASE_URL is not configured");
+    setupState.server = null;
+    console.warn(`[PG ReadOnly] skip setup scope=${scopeName}: read-only env is not configured`);
     return setupState;
   }
 
   try {
-    const instance = getPostgresReadOnlyInstance();
+    const instance = getPostgresReadOnlyInstance(scope);
     await instance.authenticate();
 
     // 启动时做安全校验：
@@ -203,11 +270,11 @@ async function setupK8sPostgresReadOnlyConnection() {
       { type: QueryTypes.SELECT }
     );
 
-    const allowPrimary = getK8sPgReadEnv("ALLOW_PRIMARY", ["PG_READ_ALLOW_PRIMARY"]) === "true";
+    const allowPrimary = getScopedK8sPgReadEnv(scope, "ALLOW_PRIMARY", ["PG_READ_ALLOW_PRIMARY"]) === "true";
     // 默认不允许连接到主库；除非显式 K8S_PG_READ_ALLOW_PRIMARY=true。
     if (!allowPrimary && !row.inRecovery) {
       const error = new Error(
-        `[PG ReadOnly] expected replica, but connected to primary ${row.serverAddr}:${row.serverPort}`
+        `[PG ReadOnly] expected replica for scope=${scopeName}, but connected to primary ${row.serverAddr}:${row.serverPort}`
       );
       error.code = "PG_READ_CONNECTED_TO_PRIMARY";
       throw error;
@@ -223,30 +290,37 @@ async function setupK8sPostgresReadOnlyConnection() {
     };
 
     console.log(
-      `[PG ReadOnly] connected database=${row.databaseName} server=${row.serverAddr}:${row.serverPort} recovery=${row.inRecovery} readonly=${row.transactionReadOnly}`
+      `[PG ReadOnly] connected scope=${scopeName} database=${row.databaseName} server=${row.serverAddr}:${row.serverPort} recovery=${row.inRecovery} readonly=${row.transactionReadOnly}`
     );
 
     return setupState;
   } catch (error) {
     setupState.ready = false;
     setupState.error = error.message;
+    setupState.server = null;
 
     // 初始化失败时关闭半初始化连接，避免后续业务复用异常连接池。
+    const pgReadInstance = pgReadInstances.get(scopeKey);
     if (pgReadInstance) {
       try {
         await pgReadInstance.close();
       } catch (closeError) {
         console.warn("[PG ReadOnly] close failed after setup error:", closeError.message);
       } finally {
-        pgReadInstance = null;
+        pgReadInstances.delete(scopeKey);
       }
     }
     throw error;
   }
 }
 
-function getPostgresReadOnlyStatus() {
-  return { ...setupState };
+function getPostgresReadOnlyStatus(scope = "default") {
+  const setupState = getSetupState(scope);
+  return {
+    ...setupState,
+    configured: isPostgresReadOnlyConfigured(scope),
+    server: setupState.server ? { ...setupState.server } : null,
+  };
 }
 
 module.exports = {

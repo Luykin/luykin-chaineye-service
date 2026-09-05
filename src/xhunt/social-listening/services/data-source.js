@@ -10,16 +10,18 @@ const { normalizeTweetText, collectMatchedKeywords, normalizeKeywords } = requir
 const { ACCOUNT_SIGNAL_TYPES } = require("../constants");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
+const SOCIAL_LISTENING_READONLY_SCOPE = "social-listening";
+
 function getReadonlyDbOrThrow() {
-  const status = getPostgresReadOnlyStatus();
-  if (!isPostgresReadOnlyConfigured() || !status.ready) {
+  const status = getPostgresReadOnlyStatus(SOCIAL_LISTENING_READONLY_SCOPE);
+  if (!isPostgresReadOnlyConfigured(SOCIAL_LISTENING_READONLY_SCOPE) || !status.ready) {
     const error = new Error("PG_READ_NOT_READY");
     error.status = 503;
     error.publicMessage = "只读数据源暂不可用，请稍后再试。";
     error.details = status;
     throw error;
   }
-  return getPostgresReadOnlyInstance();
+  return getPostgresReadOnlyInstance(SOCIAL_LISTENING_READONLY_SCOPE);
 }
 
 function clampInteger(value, fallback, min, max) {
@@ -72,19 +74,50 @@ function isStatementTimeoutError(error) {
   }) || errors.some((item) => /canceling statement due to statement timeout/i.test(String(item.message || "")));
 }
 
+function isReadonlyPoolAcquireTimeoutError(error) {
+  const errors = [error, error?.parent, error?.original].filter(Boolean);
+  return errors.some((item) => String(item.name || "") === "SequelizeConnectionAcquireTimeoutError")
+    || errors.some((item) => String(item.code || "") === "PG_READ_POOL_ACQUIRE_TIMEOUT")
+    || errors.some((item) => /Operation timeout/i.test(String(item.message || "")));
+}
+
+function normalizeReadonlyQueryError(error, db) {
+  if (!isReadonlyPoolAcquireTimeoutError(error)) return error;
+  const pool = db?.options?.pool || {};
+  error.code = "PG_READ_POOL_ACQUIRE_TIMEOUT";
+  error.status = 503;
+  error.publicMessage = [
+    "Social Listening 获取只读 PostgreSQL 连接超时，不是前端 URL 或接口地址配置问题。",
+    `只读连接池 scope=${SOCIAL_LISTENING_READONLY_SCOPE} max=${pool.max || "-"} acquire=${pool.acquire || "-"}ms。`,
+    "通常是只读池被慢查询/并发查询占满，可调大 K8S_PG_READ_SOCIAL_LISTENING_POOL_MAX，或降低 social-listening 的 scan.pageSize / scan.maxPages / scheduler.maxJobsPerTick 后重试。",
+  ].join(" ");
+  error.details = {
+    scope: SOCIAL_LISTENING_READONLY_SCOPE,
+    poolMax: pool.max,
+    poolAcquireMs: pool.acquire,
+  };
+  return error;
+}
+
 async function queryReadonlyWithStatementTimeout(db, sql, queryOptions, statementTimeoutMs) {
   const configuredTimeout = statementTimeoutMs ?? (await getSocialListeningRuntimeConfig()).scan?.statementTimeoutMs;
   const timeoutMs = Number(configuredTimeout);
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return db.query(sql, queryOptions);
+  try {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return await db.query(sql, queryOptions);
 
-  return db.transaction(async (transaction) => {
-    await db.query("SELECT set_config('statement_timeout', $statementTimeout, true)", {
-      bind: { statementTimeout: `${Math.floor(timeoutMs)}ms` },
-      type: QueryTypes.SELECT,
-      transaction,
+    // 使用 Sequelize managed transaction，异常时会自动 rollback 并释放连接；
+    // 不在业务代码里保存 transaction / connection 引用，避免异常路径泄漏只读连接。
+    return await db.transaction(async (transaction) => {
+      await db.query("SELECT set_config('statement_timeout', $statementTimeout, true)", {
+        bind: { statementTimeout: `${Math.floor(timeoutMs)}ms` },
+        type: QueryTypes.SELECT,
+        transaction,
+      });
+      return db.query(sql, { ...queryOptions, transaction });
     });
-    return db.query(sql, { ...queryOptions, transaction });
-  });
+  } catch (error) {
+    throw normalizeReadonlyQueryError(error, db);
+  }
 }
 
 function toNumberOrNull(value) {
@@ -606,6 +639,10 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
     scanMeta.matchedBeforeLimit = matchedIds.length;
     rows = await fetchTweetRowsByIds(db, matchedIds.slice(0, limit), limit);
   } catch (error) {
+    if (isReadonlyPoolAcquireTimeoutError(error)) {
+      scanMeta.stoppedReason = "readonly_pool_acquire_timeout";
+      throw error;
+    }
     if (!isStatementTimeoutError(error)) throw error;
     error.publicMessage = [
       "只读库扫描推文超时，不是前端 URL 或接口地址配置问题。",

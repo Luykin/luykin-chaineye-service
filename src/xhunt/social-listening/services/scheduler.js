@@ -10,6 +10,19 @@ const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 const SCHEDULER_STATE_KEY = "echohunt:social-listening:scheduler:state";
 const SCHEDULER_ENABLED_VALUE = "running";
 
+function formatSchedulerError(error) {
+  if (!error || typeof error !== "object") return String(error);
+  const stack = error.stack
+    ? String(error.stack).split("\n").slice(0, 8).map((line) => line.trim()).join(" | ")
+    : "";
+  return [
+    `name=${error.name || "-"}`,
+    `code=${error.code || "-"}`,
+    `message=${String(error.publicMessage || error.message || error).slice(0, 1200)}`,
+    stack ? `stack=${stack}` : "",
+  ].filter(Boolean).join(" ");
+}
+
 async function getSchedulerMode() {
   const config = await getSocialListeningRuntimeConfig();
   return config.scheduler?.mode || "default";
@@ -114,7 +127,12 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     let processed = 0;
     for (const job of jobs) {
       const result = await withBoardLock(job.boardId, async () => {
-        await processSocialListeningJob(job.id);
+        try {
+          await processSocialListeningJob(job.id);
+        } catch (error) {
+          console.error(`[SocialListeningScheduler] job failed id=${job.id} board=${job.boardId} type=${job.jobType}:`, formatSchedulerError(error));
+          throw error;
+        }
         return true;
       });
       if (result) processed += 1;
@@ -136,7 +154,7 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     ticking = true;
     try {
       const recovered = await recoverStaleRunningJobs().catch((error) => {
-        console.warn("[SocialListeningScheduler] recover stale jobs failed:", error.message);
+        console.warn("[SocialListeningScheduler] recover stale jobs failed:", formatSchedulerError(error));
         return 0;
       });
       const enqueued = await enqueueDueIncrementalJobs();
@@ -145,7 +163,7 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
         console.log(`[SocialListeningScheduler] tick recovered=${recovered} enqueued=${enqueued} processed=${processed}`);
       }
     } catch (error) {
-      console.error("[SocialListeningScheduler] tick failed:", error.message || error);
+      console.error("[SocialListeningScheduler] tick failed:", formatSchedulerError(error));
     } finally {
       ticking = false;
     }

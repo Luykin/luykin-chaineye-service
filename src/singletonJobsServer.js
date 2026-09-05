@@ -35,6 +35,8 @@ const {
   createBackendHealthChecker,
 } = require("./services/singleton/backend-health-checker");
 
+const SOCIAL_LISTENING_READONLY_SCOPE = "social-listening";
+
 // 初始化 Redis 客户端
 const redisClient = redis.createClient({
   socket: {
@@ -53,10 +55,10 @@ const redisClient = redis.createClient({
     await redisClient.connect();
     console.log("✅ Redis 连接成功");
 
-    // Social Listening 后台任务需要 meta/dev 只读从库；未配置时调度器仍会启动但任务会失败并留下明确错误。
-    if (isPostgresReadOnlyConfigured()) {
+    // Social Listening 后台任务使用独立只读连接池，ready 状态也按 scope 校验。
+    if (isPostgresReadOnlyConfigured(SOCIAL_LISTENING_READONLY_SCOPE)) {
       try {
-        await setupK8sPostgresReadOnlyConnection();
+        await setupK8sPostgresReadOnlyConnection(SOCIAL_LISTENING_READONLY_SCOPE);
         console.log("✅ Social Listening 只读从库初始化成功");
       } catch (error) {
         console.error("[SocialListening] 只读从库初始化失败:", error.message);

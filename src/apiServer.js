@@ -205,6 +205,9 @@ const {
   isPostgresWriteConfigured,
   setupK8sPostgresWriteConnection,
 } = require("./infra/k8s/postgres-write");
+
+const SOCIAL_LISTENING_READONLY_SCOPE = "social-listening";
+
 const fundraisingRoutes = require("./routes/fundraising");
 const cryptoRoutes = require("./routes/cryptohunt-tg");
 const proxyRoutes = require("./routes/proxy");
@@ -768,12 +771,24 @@ async function initializeAndStartServer() {
       await setupK8sPostgresReadOnlyConnection(); // 初始化 K8s 注入的 PostgreSQL 只读从库连接；不执行 sync
     } catch (error) {
       console.error(
-        "[API Server] ❌ PostgreSQL 只读从库初始化失败，依赖只读从库的业务接口会返回 503:",
+        "[API Server] ❌ 默认 PostgreSQL 只读从库初始化失败，依赖默认只读从库的业务接口会返回 503:",
         error.message
       );
     }
   } else {
-    console.warn("[API Server] PostgreSQL 只读从库未配置，依赖只读从库的业务接口会返回 503");
+    console.warn("[API Server] 默认 PostgreSQL 只读从库未配置，依赖默认只读从库的业务接口会返回 503");
+  }
+  if (isPostgresReadOnlyConfigured(SOCIAL_LISTENING_READONLY_SCOPE)) {
+    try {
+      await setupK8sPostgresReadOnlyConnection(SOCIAL_LISTENING_READONLY_SCOPE); // 初始化 Social Listening 独立只读池；不执行 sync
+    } catch (error) {
+      console.error(
+        "[API Server] ❌ Social Listening 只读从库初始化失败，相关接口会返回 503:",
+        error.message
+      );
+    }
+  } else {
+    console.warn("[API Server] Social Listening 只读从库未配置，相关接口会返回 503");
   }
   if (isPostgresWriteConfigured()) {
     try {
