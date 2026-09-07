@@ -17,6 +17,8 @@ const {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  applySignalPostFilter,
+  enrichSignalPostSources,
   serializeAlert,
   getPostDisplayRank,
   enrichSignalAvatars,
@@ -30,6 +32,7 @@ const {
   buildSnapshotPayload,
   EFFECTIVE_SENTIMENTS,
   appendDerivedNegativeContentAlert,
+  INFLUENTIAL_GLOBAL_RANK_LIMIT,
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { sendJsonError, publicError } = require("../services/errors");
@@ -62,6 +65,19 @@ function applyExcludeUnknownMentionSignals(where) {
       [Op.or]: [
         { signalType: { [Op.ne]: "influential_mention" } },
         { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } },
+      ],
+    },
+  ];
+  return where;
+}
+
+function applyInfluentialRankScope(where) {
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    {
+      [Op.or]: [
+        { signalType: { [Op.ne]: "influential_mention" } },
+        { globalRank: { [Op.between]: [1, INFLUENTIAL_GLOBAL_RANK_LIMIT] } },
       ],
     },
   ];
@@ -405,15 +421,16 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = applyExcludeUnknownMentionSignals(applyExcludeOfficialAccount(
+    const where = applyInfluentialRankScope(applyExcludeUnknownMentionSignals(applyExcludeOfficialAccount(
       { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } },
       board
-    ));
+    )));
     if (req.query.type) where.signalType = String(req.query.type);
     const q = String(req.query.q || "").trim();
     if (q) where[Op.or] = [{ handle: { [Op.iLike]: `%${q.replace(/^@+/, "")}%` } }, { name: { [Op.iLike]: `%${q}%` } }];
+    applySignalPostFilter(where, req.query);
     const result = await EchohuntSocialListeningAccountSignal.findAndCountAll({ where, order: [["occurredAt", "DESC"]], offset, limit, raw: true });
-    const rows = await enrichSignalAvatars(result.rows);
+    const rows = await enrichSignalAvatars(await enrichSignalPostSources(result.rows, board.id));
     return res.json({ success: true, data: { rangeKey, items: rows.map(serializeAccountSignal), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCOUNTS_FAILED");
@@ -447,7 +464,7 @@ router.get("/boards/:boardId/accounts/:twitterId", async (req, res) => {
         limit: 50,
       }),
     ]);
-    const enrichedSignals = await enrichSignalAvatars(signals);
+    const enrichedSignals = await enrichSignalAvatars(await enrichSignalPostSources(signals, board.id));
     return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals: enrichedSignals.map(serializeAccountSignal), posts: posts.map(serializePost) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCOUNT_DETAIL_FAILED");

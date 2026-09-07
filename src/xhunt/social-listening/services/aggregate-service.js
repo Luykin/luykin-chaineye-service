@@ -10,6 +10,8 @@ const { fetchFollowSignalsForBoard, pickRank } = require("./data-source");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 const { buildTweetUrl } = require("../utils/twitter");
 
+const INFLUENTIAL_GLOBAL_RANK_LIMIT = 3000;
+
 function normalizeRangeKey(value) {
   const range = String(value || "7D").toUpperCase();
   return RANGE_KEYS.includes(range) ? range : "7D";
@@ -42,8 +44,7 @@ function getEngagement(post) {
 }
 
 function isInfluentialRank(globalRank, cnRank) {
-  return (toNumber(globalRank) > 0 && toNumber(globalRank) <= 10000) ||
-    (toNumber(cnRank) > 0 && toNumber(cnRank) <= 1500);
+  return toNumber(globalRank) > 0 && toNumber(globalRank) <= INFLUENTIAL_GLOBAL_RANK_LIMIT;
 }
 
 function getPostDisplayRank(post = {}) {
@@ -63,17 +64,11 @@ function buildRawAuthorRankLiteral() {
   return literal(`
     (
       (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}') ~ '^[0-9]+$'
-        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}')::int BETWEEN 1 AND 10000))
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}')::int BETWEEN 1 AND ${INFLUENTIAL_GLOBAL_RANK_LIMIT}))
       OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}') ~ '^[0-9]+$'
-        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}')::int BETWEEN 1 AND 10000))
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}')::int BETWEEN 1 AND ${INFLUENTIAL_GLOBAL_RANK_LIMIT}))
       OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}') ~ '^[0-9]+$'
-        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}')::int BETWEEN 1 AND 10000))
-      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolCnRank}') ~ '^[0-9]+$'
-        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolCnRank}')::int BETWEEN 1 AND 1500))
-      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,cnRank}') ~ '^[0-9]+$'
-        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,cnRank}')::int BETWEEN 1 AND 1500))
-      OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolChineseRank}') ~ '^[0-9]+$'
-        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolChineseRank}')::int BETWEEN 1 AND 1500))
+        AND (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}')::int BETWEEN 1 AND ${INFLUENTIAL_GLOBAL_RANK_LIMIT}))
     )
   `);
 }
@@ -605,8 +600,7 @@ async function countInfluentialMetricPosts(boardId, windowStartAt, windowEndAt, 
       postCreatedAt: { [Op.gte]: windowStartAt, [Op.lt]: windowEndAt },
       ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
       [Op.or]: [
-        { authorGlobalRank: { [Op.between]: [1, 10000] } },
-        { authorCnRank: { [Op.between]: [1, 1500] } },
+        { authorGlobalRank: { [Op.between]: [1, INFLUENTIAL_GLOBAL_RANK_LIMIT] } },
         buildRawAuthorRankLiteral(),
       ],
     },
@@ -763,8 +757,7 @@ async function generateInfluentialSignals(board, options = {}) {
       sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS },
       ...(selfExclusions.length ? { [Op.and]: selfExclusions } : {}),
       [Op.or]: [
-        { authorGlobalRank: { [Op.between]: [1, 10000] } },
-        { authorCnRank: { [Op.between]: [1, 1500] } },
+        { authorGlobalRank: { [Op.between]: [1, INFLUENTIAL_GLOBAL_RANK_LIMIT] } },
         buildRawAuthorRankLiteral(),
       ],
     },
@@ -796,7 +789,7 @@ async function generateInfluentialSignals(board, options = {}) {
       postIds: [post.tweetId],
       summaryZh: post.summaryZh || post.text,
       summaryEn: post.summaryEn || `${post.authorName || post.authorHandle || post.authorTwitterId} mentioned ${board.projectName}.`,
-      rankSnapshot: { globalRank: rank.globalRank, cnRank: rank.cnRank },
+      rankSnapshot: { globalRank: rank.globalRank, cnRank: rank.cnRank, source: post.source, postType: post.source === "reply" || post.replyId ? "reply" : "post" },
     }, { conflictFields: ["boardId", "signalType", "twitterId", "occurredAt"] }).catch(() => null);
 
     await EchohuntSocialListeningAlert.upsert({
@@ -1137,4 +1130,5 @@ module.exports = {
   filterEffectiveSentimentPosts,
   buildDerivedNegativeContentAlertForRange,
   appendDerivedNegativeContentAlert,
+  INFLUENTIAL_GLOBAL_RANK_LIMIT,
 };

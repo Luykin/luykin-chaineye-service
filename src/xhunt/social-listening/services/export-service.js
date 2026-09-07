@@ -30,6 +30,17 @@ function buildRankAscOrder() {
   ];
 }
 
+function appendWhereAnd(where, condition) {
+  where[Op.and] = [...(where[Op.and] || []), condition];
+}
+
+function normalizePostType(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "reply") return "reply";
+  if (["post", "normal", "original", "non_reply", "non-reply"].includes(text)) return "post";
+  return "";
+}
+
 function buildPostWhere(boardId, query = {}, options = {}) {
   const rangeKey = normalizeRangeKey(query.range);
   const window = getWindowForRange(rangeKey);
@@ -52,7 +63,23 @@ function buildPostWhere(boardId, query = {}, options = {}) {
   }
   if (["analyzed", "generated", "succeeded"].includes(aiFilter)) where.aiAnalyzedAt = { [Op.ne]: null };
   const source = String(query.source || "").trim().toLowerCase();
-  if (["mention", "quote", "reply", "comment"].includes(source)) where.source = source;
+  const postType = normalizePostType(query.postType || query.contentType);
+  if (["mention", "quote", "reply", "comment"].includes(source)) {
+    where.source = source;
+  }
+  if (postType === "reply") {
+    appendWhereAnd(where, {
+      [Op.or]: [
+        { source: "reply" },
+        { replyId: { [Op.ne]: null } },
+      ],
+    });
+  } else if (postType === "post") {
+    appendWhereAnd(where, {
+      source: { [Op.ne]: "reply" },
+      replyId: null,
+    });
+  }
   const q = String(query.q || "").trim();
   if (q) {
     where[Op.or] = [
@@ -129,6 +156,7 @@ async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null
       粉丝数: post.author.followersCount ?? "",
       全球排名: post.author.globalRank ?? "",
       华语排名: post.author.cnRank ?? "",
+      内容类型: post.postType === "reply" ? "reply" : "post",
       来源: post.source || "",
       情绪: post.sentiment || "unknown",
       项目态度分: post.projectAttitudeScore ?? "",

@@ -26,6 +26,8 @@ const {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  applySignalPostFilter,
+  enrichSignalPostSources,
   serializeAlert,
   enrichSignalAvatars,
   enrichInfluentialAlertRanks,
@@ -36,6 +38,7 @@ const {
   normalizeRangeKey,
   getWindowForRange,
   appendDerivedNegativeContentAlert,
+  INFLUENTIAL_GLOBAL_RANK_LIMIT,
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { enableSocialListeningScheduler } = require("../services/scheduler");
@@ -444,6 +447,19 @@ function applyExcludeOfficialAccount(where, board) {
   return where;
 }
 
+function applyInfluentialRankScope(where) {
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    {
+      [Op.or]: [
+        { signalType: { [Op.ne]: "influential_mention" } },
+        { globalRank: { [Op.between]: [1, INFLUENTIAL_GLOBAL_RANK_LIMIT] } },
+      ],
+    },
+  ];
+  return where;
+}
+
 function applyExcludeSelfMentionAlerts(where) {
   where[Op.and] = [
     ...(where[Op.and] || []),
@@ -818,11 +834,12 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = applyExcludeOfficialAccount(
+    const where = applyInfluentialRankScope(applyExcludeOfficialAccount(
       { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } },
       board
-    );
+    ));
     if (req.query.type) where.signalType = String(req.query.type);
+    applySignalPostFilter(where, req.query);
     const result = await EchohuntSocialListeningAccountSignal.findAndCountAll({
       where,
       order: [["occurredAt", "DESC"]],
@@ -830,7 +847,7 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
       limit,
       raw: true,
     });
-    const rows = await enrichSignalAvatars(result.rows);
+    const rows = await enrichSignalAvatars(await enrichSignalPostSources(result.rows, board.id));
     return res.json({ success: true, data: { rangeKey, items: rows.map(serializeAccountSignal), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_SIGNALS_FAILED");

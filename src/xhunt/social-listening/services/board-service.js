@@ -1,4 +1,4 @@
-const { Op, fn, col } = require("sequelize");
+const { Op, fn, col, literal } = require("sequelize");
 const {
   pgInstance,
   AuthCenterXhuntIdentity,
@@ -249,6 +249,8 @@ function serializePost(record) {
   const row = toJson(record) || {};
   const authorAvatar = pickAvatarUrl(row.authorAvatar, pickProfileAvatar(row.rawAuthor?.profile));
   const authorRank = getPostDisplayRank(row);
+  const source = row.source || "mention";
+  const postType = source === "reply" || row.replyId ? "reply" : "post";
   const engagementCount = [row.likesCount, row.repostsCount, row.quotesCount, row.repliesCount]
     .map((v) => Number(v || 0))
     .reduce((a, b) => a + b, 0);
@@ -274,7 +276,12 @@ function serializePost(record) {
     },
     postCreatedAt: row.postCreatedAt,
     text: row.text,
-    source: row.source,
+    source,
+    postType,
+    isReply: postType === "reply",
+    conversationId: row.conversationId || null,
+    quoteId: row.quoteId || null,
+    replyId: row.replyId || null,
     metrics: {
       views: Number(row.viewsCount || 0),
       likes: Number(row.likesCount || 0),
@@ -322,13 +329,109 @@ function describeAccountSignalEn(row = {}) {
 function serializeAccountSignal(record) {
   const row = toJson(record) || {};
   const avatar = pickAvatarUrl(row.avatar, row.avatarUrl, row.profileImageUrl);
+  const sourceCounts = row.sourceCounts || row.rankSnapshot?.sourceCounts || {};
+  const rankPostType = row.rankSnapshot?.postType;
+  const hasReply = row.hasReply ?? row.rankSnapshot?.hasReply ?? (rankPostType === "reply");
+  const hasPost = row.hasPost ?? row.rankSnapshot?.hasPost ?? (rankPostType ? rankPostType !== "reply" : false);
+  const postType = hasReply && !hasPost ? "reply" : "post";
   return {
     ...row,
     avatar,
     avatarUrl: avatar,
     profileImageUrl: avatar,
+    source: row.source || row.rankSnapshot?.source || null,
+    sourceCounts,
+    hasReply,
+    hasPost,
+    postType,
+    isReply: postType === "reply",
     summaryEn: row.summaryEn || describeAccountSignalEn(row),
   };
+}
+
+function getPostTypeFromPost(row = {}) {
+  return row.source === "reply" || row.replyId ? "reply" : "post";
+}
+
+function normalizeSignalPostType(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "reply") return "reply";
+  if (["post", "normal", "original", "non_reply", "non-reply"].includes(text)) return "post";
+  return "";
+}
+
+function normalizeSignalPostSource(value) {
+  const text = String(value || "").trim().toLowerCase();
+  return ["mention", "quote", "reply", "comment"].includes(text) ? text : "";
+}
+
+function applySignalPostFilter(where, query = {}) {
+  const postType = normalizeSignalPostType(query.postType || query.contentType);
+  const source = normalizeSignalPostSource(query.source);
+  if (!postType && !source) return where;
+
+  const clauses = [];
+  if (source) clauses.push(`"SignalPost"."source" = '${source}'`);
+  if (postType === "reply") clauses.push(`("SignalPost"."source" = 'reply' OR "SignalPost"."replyId" IS NOT NULL)`);
+  if (postType === "post") clauses.push(`("SignalPost"."source" <> 'reply' AND "SignalPost"."replyId" IS NULL)`);
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    literal(`
+      EXISTS (
+        SELECT 1
+        FROM "EchohuntSocialListeningPosts" AS "SignalPost"
+        WHERE "SignalPost"."boardId" = "EchohuntSocialListeningAccountSignal"."boardId"
+          AND COALESCE("EchohuntSocialListeningAccountSignal"."postIds", '[]'::jsonb) @> jsonb_build_array("SignalPost"."tweetId")
+          AND ${clauses.join(" AND ")}
+      )
+    `),
+  ];
+  return where;
+}
+
+async function enrichSignalPostSources(rows = [], defaultBoardId = null) {
+  const normalizedRows = rows.map((row) => toJson(row) || {});
+  const tweetIds = Array.from(new Set(normalizedRows
+    .flatMap((row) => Array.isArray(row.postIds) ? row.postIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)));
+  if (!tweetIds.length) return normalizedRows;
+
+  const boardIds = Array.from(new Set(normalizedRows
+    .map((row) => String(row.boardId || defaultBoardId || "").trim())
+    .filter(Boolean)));
+  const posts = await EchohuntSocialListeningPost.findAll({
+    where: {
+      ...(boardIds.length ? { boardId: { [Op.in]: boardIds } } : {}),
+      tweetId: { [Op.in]: tweetIds },
+    },
+    attributes: ["boardId", "tweetId", "source", "replyId"],
+    raw: true,
+  }).catch(() => []);
+  const postMap = new Map(posts.map((post) => [`${post.boardId}:${post.tweetId}`, post]));
+
+  return normalizedRows.map((row) => {
+    const sourceCounts = {};
+    let hasReply = false;
+    let hasPost = false;
+    for (const id of Array.isArray(row.postIds) ? row.postIds : []) {
+      const post = postMap.get(`${row.boardId || defaultBoardId}:${String(id || "").trim()}`);
+      if (!post) continue;
+      const source = post.source || "mention";
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      if (getPostTypeFromPost(post) === "reply") hasReply = true;
+      else hasPost = true;
+    }
+    if (!hasReply && !hasPost) return row;
+    return {
+      ...row,
+      sourceCounts,
+      hasReply,
+      hasPost,
+      postType: hasReply && !hasPost ? "reply" : "post",
+      source: hasReply && !hasPost ? "reply" : Object.keys(sourceCounts).find((source) => source !== "reply") || "reply",
+    };
+  });
 }
 
 function formatAlertPercent(value) {
@@ -863,6 +966,8 @@ module.exports = {
   serializeJob,
   serializePost,
   serializeAccountSignal,
+  applySignalPostFilter,
+  enrichSignalPostSources,
   serializeAlert,
   getPostDisplayRank,
   enrichSignalAvatars,
