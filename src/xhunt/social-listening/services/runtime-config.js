@@ -55,7 +55,7 @@ const DEFAULT_SOCIAL_LISTENING_RUNTIME_CONFIG = Object.freeze({
     mode: "default",
     tickIntervalMs: 60000,
     maxJobsPerTick: 3,
-    staleRunningMinutes: 60,
+    staleRunningMinutes: 30,
     incrementalIntervalMinutes: 15,
   },
   aiWorker: {
@@ -231,7 +231,7 @@ function normalizeConfig(document = {}) {
       mode: ["default", "enabled", "disabled"].includes(String(merged.scheduler?.mode || "").toLowerCase()) ? String(merged.scheduler.mode).toLowerCase() : "default",
       tickIntervalMs: toInteger(getValue(merged, "scheduler.tickIntervalMs", merged.scheduler.tickIntervalMs), 60000, 10000, 300000),
       maxJobsPerTick: toInteger(getValue(merged, "scheduler.maxJobsPerTick", merged.scheduler.maxJobsPerTick), 3, 1, 10),
-      staleRunningMinutes: toInteger(getValue(merged, "scheduler.staleRunningMinutes", merged.scheduler.staleRunningMinutes), 60, 15, 1440),
+      staleRunningMinutes: toInteger(getValue(merged, "scheduler.staleRunningMinutes", merged.scheduler.staleRunningMinutes), 30, 10, 1440),
       incrementalIntervalMinutes: toInteger(getValue(merged, "scheduler.incrementalIntervalMinutes", merged.scheduler.incrementalIntervalMinutes), 15, 1, 240),
     },
     aiWorker: {

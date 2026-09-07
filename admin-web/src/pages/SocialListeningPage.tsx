@@ -378,6 +378,148 @@ function getOptionalNumber(value: unknown) {
   return Number.isFinite(num) ? num : null;
 }
 
+const JOB_PHASE_LABELS: Record<string, string> = {
+  starting: "任务已领取，正在计算扫描范围",
+  prepared: "已拆分时间窗口，准备开始扫描",
+  scanning: "正在扫描当前时间窗口",
+  scan_finished: "推文扫描完成，准备生成聚合数据",
+  aggregating: "正在生成关系信号和聚合预警",
+  snapshotting: "正在刷新看板快照",
+  no_windows: "当前范围没有需要扫描的时间窗口",
+  stale_recovered: "心跳超时，已自动标记失败",
+  succeeded: "任务已完成",
+  failed: "任务执行失败",
+};
+
+function parseTimestamp(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getSecondsSince(value?: string | null) {
+  const date = parseTimestamp(value);
+  if (!date) return null;
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+}
+
+function getJobRuntimeSeconds(job: SocialListeningJob) {
+  const startedAt = parseTimestamp(job.startedAt || job.createdAt);
+  if (!startedAt) return null;
+  const finishedAt = parseTimestamp(job.finishedAt || null);
+  const endTime = finishedAt?.getTime() || Date.now();
+  return Math.max(0, Math.floor((endTime - startedAt.getTime()) / 1000));
+}
+
+function formatDurationSeconds(value?: number | null) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "-";
+  const seconds = Math.max(0, Math.floor(value));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours < 24) return `${hours} 小时${mins ? ` ${mins} 分钟` : ""}`;
+  const days = Math.floor(hours / 24);
+  const restHours = hours % 24;
+  return `${days} 天${restHours ? ` ${restHours} 小时` : ""}`;
+}
+
+function getJobHeartbeatAt(job: SocialListeningJob, progress = asRecord(job.progress)) {
+  return getString(progress.heartbeatAt) || getString(progress.lastHeartbeatAt) || job.updatedAt || job.startedAt || job.createdAt || null;
+}
+
+function getJobPhaseText(job: SocialListeningJob, progress = asRecord(job.progress)) {
+  const statusMessage = getString(progress.statusMessage);
+  if (statusMessage) return statusMessage;
+
+  const phase = getString(progress.phase);
+  if (phase && JOB_PHASE_LABELS[phase]) return JOB_PHASE_LABELS[phase];
+
+  const windowIndex = Number(progress.windowIndex || 0);
+  const windowTotal = Number(progress.windowTotal || 0);
+  const activeWindowIndex = Number(progress.activeWindowIndex || 0);
+  if (job.status === "pending") return "等待调度器领取";
+  if (job.status === "running") {
+    if (windowTotal > 0) {
+      const current = activeWindowIndex || Math.min(windowIndex + 1, windowTotal);
+      return `正在处理第 ${current}/${windowTotal} 个时间窗口`;
+    }
+    return "任务运行中，正在准备扫描窗口";
+  }
+  if (job.status === "failed") return job.errorMessage || "任务执行失败";
+  if (job.status === "succeeded") return "任务已完成";
+  return getString(progress.stage) || "-";
+}
+
+function getJobProgressPercent(job: SocialListeningJob, progress = asRecord(job.progress)) {
+  const windowIndex = Number(progress.windowIndex || 0);
+  const windowTotal = Number(progress.windowTotal || 0);
+  if (job.status === "succeeded") return 100;
+  if (windowTotal > 0) {
+    const activeWindowIndex = Number(progress.activeWindowIndex || 0);
+    const phase = getString(progress.phase);
+    const inFlightCredit = job.status === "running" && windowIndex < windowTotal && (phase === "scanning" || activeWindowIndex > windowIndex) ? 0.35 : 0;
+    const rawPercent = ((windowIndex + inFlightCredit) / windowTotal) * 100;
+    return Math.max(job.status === "running" ? 3 : 0, Math.min(99, Math.round(rawPercent)));
+  }
+  return job.status === "running" ? 6 : 0;
+}
+
+function formatJobProgressSummary(job: SocialListeningJob, progress = asRecord(job.progress)) {
+  const windowIndex = Number(progress.windowIndex || 0);
+  const windowTotal = Number(progress.windowTotal || 0);
+  if (!windowTotal) return getJobPhaseText(job, progress);
+  const activeWindowIndex = Number(progress.activeWindowIndex || 0);
+  if (job.status === "running" && activeWindowIndex > windowIndex) {
+    return `第 ${activeWindowIndex}/${windowTotal} 个窗口扫描中`;
+  }
+  return `${windowIndex}/${windowTotal} 个窗口`;
+}
+
+function getRunningJobNotice(job: SocialListeningJob, progress = asRecord(job.progress)) {
+  if (job.status !== "running") return null;
+  const heartbeatSeconds = getSecondsSince(getJobHeartbeatAt(job, progress));
+  const runtimeSeconds = getJobRuntimeSeconds(job);
+  const windowTotal = Number(progress.windowTotal || 0);
+  if (heartbeatSeconds !== null && heartbeatSeconds >= 5 * 60) {
+    return {
+      type: "warning" as const,
+      message: "任务心跳较久未更新",
+      description: `最近心跳在 ${formatDurationSeconds(heartbeatSeconds)} 前；可能卡在只读库查询或进程中断，调度器会按超时阈值自动恢复，避免长期占住 running。`,
+    };
+  }
+  if (!windowTotal && runtimeSeconds !== null && runtimeSeconds >= 2 * 60) {
+    return {
+      type: "info" as const,
+      message: "任务还在准备扫描窗口",
+      description: "这里不再用固定 12% 冒充真实进度；后端写入窗口总数后，会切换为真实窗口进度和 counters。",
+    };
+  }
+  return null;
+}
+
+function renderJobProgressCell(row: SocialListeningJob) {
+  const progress = asRecord(row.progress);
+  const heartbeatSeconds = getSecondsSince(getJobHeartbeatAt(row, progress));
+  const heartbeatSlow = row.status === "running" && heartbeatSeconds !== null && heartbeatSeconds >= 5 * 60;
+  const phaseText = getJobPhaseText(row, progress);
+  return (
+    <Space direction="vertical" size={0}>
+      <Text>{formatJobProgressSummary(row, progress)}</Text>
+      {row.status === "running" ? (
+        <Text type={heartbeatSlow ? "warning" : "secondary"}>
+          {heartbeatSeconds === null ? "等待心跳" : `心跳 ${formatDurationSeconds(heartbeatSeconds)}前`}
+        </Text>
+      ) : (
+        <Text type={row.status === "failed" ? "danger" : "secondary"} ellipsis>
+          {phaseText}
+        </Text>
+      )}
+    </Space>
+  );
+}
+
 function formatRank(value: unknown) {
   const num = getOptionalNumber(value);
   if (num === null) return "-";
@@ -651,18 +793,45 @@ function JobProgressView({ job }: { job: SocialListeningJob }) {
   const counters = asRecord(progress.counters);
   const windowIndex = Number(progress.windowIndex || 0);
   const windowTotal = Number(progress.windowTotal || 0);
-  const percent = job.status === "succeeded"
-    ? 100
-    : windowTotal > 0
-      ? Math.min(99, Math.round((windowIndex / windowTotal) * 100))
-      : job.status === "running" ? 12 : 0;
+  const activeWindowIndex = Number(progress.activeWindowIndex || 0);
+  const percent = getJobProgressPercent(job, progress);
+  const phaseText = getJobPhaseText(job, progress);
+  const heartbeatAt = getJobHeartbeatAt(job, progress);
+  const heartbeatSeconds = getSecondsSince(heartbeatAt);
+  const runtimeSeconds = getJobRuntimeSeconds(job);
+  const runningNotice = getRunningJobNotice(job, progress);
+  const heartbeatSlow = job.status === "running" && heartbeatSeconds !== null && heartbeatSeconds >= 5 * 60;
+  const progressStatus = job.status === "failed" || heartbeatSlow ? "exception" : job.status === "succeeded" ? "success" : "active";
 
   return (
     <Space direction="vertical" size={12} className="social-listening-full">
+      {runningNotice ? <Alert type={runningNotice.type} showIcon message={runningNotice.message} description={runningNotice.description} /> : null}
+      {job.status === "failed" && job.errorCode === "STALE_RUNNING_JOB" ? (
+        <Alert
+          type="warning"
+          showIcon
+          message="这个任务已不是“卡在 12%”"
+          description="后端检测到 running 任务长时间没有心跳，已自动标记失败；可以手动重试，或等待下一轮增量任务重新创建。"
+        />
+      ) : null}
       <div className="social-listening-job-progress">
-        <Progress percent={percent} status={job.status === "failed" ? "exception" : job.status === "succeeded" ? "success" : "active"} />
+        <Progress
+          percent={percent}
+          status={progressStatus}
+          format={() => {
+            if (job.status === "succeeded") return "完成";
+            if (job.status === "failed") return "失败";
+            if (!windowTotal) return "准备中";
+            if (heartbeatSlow) return "心跳慢";
+            return `${percent}%`;
+          }}
+        />
+        <Text type={heartbeatSlow ? "warning" : "secondary"}>{phaseText}</Text>
         <Space wrap>
           <Tag>窗口 {windowIndex || 0}/{windowTotal || 0}</Tag>
+          {job.status === "running" && activeWindowIndex ? <Tag color="processing">当前第 {activeWindowIndex}/{windowTotal || activeWindowIndex}</Tag> : null}
+          <Tag color={heartbeatSlow ? "orange" : "blue"}>心跳 {heartbeatSeconds === null ? "未知" : `${formatDurationSeconds(heartbeatSeconds)}前`}</Tag>
+          <Tag>已运行 {formatDurationSeconds(runtimeSeconds)}</Tag>
           <Tag color="default">候选页 {getNumberFromRecord(counters, "candidatePagesScanned") || "-"}</Tag>
           <Tag color="default">每页 {getNumberFromRecord(counters, "scanPageSize") || "-"}</Tag>
           <Tag color="default">候选行 {getNumberFromRecord(counters, "candidateRowsScanned")}</Tag>
@@ -681,7 +850,11 @@ function JobProgressView({ job }: { job: SocialListeningJob }) {
         <Descriptions.Item label="触发方">{job.triggeredBy || "system"}</Descriptions.Item>
         <Descriptions.Item label="开始时间">{formatDate(job.startedAt)}</Descriptions.Item>
         <Descriptions.Item label="结束时间">{formatDate(job.finishedAt)}</Descriptions.Item>
+        <Descriptions.Item label="当前阶段" span={2}>{phaseText}</Descriptions.Item>
+        <Descriptions.Item label="最近心跳">{formatDate(heartbeatAt)}</Descriptions.Item>
+        <Descriptions.Item label="运行时长">{formatDurationSeconds(runtimeSeconds)}</Descriptions.Item>
         <Descriptions.Item label="当前窗口" span={2}><Text code>{jsonPreview(progress.currentWindow)}</Text></Descriptions.Item>
+        {job.errorMessage ? <Descriptions.Item label="错误信息" span={2}><Text type="danger">{job.errorMessage}</Text></Descriptions.Item> : null}
         <Descriptions.Item label="progress JSON" span={2}><pre className="social-listening-json-block">{jsonPreview(job.progress)}</pre></Descriptions.Item>
         <Descriptions.Item label="metadata JSON" span={2}><pre className="social-listening-json-block">{jsonPreview(job.metadata)}</pre></Descriptions.Item>
       </Descriptions>
@@ -1584,12 +1757,7 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
   const jobColumns: TableProps<SocialListeningJob>["columns"] = [
     { title: "类型", dataIndex: "jobType", width: 150 },
     { title: "状态", dataIndex: "status", width: 100, render: statusTag },
-    { title: "处理进度", width: 180, render: (_, row) => {
-      const progress = asRecord(row.progress);
-      const total = Number(progress.windowTotal || 0);
-      const current = Number(progress.windowIndex || 0);
-      return total ? `${current}/${total} 个窗口` : getString(progress.stage) || "-";
-    } },
+    { title: "处理进度", width: 240, render: (_, row) => renderJobProgressCell(row) },
     { title: "写入结果", width: 280, render: (_, row) => {
       const counters = asRecord(asRecord(row.progress).counters);
       return <Space size={4} wrap><Tag>扫 {getNumberFromRecord(counters, "scanned")}</Tag><Tag color="green">入库 {getNumberFromRecord(counters, "upserted")}</Tag><Tag color="purple">AI {getNumberFromRecord(counters, "contentAiAnalyzed") + getNumberFromRecord(counters, "aiAnalyzed")}</Tag><Tag color="geekblue">Prompt {getNumberFromRecord(counters, "contentAiPromptOverrides") + getNumberFromRecord(counters, "aiPromptOverrides")}</Tag><Tag color="orange">预警 {getNumberFromRecord(counters, "aggregateAlerts")}</Tag></Space>;
@@ -1857,7 +2025,7 @@ export function SocialListeningPage() {
     { title: "数据", width: 150, render: (_, row) => <Space direction="vertical" size={0}><Text>{row.postCount || 0} posts</Text><Text type="secondary">已分配 {row.accessCount || 0} 个账号</Text></Space> },
     { title: "AI", width: 170, render: (_, row) => renderBoardAiStatus(row) },
     { title: "处理进度", width: 250, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatDate(row.processedThrough)}</Text><Text type={row.lastFailureReason ? "danger" : "secondary"}>{row.lastFailureReason || `最近成功 ${formatDate(row.lastSuccessAt)}`}</Text></Space> },
-    { title: "最新任务", width: 190, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text></Space> : "-" },
+    { title: "最新任务", width: 210, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text><Text type="secondary">{formatJobProgressSummary(row.latestJob)}</Text></Space> : "-" },
     {
       title: "操作",
       fixed: "right",
@@ -1941,7 +2109,7 @@ export function SocialListeningPage() {
 
         <Row gutter={16}>
           <Col xs={24} lg={12}>
-            <PageSection title="最近任务" description="自动每 15 秒刷新；展开行可查看 counters、窗口游标和写表结果。">
+            <PageSection title="最近任务" description="自动每 15 秒刷新；展开行可查看窗口、心跳、counters 和写表结果。初始化阶段不再展示固定 12%，会显示准备中/心跳状态。">
               <Table<SocialListeningJob>
                 rowKey="id"
                 size="small"
@@ -1952,6 +2120,7 @@ export function SocialListeningPage() {
                 columns={[
                   { title: "类型", dataIndex: "jobType" },
                   { title: "状态", dataIndex: "status", render: statusTag },
+                  { title: "进度", render: (_, row) => renderJobProgressCell(row) },
                   { title: "创建", dataIndex: "createdAt", render: formatDate },
                 ]}
               />

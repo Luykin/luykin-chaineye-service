@@ -73,6 +73,33 @@ function splitWindows(startAt, endAt, windowMinutes = 30) {
   return output;
 }
 
+function asProgressObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function getJobStage(job) {
+  return job?.metadata?.stage || job?.jobType || "running";
+}
+
+function serializeWindow(window, extras = {}) {
+  if (!window) return null;
+  return {
+    startAt: new Date(window.startAt).toISOString(),
+    endAt: new Date(window.endAt).toISOString(),
+    ...extras,
+  };
+}
+
+async function updateJobProgress(job, progress = {}) {
+  return job.update({
+    progress: {
+      ...asProgressObject(job.progress),
+      ...progress,
+      heartbeatAt: new Date().toISOString(),
+    },
+  });
+}
+
 async function upsertPostPayloads(payloads) {
   if (!payloads.length) return 0;
   await EchohuntSocialListeningPost.bulkCreate(payloads, {
@@ -111,7 +138,13 @@ async function markJobRunning(job) {
   return job.update({
     status: JOB_STATUSES.RUNNING,
     startedAt: new Date(),
-    progress: { ...(job.progress || {}), stage: "running", heartbeatAt: new Date().toISOString() },
+    progress: {
+      ...asProgressObject(job.progress),
+      stage: getJobStage(job),
+      phase: "starting",
+      statusMessage: "任务已领取，正在计算扫描范围。",
+      heartbeatAt: new Date().toISOString(),
+    },
   });
 }
 
@@ -119,19 +152,34 @@ async function markJobSucceeded(job, progress = {}) {
   return job.update({
     status: JOB_STATUSES.SUCCEEDED,
     finishedAt: new Date(),
-    progress: { ...(job.progress || {}), ...progress, stage: "succeeded", heartbeatAt: new Date().toISOString() },
+    progress: {
+      ...asProgressObject(job.progress),
+      ...progress,
+      stage: "succeeded",
+      phase: progress.phase || "succeeded",
+      statusMessage: progress.statusMessage || "任务已完成。",
+      heartbeatAt: new Date().toISOString(),
+    },
     errorCode: null,
     errorMessage: null,
   });
 }
 
 async function markJobFailed(job, error, progress = {}) {
+  const errorMessage = String(error.publicMessage || error.message || error).slice(0, 2000);
   return job.update({
     status: JOB_STATUSES.FAILED,
     finishedAt: new Date(),
-    progress: { ...(job.progress || {}), ...progress, stage: "failed", heartbeatAt: new Date().toISOString() },
+    progress: {
+      ...asProgressObject(job.progress),
+      ...progress,
+      stage: "failed",
+      phase: progress.phase || "failed",
+      statusMessage: progress.statusMessage || "任务执行失败，可查看错误信息或重试。",
+      heartbeatAt: new Date().toISOString(),
+    },
     errorCode: error.code || error.message || "JOB_FAILED",
-    errorMessage: String(error.publicMessage || error.message || error).slice(0, 2000),
+    errorMessage,
   });
 }
 
@@ -161,7 +209,33 @@ async function processSocialListeningJob(jobId) {
     const runtimeConfig = await getSocialListeningRuntimeConfig();
     const range = await getJobRange(board, job);
     const windows = splitWindows(range.startAt, range.endAt, runtimeConfig.scan?.windowMinutes);
+    const stage = getJobStage(job);
+    await updateJobProgress(job, {
+      stage,
+      phase: windows.length ? "prepared" : "no_windows",
+      statusMessage: windows.length
+        ? `已拆分 ${windows.length} 个时间窗口，准备开始扫描。`
+        : "当前范围没有需要扫描的时间窗口，将直接更新游标和聚合数据。",
+      range: { startAt: range.startAt.toISOString(), endAt: range.endAt.toISOString() },
+      currentWindow: serializeWindow(windows[0], { status: "pending" }),
+      windowIndex: 0,
+      activeWindowIndex: windows.length ? 1 : 0,
+      windowTotal: windows.length,
+      counters,
+    });
     for (const [index, window] of windows.entries()) {
+      const activeWindowIndex = index + 1;
+      const windowStartedAt = new Date();
+      await updateJobProgress(job, {
+        stage,
+        phase: "scanning",
+        statusMessage: `正在扫描第 ${activeWindowIndex}/${windows.length} 个时间窗口。`,
+        currentWindow: serializeWindow(window, { status: "running", startedAt: windowStartedAt.toISOString() }),
+        windowIndex: index,
+        activeWindowIndex,
+        windowTotal: windows.length,
+        counters,
+      });
       const result = await processWindow(board, window);
       counters.scanned += result.scanned;
       counters.upserted += result.upserted;
@@ -173,16 +247,20 @@ async function processSocialListeningJob(jobId) {
         counters.candidateRowsScanned = (counters.candidateRowsScanned || 0) + result.scanMeta.candidatesScanned;
         counters.candidateScanBudget = (counters.candidateScanBudget || 0) + result.scanMeta.scanLimit;
       }
-      await job.update({
-        progress: {
-          ...(job.progress || {}),
-          stage: job.metadata?.stage || job.jobType,
-          currentWindow: { startAt: window.startAt.toISOString(), endAt: window.endAt.toISOString(), scanMeta: result.scanMeta || undefined },
-          windowIndex: index + 1,
-          windowTotal: windows.length,
-          counters,
-          heartbeatAt: new Date().toISOString(),
-        },
+      await updateJobProgress(job, {
+        stage,
+        phase: activeWindowIndex >= windows.length ? "scan_finished" : "scanning",
+        statusMessage: `已完成第 ${activeWindowIndex}/${windows.length} 个时间窗口。`,
+        currentWindow: serializeWindow(window, {
+          status: "finished",
+          startedAt: windowStartedAt.toISOString(),
+          finishedAt: new Date().toISOString(),
+          scanMeta: result.scanMeta || undefined,
+        }),
+        windowIndex: activeWindowIndex,
+        activeWindowIndex,
+        windowTotal: windows.length,
+        counters,
       });
     }
 
@@ -198,6 +276,15 @@ async function processSocialListeningJob(jobId) {
       lastFailureReason: null,
     });
 
+    await updateJobProgress(job, {
+      stage,
+      phase: "aggregating",
+      statusMessage: "扫描入库完成，正在生成关键账号信号、关注关系信号和聚合预警。",
+      windowIndex: windows.length,
+      activeWindowIndex: windows.length,
+      windowTotal: windows.length,
+      counters,
+    });
     counters.contentAiAnalyzed = 0;
     counters.contentAiFailed = 0;
     counters.contentAiSkipped = 0;
@@ -209,10 +296,44 @@ async function processSocialListeningJob(jobId) {
     counters.aiMode = "ai_worker";
 
     counters.influentialSignals = await generateInfluentialSignals(board, { since: range.startAt, until: range.endAt });
+    await updateJobProgress(job, {
+      stage,
+      phase: "aggregating",
+      statusMessage: "关键账号信号已生成，正在生成关注关系信号。",
+      windowIndex: windows.length,
+      activeWindowIndex: windows.length,
+      windowTotal: windows.length,
+      counters,
+    });
     counters.followSignals = await generateFollowSignals(board, { since: range.startAt, until: range.endAt });
+    await updateJobProgress(job, {
+      stage,
+      phase: "aggregating",
+      statusMessage: "关注关系信号已生成，正在生成聚合预警。",
+      windowIndex: windows.length,
+      activeWindowIndex: windows.length,
+      windowTotal: windows.length,
+      counters,
+    });
     counters.aggregateAlerts = await generateAggregateAlerts(board);
+    await updateJobProgress(job, {
+      stage,
+      phase: "snapshotting",
+      statusMessage: "聚合预警已生成，正在刷新看板快照。",
+      windowIndex: windows.length,
+      activeWindowIndex: windows.length,
+      windowTotal: windows.length,
+      counters,
+    });
     await generateSnapshotsForBoard(await EchohuntSocialListeningBoard.findByPk(board.id));
-    await markJobSucceeded(job, { counters });
+    await markJobSucceeded(job, {
+      counters,
+      windowIndex: windows.length,
+      activeWindowIndex: windows.length,
+      windowTotal: windows.length,
+      phase: "succeeded",
+      statusMessage: "任务已完成。",
+    });
 
     if (job.jobType === JOB_TYPES.HISTORY_BACKFILL && (job.metadata?.stage || "recent_7d") === "recent_7d") {
       const olderRange = await getHistoryRange("older_to_30d");
@@ -241,23 +362,40 @@ async function processSocialListeningJob(jobId) {
 
 async function recoverStaleRunningJobs(options = {}) {
   const runtimeConfig = await getSocialListeningRuntimeConfig();
-  const staleMinutes = clampPositiveInteger(options.staleMinutes || runtimeConfig.scheduler?.staleRunningMinutes, 60, 15, 24 * 60);
+  const staleMinutes = clampPositiveInteger(options.staleMinutes || runtimeConfig.scheduler?.staleRunningMinutes, 30, 10, 24 * 60);
   const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000);
-  const [count] = await EchohuntSocialListeningJob.update(
-    {
+  const staleJobs = await EchohuntSocialListeningJob.findAll({
+    where: {
+      status: JOB_STATUSES.RUNNING,
+      updatedAt: { [Op.lt]: cutoff },
+    },
+    order: [["updatedAt", "ASC"]],
+    limit: 100,
+  });
+  const recoveredAt = new Date();
+  for (const staleJob of staleJobs) {
+    const currentProgress = asProgressObject(staleJob.progress);
+    const lastHeartbeatAt = currentProgress.heartbeatAt
+      || currentProgress.lastHeartbeatAt
+      || (staleJob.updatedAt ? new Date(staleJob.updatedAt).toISOString() : undefined);
+    await staleJob.update({
       status: JOB_STATUSES.FAILED,
-      finishedAt: new Date(),
+      finishedAt: recoveredAt,
       errorCode: "STALE_RUNNING_JOB",
       errorMessage: "任务运行超时，已由调度器恢复为失败状态",
-    },
-    {
-      where: {
-        status: JOB_STATUSES.RUNNING,
-        updatedAt: { [Op.lt]: cutoff },
+      progress: {
+        ...currentProgress,
+        previousStage: currentProgress.stage,
+        stage: "failed",
+        phase: "stale_recovered",
+        statusMessage: "任务心跳超时，已自动标记失败；可手动重试，或等待下一轮增量任务。",
+        lastHeartbeatAt,
+        staleDetectedAt: recoveredAt.toISOString(),
+        staleAfterMinutes: staleMinutes,
       },
-    }
-  );
-  return count;
+    });
+  }
+  return staleJobs.length;
 }
 
 module.exports = {
