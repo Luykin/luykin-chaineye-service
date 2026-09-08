@@ -13,14 +13,8 @@ const {
   STRICT_CRYPTO_SUB_TAGS,
   STRICT_AI_SUB_TAGS,
   DEFAULT_LOCAL_AI_PROMPTS,
-  LEGACY_FRONTEND_AI_PROMPTS,
 } = require("./ai-prompt-templates");
-const {
-  generateTweetAnalysis,
-  generateTweetTagV2,
-  generateProjectAttitude,
-  generateTweetSummaryMedia,
-} = require("./local-ai-service");
+const { generateTweetAnalysis } = require("./local-ai-service");
 
 
 function clampInteger(value, fallback, min, max) {
@@ -115,16 +109,6 @@ function hasLocalAiConfig(aiConfig = {}) {
   return Boolean(String(aiConfig.apiKey || "").trim() && String(aiConfig.baseURL || "").trim());
 }
 
-async function isProjectAttitudeEnabled(board) {
-  const aiConfig = await getBoardAiConfig(board);
-  return Boolean(aiConfig.projectAttitudeEnabled && hasLocalAiConfig(aiConfig));
-}
-
-async function isContentAiEnabled(board) {
-  const aiConfig = await getBoardAiConfig(board);
-  return Boolean(aiConfig.contentEnabled && hasLocalAiConfig(aiConfig));
-}
-
 function normalizePrompt(value, maxLength = 6000) {
   const text = String(value || "").trim();
   if (!text) return "";
@@ -185,13 +169,7 @@ function normalizePromptForCompare(value) {
 
 function isDefaultEquivalentPrompt(field, prompt) {
   const normalized = normalizePromptForCompare(prompt);
-  return Boolean(
-    normalized &&
-    (
-      normalized === normalizePromptForCompare(DEFAULT_LOCAL_AI_PROMPTS[field]) ||
-      normalized === normalizePromptForCompare(LEGACY_FRONTEND_AI_PROMPTS[field])
-    )
-  );
+  return Boolean(normalized && normalized === normalizePromptForCompare(DEFAULT_LOCAL_AI_PROMPTS[field]));
 }
 
 function renderPromptTemplate(prompt, variables = {}) {
@@ -200,6 +178,13 @@ function renderPromptTemplate(prompt, variables = {}) {
     const value = variables[key];
     return value === null || value === undefined ? "" : String(value);
   });
+}
+
+function appendKeywordExclusionRule(prompt, field, variables = {}) {
+  const exclusions = String(variables.keywordExclusions || "").trim();
+  if (!exclusions || field !== PROMPT_FIELDS.TWEET_ANALYSIS) return prompt;
+  if (prompt.includes(exclusions)) return prompt;
+  return `${prompt}\n\n关键词输出限制（必须遵守）：以下是词云排除词：${exclusions}。即使它们出现在原文中，也不得输出到 hot_tags（后端会将 hot_tags 写入 keywords）。`;
 }
 
 function buildPromptInfo(board, aiConfig, field, variables = {}) {
@@ -221,7 +206,7 @@ function buildPromptInfo(board, aiConfig, field, variables = {}) {
     configured = true;
   }
 
-  let prompt = renderPromptTemplate(template, variables);
+  let prompt = appendKeywordExclusionRule(renderPromptTemplate(template, variables), field, variables);
   if (variables.text && !prompt.includes(String(variables.text))) {
     prompt = `${prompt}\n\n输入文本：\n${variables.text}`;
   }
@@ -248,10 +233,6 @@ function hasPromptOverride(board, field) {
   return Boolean(prompt && !isDefaultEquivalentPrompt(field, prompt));
 }
 
-function countPromptOverrides(board, fields) {
-  return fields.filter((field) => hasPromptOverride(board, field)).length;
-}
-
 function scoreToSentiment(score, config = {}) {
   const num = Number(score);
   if (!Number.isFinite(num)) return SENTIMENTS.UNKNOWN;
@@ -272,36 +253,28 @@ function buildProjectPromptName(board) {
   return String(metadata.aiProjectName || board.projectName || board.officialHandle || "").trim();
 }
 
-async function callProjectAttitudeAi(board, post, options = {}) {
-  const aiConfig = await getBoardAiConfig(board);
-  const aiText = getPostAiText(post, options);
-  const text = `<<${new Date(post.postCreatedAt).toISOString()}--${aiText.text}>>`;
-  const project = buildProjectPromptName(board);
-  const promptVariables = { text, project, lang: "cn" };
-  const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.PROJECT_ATTITUDE, promptVariables);
-  const data = await generateProjectAttitude({ prompt, aiConfig });
+function buildProjectPromptAliases(board, project = buildProjectPromptName(board)) {
+  const metadata = getBoardMetadata(board);
+  return Array.from(new Set([
+    project,
+    board.projectName,
+    board.officialHandle,
+    ...(Array.isArray(metadata.aliases) ? metadata.aliases : []),
+  ].map((value) => String(value || "").trim()).filter(Boolean))).slice(0, 20).join("、");
+}
 
-  const score = data.score ?? data.data?.score;
-  const source = data.data && typeof data.data === "object" ? data.data : data;
-  const explicitSentiment = normalizeSentiment(source.sentiment);
-  const relevantToProject = source.relevant_to_project ?? source.relevantToProject;
-  const rawConfidence = source.confidence;
-  const confidence = rawConfidence === null || rawConfidence === undefined || rawConfidence === "" ? NaN : Number(rawConfidence);
-  const sentiment = explicitSentiment || scoreToSentiment(score, aiConfig);
-  const strictSentiment = (
-    sentiment === SENTIMENTS.UNKNOWN ||
-    relevantToProject === false ||
-    (Number.isFinite(confidence) && confidence < 0.5)
-  ) ? SENTIMENTS.UNKNOWN : sentiment;
-  return {
-    score,
-    sentiment: strictSentiment,
-    relevantToProject: relevantToProject === undefined ? null : Boolean(relevantToProject),
-    confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
-    summary: data.summary || data.reason || data.message || null,
-    raw: data,
-    promptTrace,
-  };
+function getKeywordExclusionValues(board) {
+  const metadata = getBoardMetadata(board);
+  const wordCloud = metadata.wordCloud && typeof metadata.wordCloud === "object" ? metadata.wordCloud : {};
+  return Array.from(new Set([
+    ...(Array.isArray(metadata.wordCloudExcludeKeywords) ? metadata.wordCloudExcludeKeywords : []),
+    ...(Array.isArray(metadata.wordCloudExcludedKeywords) ? metadata.wordCloudExcludedKeywords : []),
+    ...(Array.isArray(wordCloud.excludeKeywords) ? wordCloud.excludeKeywords : []),
+  ].map((value) => String(value || "").trim()).filter(Boolean))).slice(0, 100);
+}
+
+function buildKeywordExclusions(board) {
+  return getKeywordExclusionValues(board).join("、");
 }
 
 function normalizeList(value) {
@@ -378,9 +351,18 @@ function hotTagAppearsInText(tag, text) {
   return Boolean(haystack && normalizeSearchText(stripped) && haystack.includes(normalizeSearchText(stripped)));
 }
 
-function normalizeHotTags(value, text, limit = 12) {
+function normalizeKeywordExclusion(value) {
+  return normalizeSearchText(String(value || "").trim().replace(/^[@#$]+/, ""));
+}
+
+function filterExcludedKeywords(values, exclusions = []) {
+  const exclusionSet = new Set(normalizeList(exclusions).map(normalizeKeywordExclusion).filter(Boolean));
+  return normalizeList(values).filter((value) => !exclusionSet.has(normalizeKeywordExclusion(value)));
+}
+
+function normalizeHotTags(value, text, limit = 12, exclusions = []) {
   const output = [];
-  for (const item of normalizeList(value)) {
+  for (const item of filterExcludedKeywords(value, exclusions)) {
     const tag = String(item || "").trim().slice(0, 80);
     if (!hotTagAppearsInText(tag, text) || output.includes(tag)) continue;
     output.push(tag);
@@ -389,12 +371,12 @@ function normalizeHotTags(value, text, limit = 12) {
   return output;
 }
 
-function extractTagResult(data = {}, text = "") {
+function extractTagResult(data = {}, text = "", keywordExclusions = []) {
   const source = data.data && typeof data.data === "object" ? data.data : data;
   const domainTag = normalizeStrictDomainTag(source.domain_tag || source.domainTag);
   const cryptoSubTags = normalizeStrictList(source.crypto_sub_tags || source.cryptoSubTags, STRICT_CRYPTO_SUB_TAGS, 8);
   const aiSubTags = normalizeStrictList(source.ai_sub_tags || source.aiSubTags, STRICT_AI_SUB_TAGS, 8);
-  const hotTags = normalizeHotTags(mergeListValues(source.hot_tags, source.hotTags, source.keywords), text, 12);
+  const hotTags = normalizeHotTags(mergeListValues(source.hot_tags, source.hotTags, source.keywords), text, 12, keywordExclusions);
   const topics = mergeListValues(
     domainTag === "其他" ? [] : [domainTag],
     cryptoSubTags,
@@ -435,16 +417,6 @@ function hasSummaryFields(row) {
   return Boolean(row.summaryZh || row.summaryEn || row.titleZh || row.titleEn || row.abstractZh || row.abstractEn);
 }
 
-async function callTweetTagAi(board, post, options = {}) {
-  const { text } = getPostAiText(post, options);
-  const promptVariables = { text };
-  const aiConfig = await getBoardAiConfig(board);
-  const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_TAG, promptVariables);
-  if (!text) return { topics: [], keywords: [], raw: {}, promptTrace };
-  const data = await generateTweetTagV2({ prompt, aiConfig });
-  return { ...extractTagResult(data, text), promptTrace };
-}
-
 function pickFirstMedia(post) {
   const info = post.rawTweet?.info && typeof post.rawTweet.info === "object" ? post.rawTweet.info : {};
   const videos = Array.isArray(info.videos) ? info.videos : [];
@@ -456,68 +428,14 @@ function pickFirstMedia(post) {
   return "";
 }
 
-async function callTweetSummaryAi(board, post, lang, options = {}) {
-  const aiConfig = await getBoardAiConfig(board);
-  const summaryWords = aiConfig.summaryWords || 5;
-  const { text } = getPostAiText(post, options);
-  const promptVariables = { text, lang, words: summaryWords, media: pickFirstMedia(post) };
-  const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_SUMMARY, promptVariables);
-  if (!text) return { summary: "", promptTrace, raw: {} };
-  const data = await generateTweetSummaryMedia({ prompt, aiConfig });
-  const summary = typeof data === "string" ? data : (data.summary || data.text || "");
-  return { summary, promptTrace, raw: typeof data === "object" ? data : { text: data } };
-}
-
-function buildCombinedPromptSection(board, aiConfig, field, variables = {}) {
-  const promptVariables = {
-    ...variables,
-    text: "见下方 INPUT.tweet_text，不要在这里重复正文。",
-  };
-  const { prompt, trace } = buildPromptInfo(board, aiConfig, field, promptVariables);
-  return { prompt, trace };
-}
-
 function buildTweetAnalysisPrompt(board, aiConfig, variables = {}) {
-  const summaryWords = aiConfig.summaryWords || 5;
   const analysisPrompt = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_ANALYSIS, variables);
-  const tagPrompt = buildCombinedPromptSection(board, aiConfig, PROMPT_FIELDS.TWEET_TAG, variables);
-  const summaryPrompt = buildCombinedPromptSection(board, aiConfig, PROMPT_FIELDS.TWEET_SUMMARY, variables);
-  const attitudePrompt = buildCombinedPromptSection(board, aiConfig, PROMPT_FIELDS.PROJECT_ATTITUDE, {
-    ...variables,
-    text: `<<${variables.createdAt || ""}--${variables.text || ""}>>`,
-  });
-  const prompt = analysisPrompt.trace.configured || (!tagPrompt.trace.configured && !summaryPrompt.trace.configured && !attitudePrompt.trace.configured)
-    ? analysisPrompt.prompt
-    : [
-      "你是 Crypto/Web3/AI 社媒内容结构化分析助手。请只读取 INPUT.tweet_text 一次，并一次性完成标签、摘要、项目态度三类结果。",
-      "重要要求：不要翻译推文全文，不要输出 post_zh；只需要给 summary_cn、summary_en 和 attitude_summary。不要添加原文没有的信息。",
-      `中文摘要尽量不超过 ${summaryWords} 个词/短语；英文摘要尽量短句。`,
-      "",
-      "标签规则：",
-      tagPrompt.prompt,
-      "",
-      "摘要规则：",
-      summaryPrompt.prompt,
-      "",
-      "项目态度规则：",
-      attitudePrompt.prompt,
-      "",
-      `INPUT:\n${JSON.stringify({
-        tweet_text: variables.text || "",
-        tweet_created_at: variables.createdAt || "",
-        project: variables.project || "",
-        media: variables.media || "",
-      })}`,
-    ].join("\n");
   return {
-    prompt,
+    prompt: analysisPrompt.prompt,
     analysisTemplate: analysisPrompt.template,
     promptTrace: {
       analysis: analysisPrompt.trace,
-      tag: tagPrompt.trace,
-      summary: summaryPrompt.trace,
-      attitude: attitudePrompt.trace,
-      length: prompt.length,
+      length: analysisPrompt.prompt.length,
     },
   };
 }
@@ -525,9 +443,13 @@ function buildTweetAnalysisPrompt(board, aiConfig, variables = {}) {
 async function buildTweetAnalysisPromptPreview(board) {
   const aiConfig = await getBoardAiConfig(board);
   const project = buildProjectPromptName(board);
+  const projectAliases = buildProjectPromptAliases(board, project);
+  const keywordExclusions = buildKeywordExclusions(board);
   const variables = {
     text: "{{tweet_text}}",
     project,
+    projectAliases,
+    keywordExclusions,
     lang: "cn",
     words: aiConfig.summaryWords || 5,
     media: "{{media}}",
@@ -551,11 +473,16 @@ async function callTweetAnalysisAi(board, post, options = {}) {
   const summaryWords = aiConfig.summaryWords || 5;
   const aiText = getPostAiText(post, options);
   const project = buildProjectPromptName(board);
+  const projectAliases = buildProjectPromptAliases(board, project);
+  const keywordExclusionValues = getKeywordExclusionValues(board);
+  const keywordExclusions = keywordExclusionValues.join("、");
   const media = pickFirstMedia(post);
   const createdAt = post.postCreatedAt ? new Date(post.postCreatedAt).toISOString() : "";
   const variables = {
     text: aiText.text,
     project,
+    projectAliases,
+    keywordExclusions,
     lang: "cn",
     words: summaryWords,
     media,
@@ -564,15 +491,15 @@ async function callTweetAnalysisAi(board, post, options = {}) {
   const { prompt, promptTrace } = buildTweetAnalysisPrompt(board, aiConfig, variables);
   if (!aiText.text) {
     return {
-      tag: { topics: [], keywords: [], raw: {}, promptTrace: promptTrace.tag },
-      summary: { summaryZh: null, summaryEn: null, raw: {} },
-      attitude: { score: 5, sentiment: SENTIMENTS.UNKNOWN, relevantToProject: null, confidence: null, summary: null, raw: {} },
+      tag: { topics: [], keywords: [], raw: {}, promptTrace: promptTrace.analysis },
+      summary: { summaryZh: null, summaryEn: null, raw: {}, promptTrace: promptTrace.analysis },
+      attitude: { score: 5, sentiment: SENTIMENTS.UNKNOWN, relevantToProject: null, confidence: null, summary: null, raw: {}, promptTrace: promptTrace.analysis },
       promptTrace,
       raw: {},
     };
   }
   const data = await generateTweetAnalysis({ prompt, aiConfig });
-  const tag = extractTagResult(data, aiText.text);
+  const tag = extractTagResult(data, aiText.text, keywordExclusionValues);
   const summary = extractSummaryResult(data);
   const explicitSentiment = normalizeSentiment(data.sentiment);
   const relevantToProject = data.relevant_to_project ?? data.relevantToProject;
@@ -585,8 +512,8 @@ async function callTweetAnalysisAi(board, post, options = {}) {
     (Number.isFinite(confidence) && confidence < 0.5)
   ) ? SENTIMENTS.UNKNOWN : sentiment;
   return {
-    tag: { ...tag, promptTrace: promptTrace.tag },
-    summary: { ...summary, promptTrace: promptTrace.summary },
+    tag: { ...tag, promptTrace: promptTrace.analysis },
+    summary: { ...summary, promptTrace: promptTrace.analysis },
     attitude: {
       score: data.score,
       sentiment: strictSentiment,
@@ -594,7 +521,7 @@ async function callTweetAnalysisAi(board, post, options = {}) {
       confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
       summary: data.attitude_summary || data.attitudeSummary || data.summary || null,
       raw: data,
-      promptTrace: promptTrace.attitude,
+      promptTrace: promptTrace.analysis,
     },
     promptTrace,
     raw: data,
@@ -674,7 +601,7 @@ async function analyzePendingPostAi(board, options = {}) {
   const content = { enabled: contentEnabled, selected: 0, analyzed: 0, failed: 0, skipped: 0 };
   const attitude = { enabled: attitudeEnabled, selected: 0, analyzed: 0, failed: 0 };
   const startedAt = Date.now();
-  const promptOverrides = countPromptOverrides(board, [PROMPT_FIELDS.TWEET_ANALYSIS, PROMPT_FIELDS.TWEET_TAG, PROMPT_FIELDS.TWEET_SUMMARY, PROMPT_FIELDS.PROJECT_ATTITUDE]);
+  const promptOverrides = hasPromptOverride(board, PROMPT_FIELDS.TWEET_ANALYSIS) ? 1 : 0;
   await runWithConcurrency(posts, concurrency, async (post) => {
     const itemStartedAt = Date.now();
     const aiText = getPostAiText(post, { maxTextLength });
@@ -703,10 +630,11 @@ async function analyzePendingPostAi(board, options = {}) {
 
       if (shouldGenerateContent) {
         const matchedKeywords = Array.isArray(post.rawTweet?.matchedKeywords) ? post.rawTweet.matchedKeywords : [];
+        const keywordExclusions = getKeywordExclusionValues(board);
         if (shouldReplaceOldAiFields) patch.topics = result.tag.topics.length ? result.tag.topics : null;
         else if (result.tag.topics.length) patch.topics = mergeListValues(post.topics, result.tag.topics);
-        if (shouldReplaceOldAiFields) patch.keywords = mergeListValues(matchedKeywords, result.tag.keywords);
-        else if (result.tag.keywords.length) patch.keywords = mergeListValues(post.keywords, result.tag.keywords);
+        if (shouldReplaceOldAiFields) patch.keywords = filterExcludedKeywords(mergeListValues(matchedKeywords, result.tag.keywords), keywordExclusions);
+        else if (result.tag.keywords.length) patch.keywords = filterExcludedKeywords(mergeListValues(post.keywords, result.tag.keywords), keywordExclusions);
         patch.tagStatus = result.tag.topics.length || result.tag.keywords.length ? "generated" : "skipped";
         if (result.summary.summaryZh || shouldReplaceOldAiFields) patch.summaryZh = result.summary.summaryZh || null;
         if (result.summary.summaryEn || shouldReplaceOldAiFields) patch.summaryEn = result.summary.summaryEn || null;
@@ -780,203 +708,10 @@ async function analyzePendingPostAi(board, options = {}) {
   return { enabled: true, content, attitude, promptOverrides, selected: posts.length, concurrency, maxTextLength, durationMs };
 }
 
-async function analyzePendingContentMetadata(board, options = {}) {
-  const aiConfig = await getBoardAiConfig(board);
-  if (!await isContentAiEnabled(board)) return { enabled: false, analyzed: 0, failed: 0, skipped: 0 };
-  const limit = clampInteger(options.limit || aiConfig.contentBatchSize, 10, 1, 500);
-  const concurrency = clampInteger(options.concurrency || aiConfig.contentConcurrency, 1, 1, 20);
-  const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
-  const posts = await EchohuntSocialListeningPost.findAll({
-    where: applyRecallExcludeAuthorFilter({
-      boardId: board.id,
-      text: { [Op.ne]: null },
-      [Op.or]: [
-        { tagStatus: null },
-        { tagStatus: { [Op.in]: ["pending", "failed", "reused"] } },
-        { summaryStatus: null },
-        { summaryStatus: { [Op.in]: ["pending", "failed", "reused"] } },
-        { aiSource: "dev_tweet_ai" },
-      ],
-    }, board),
-    order: [
-      [getAiTextLengthOrder(), "ASC"],
-      [getAiRankOrder(), "ASC"],
-      ["viewsCount", "DESC"],
-      ["postCreatedAt", "DESC"],
-    ],
-    limit,
-  });
-
-  let analyzed = 0;
-  let failed = 0;
-  let skipped = 0;
-  const startedAt = Date.now();
-  const promptOverrides = countPromptOverrides(board, [PROMPT_FIELDS.TWEET_TAG, PROMPT_FIELDS.TWEET_SUMMARY]);
-  await runWithConcurrency(posts, concurrency, async (post) => {
-    const itemStartedAt = Date.now();
-    const aiText = getPostAiText(post, { maxTextLength });
-    if (!aiText.text || aiText.text.length < 8) {
-      skipped += 1;
-      await post.update({
-        tagStatus: post.tagStatus === "pending" || !post.tagStatus ? "skipped" : post.tagStatus,
-        summaryStatus: post.summaryStatus === "pending" || !post.summaryStatus ? "skipped" : post.summaryStatus,
-        aiStatus: "skipped",
-      }).catch(() => null);
-      console.log(`[SocialListeningAI] content board=${board.id} post=${post.id} tweet=${post.tweetId} status=skipped ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated}`);
-      return;
-    }
-
-    try {
-      const patch = {};
-      const rawAi = { ...(post.rawTweet?.socialListeningAi || {}) };
-      const shouldGenerateTag = !Array.isArray(post.topics) || !post.topics.length || ["pending", "failed", "reused"].includes(post.tagStatus || "");
-      const shouldGenerateSummary = !hasSummaryFields(post) || ["pending", "failed", "reused"].includes(post.summaryStatus || "") || post.aiSource === "dev_tweet_ai";
-      const shouldReplaceOldAiFields = post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
-
-      if (shouldGenerateTag) {
-        const tagResult = await callTweetTagAi(board, post, { maxTextLength });
-        const matchedKeywords = Array.isArray(post.rawTweet?.matchedKeywords) ? post.rawTweet.matchedKeywords : [];
-        if (shouldReplaceOldAiFields) patch.topics = tagResult.topics.length ? tagResult.topics : null;
-        else if (tagResult.topics.length) patch.topics = mergeListValues(post.topics, tagResult.topics);
-        if (shouldReplaceOldAiFields) patch.keywords = mergeListValues(matchedKeywords, tagResult.keywords);
-        else if (tagResult.keywords.length) patch.keywords = mergeListValues(post.keywords, tagResult.keywords);
-        patch.tagStatus = tagResult.topics.length || tagResult.keywords.length ? "generated" : "skipped";
-        rawAi.tag = {
-          result: tagResult.raw,
-          prompt: tagResult.promptTrace,
-        };
-      }
-      if (shouldGenerateSummary) {
-        const [summaryZhResult, summaryEnResult] = await Promise.all([
-          callTweetSummaryAi(board, post, "chinese", { maxTextLength }),
-          callTweetSummaryAi(board, post, "english", { maxTextLength }),
-        ]);
-        const summaryZh = summaryZhResult.summary;
-        const summaryEn = summaryEnResult.summary;
-        if (summaryZh || shouldReplaceOldAiFields) patch.summaryZh = summaryZh || null;
-        if (summaryEn || shouldReplaceOldAiFields) patch.summaryEn = summaryEn || null;
-        patch.summaryStatus = summaryZh || summaryEn ? "generated" : "skipped";
-        rawAi.summary = {
-          summaryZh,
-          summaryEn,
-          prompt: summaryZhResult.promptTrace || summaryEnResult.promptTrace,
-          raw: { zh: summaryZhResult.raw, en: summaryEnResult.raw },
-        };
-      }
-
-      if (Object.keys(patch).length) {
-        await post.update({
-          ...patch,
-          aiStatus: post.attitudeStatus === "succeeded" ? "succeeded" : "partial",
-          aiAnalyzedAt: new Date(),
-          aiError: null,
-          aiSource: "social_listening_generated",
-          rawTweet: {
-            ...(post.rawTweet || {}),
-            socialListeningAi: rawAi,
-          },
-        });
-        analyzed += 1;
-      }
-      console.log(`[SocialListeningAI] content board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} tag=${patch.tagStatus || post.tagStatus || "keep"} summary=${patch.summaryStatus || post.summaryStatus || "keep"}`);
-    } catch (error) {
-      failed += 1;
-      await post.update({
-        tagStatus: ["pending", "failed", null].includes(post.tagStatus) ? "failed" : post.tagStatus,
-        summaryStatus: ["pending", "failed", null].includes(post.summaryStatus) ? "failed" : post.summaryStatus,
-        aiAnalyzedAt: new Date(),
-        aiError: summarizeError(error),
-      }).catch(() => null);
-      console.warn(`[SocialListeningAI] content board=${board.id} post=${post.id} tweet=${post.tweetId} status=failed ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} error=${summarizeError(error)}`);
-    }
-  });
-
-  console.log(`[SocialListeningAI] content batch board=${board.id} posts=${posts.length} analyzed=${analyzed} failed=${failed} skipped=${skipped} concurrency=${concurrency} maxTextLength=${maxTextLength} ms=${Date.now() - startedAt}`);
-  return { enabled: true, analyzed, failed, skipped, promptOverrides, selected: posts.length, concurrency, maxTextLength, durationMs: Date.now() - startedAt };
-}
-
-async function analyzePendingProjectAttitudes(board, options = {}) {
-  const aiConfig = await getBoardAiConfig(board);
-  if (!await isProjectAttitudeEnabled(board)) return { enabled: false, analyzed: 0, failed: 0 };
-  const limit = clampInteger(options.limit || aiConfig.projectAttitudeBatchSize, 20, 1, 1000);
-  const concurrency = clampInteger(options.concurrency || aiConfig.projectAttitudeConcurrency, 1, 1, 30);
-  const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
-  const posts = await EchohuntSocialListeningPost.findAll({
-    where: applyRecallExcludeAuthorFilter({
-      boardId: board.id,
-      [Op.or]: [
-        { attitudeStatus: null },
-        { attitudeStatus: { [Op.in]: ["pending", "failed"] } },
-      ],
-      text: { [Op.ne]: null },
-    }, board),
-    order: [
-      [getAiTextLengthOrder(), "ASC"],
-      [getAiRankOrder(), "ASC"],
-      ["viewsCount", "DESC"],
-      ["postCreatedAt", "DESC"],
-    ],
-    limit,
-  });
-
-  let analyzed = 0;
-  let failed = 0;
-  const startedAt = Date.now();
-  const promptOverrides = countPromptOverrides(board, [PROMPT_FIELDS.PROJECT_ATTITUDE]);
-  await runWithConcurrency(posts, concurrency, async (post) => {
-    const itemStartedAt = Date.now();
-    const aiText = getPostAiText(post, { maxTextLength });
-    try {
-      const result = await callProjectAttitudeAi(board, post, { maxTextLength });
-      await post.update({
-        projectAttitudeScore: result.score,
-        sentimentScore: result.score,
-        sentiment: result.sentiment,
-        sentimentSummaryZh: result.summary,
-        attitudeStatus: "succeeded",
-        aiStatus: post.tagStatus === "pending" || post.summaryStatus === "pending" ? "partial" : "succeeded",
-        aiAnalyzedAt: new Date(),
-        aiError: null,
-        aiSource: post.aiSource && post.aiSource !== "social_listening_pending" ? "mixed" : "project_attitude",
-        rawTweet: {
-          ...(post.rawTweet || {}),
-          projectAttitude: {
-            score: result.score,
-            sentiment: result.sentiment,
-            relevantToProject: result.relevantToProject,
-            confidence: result.confidence,
-            summary: result.summary,
-            prompt: result.promptTrace,
-            raw: result.raw,
-          },
-        },
-      });
-      analyzed += 1;
-      console.log(`[SocialListeningAI] attitude board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok sentiment=${result.sentiment} score=${result.score} ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated}`);
-    } catch (error) {
-      failed += 1;
-      await post.update({
-        sentiment: SENTIMENTS.UNKNOWN,
-        attitudeStatus: "failed",
-        aiAnalyzedAt: new Date(),
-        aiError: summarizeError(error),
-      }).catch(() => null);
-      console.warn(`[SocialListeningAI] attitude board=${board.id} post=${post.id} tweet=${post.tweetId} status=failed ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} error=${summarizeError(error)}`);
-    }
-  });
-  console.log(`[SocialListeningAI] attitude batch board=${board.id} posts=${posts.length} analyzed=${analyzed} failed=${failed} concurrency=${concurrency} maxTextLength=${maxTextLength} ms=${Date.now() - startedAt}`);
-  return { enabled: true, analyzed, failed, promptOverrides, selected: posts.length, concurrency, maxTextLength, durationMs: Date.now() - startedAt };
-}
-
 module.exports = {
-  isContentAiEnabled,
-  isProjectAttitudeEnabled,
   getBoardAiConfig,
   buildTweetAnalysisPromptPreview,
   scoreToSentiment,
   buildPromptTrace,
-  callProjectAttitudeAi,
   analyzePendingPostAi,
-  analyzePendingContentMetadata,
-  analyzePendingProjectAttitudes,
 };

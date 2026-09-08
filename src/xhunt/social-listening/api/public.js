@@ -279,10 +279,215 @@ function applyExcludeOfficialAccount(where, board) {
 function buildSnapshotResponse(snapshot) {
   if (!snapshot) return null;
   const accountSummary = snapshot.accountSummary && typeof snapshot.accountSummary === "object" ? snapshot.accountSummary : {};
-  const response = { ...snapshot };
-  if (Array.isArray(snapshot.topViewedPosts)) response.topViewedPosts = snapshot.topViewedPosts;
-  else if (Array.isArray(accountSummary.topViewedPosts)) response.topViewedPosts = accountSummary.topViewedPosts;
-  return response;
+  const metrics = snapshot.metrics && typeof snapshot.metrics === "object" ? snapshot.metrics : {};
+  const changes = metrics.changes && typeof metrics.changes === "object" ? metrics.changes : {};
+  const pickChange = (key) => {
+    const value = changes[key] && typeof changes[key] === "object" ? changes[key] : {};
+    return {
+      changeRatio: value.changeRatio ?? null,
+      percentagePointChange: value.percentagePointChange ?? null,
+    };
+  };
+  const topViewedPosts = Array.isArray(snapshot.topViewedPosts)
+    ? snapshot.topViewedPosts
+    : (Array.isArray(accountSummary.topViewedPosts) ? accountSummary.topViewedPosts : []);
+  const serializeAggregate = (item = {}, type) => {
+    const name = item[type] || item.name || item.topic || item.word || "";
+    const localizedName = item[`${type}Zh`] || item.topicZh || item.wordZh || name;
+    return {
+      [type]: name,
+      [`${type}Zh`]: localizedName,
+      count: Number(item.count || 0),
+      ...(type === "topic" ? {
+        buckets: Array.isArray(item.buckets) ? item.buckets : [],
+        values: Array.isArray(item.values) ? item.values : [],
+      } : { sentiment: item.sentiment || "unknown" }),
+      postIds: Array.isArray(item.postIds) ? item.postIds : [],
+      tweetIds: Array.isArray(item.tweetIds) ? item.tweetIds : [],
+    };
+  };
+  const viewpoints = snapshot.viewpoints && typeof snapshot.viewpoints === "object" ? snapshot.viewpoints : {};
+  const composition = snapshot.sentimentComposition && typeof snapshot.sentimentComposition === "object" ? snapshot.sentimentComposition : {};
+  return {
+    rangeKey: snapshot.rangeKey,
+    processedThrough: snapshot.processedThrough || null,
+    metrics: {
+      discussionCount: Number(metrics.discussionCount || 0),
+      accountCount: Number(metrics.accountCount || 0),
+      viewsCount: Number(metrics.viewsCount || 0),
+      engagementCount: Number(metrics.engagementCount || 0),
+      partial: metrics.partial === true,
+      changes: {
+        discussionCount: pickChange("discussionCount"),
+        accountCount: pickChange("accountCount"),
+        viewsCount: pickChange("viewsCount"),
+        engagementCount: pickChange("engagementCount"),
+        positiveRatio: pickChange("positiveRatio"),
+      },
+    },
+    volumeSeries: (Array.isArray(snapshot.volumeSeries) ? snapshot.volumeSeries : []).map((item) => ({
+      bucket: item.bucket,
+      volume: Number(item.volume || 0),
+    })),
+    sentimentSeries: (Array.isArray(snapshot.sentimentSeries) ? snapshot.sentimentSeries : []).map((item) => ({
+      bucket: item.bucket,
+      positive: Number(item.positive || 0),
+      neutral: Number(item.neutral || 0),
+      negative: Number(item.negative || 0),
+    })),
+    sentimentComposition: {
+      positive: Number(composition.positive || 0),
+      neutral: Number(composition.neutral || 0),
+      negative: Number(composition.negative || 0),
+      unknown: Number(composition.unknown || 0),
+      total: Number(composition.total || 0),
+      analyzed: Number(composition.analyzed || 0),
+      positiveRatio: composition.positiveRatio ?? null,
+    },
+    topics: (Array.isArray(snapshot.topics) ? snapshot.topics : []).map((item) => serializeAggregate(item, "topic")),
+    topicTrends: (Array.isArray(snapshot.topicTrends) ? snapshot.topicTrends : []).map((item) => serializeAggregate(item, "topic")),
+    wordCloud: (Array.isArray(snapshot.wordCloud) ? snapshot.wordCloud : []).map((item) => serializeAggregate(item, "word")),
+    viewpoints: {
+      positive: viewpoints.positive || "",
+      positiveZh: viewpoints.positiveZh || viewpoints.positive || "",
+      negative: viewpoints.negative || "",
+      negativeZh: viewpoints.negativeZh || viewpoints.negative || "",
+      sampleSize: viewpoints.sampleSize || {},
+    },
+    accountSummary: { influentialMentionCount: Number(accountSummary.influentialMentionCount || 0) },
+    topViewedPosts: topViewedPosts.map(serializePublicPost),
+  };
+}
+
+function serializePublicBoard(record) {
+  const board = serializeBoard(record);
+  return {
+    id: board.id,
+    officialHandle: board.officialHandle,
+    projectName: board.projectName,
+    projectDescription: board.projectDescription,
+    projectAvatar: board.projectAvatar,
+    verified: board.verified,
+    followersCount: board.followersCount,
+    globalRank: board.globalRank,
+    cnRank: board.cnRank,
+    brandColor: board.brandColor,
+    status: board.status,
+    coverageStartAt: board.coverageStartAt,
+    processedThrough: board.processedThrough,
+    lastSuccessAt: board.lastSuccessAt,
+    lastFailureAt: board.lastFailureAt,
+    lastFailureReason: board.lastFailureReason,
+  };
+}
+
+function serializePublicPost(record) {
+  const post = record?.author ? record : serializePost(record);
+  const author = post.author && typeof post.author === "object" ? post.author : {};
+  const source = post.source || "mention";
+  const postType = post.postType || (source === "reply" || post.replyId ? "reply" : "post");
+  const metrics = post.metrics && typeof post.metrics === "object" ? post.metrics : {};
+  return {
+    id: post.id,
+    tweetId: post.tweetId,
+    tweetUrl: post.tweetUrl,
+    author: {
+      twitterId: author.twitterId || post.authorTwitterId || null,
+      handle: author.handle || post.authorHandle || null,
+      name: author.name || post.authorName || null,
+      avatar: author.avatar || post.authorAvatar || null,
+      followersCount: author.followersCount ?? null,
+      globalRank: author.globalRank ?? null,
+    },
+    postCreatedAt: post.postCreatedAt,
+    text: post.text || null,
+    source,
+    postType,
+    isReply: postType === "reply",
+    sentiment: post.sentiment || "unknown",
+    metrics: {
+      views: Number(metrics.views || 0),
+      likes: Number(metrics.likes || 0),
+      reposts: Number(metrics.reposts || 0),
+      replies: Number(metrics.replies || 0),
+    },
+    sentimentSummaryZh: post.sentimentSummaryZh || null,
+    summaryZh: post.summaryZh || null,
+    summaryEn: post.summaryEn || null,
+  };
+}
+
+function serializePublicAccountSignal(record) {
+  const signal = serializeAccountSignal(record);
+  const rankSnapshot = signal.rankSnapshot && typeof signal.rankSnapshot === "object" ? signal.rankSnapshot : {};
+  return {
+    id: signal.id,
+    twitterId: signal.twitterId,
+    handle: signal.handle || null,
+    name: signal.name || null,
+    avatar: signal.avatar || null,
+    followersCount: signal.followersCount ?? null,
+    globalRank: signal.globalRank ?? rankSnapshot.globalRank ?? null,
+    cnRank: signal.cnRank ?? rankSnapshot.cnRank ?? null,
+    signalType: signal.signalType,
+    occurredAt: signal.occurredAt,
+    mentionCount: signal.mentionCount ?? null,
+    viewsCount: signal.viewsCount ?? null,
+    engagementCount: signal.engagementCount ?? null,
+    sentiment: signal.sentiment || "unknown",
+    topics: signal.topics || [],
+    postIds: signal.postIds || [],
+    summaryZh: signal.summaryZh || null,
+    summaryEn: signal.summaryEn || null,
+    source: signal.source || null,
+    sourceCounts: signal.sourceCounts || {},
+    hasReply: signal.hasReply === true,
+    hasPost: signal.hasPost === true,
+    postType: signal.postType || "post",
+    isReply: signal.isReply === true,
+  };
+}
+
+function serializePublicAlert(record, options = {}) {
+  const alert = serializeAlert(record, options);
+  return {
+    id: alert.id,
+    alertType: alert.alertType,
+    severity: alert.severity,
+    titleZh: alert.titleZh,
+    titleEn: alert.titleEn,
+    messageZh: alert.messageZh,
+    messageEn: alert.messageEn,
+    authorTwitterId: alert.authorTwitterId || null,
+    authorHandle: alert.authorHandle || null,
+    authorName: alert.authorName || null,
+    authorAvatar: alert.authorAvatar || null,
+    triggeredAt: alert.triggeredAt,
+    currentValue: alert.currentValue || {},
+    evidenceTweetIds: Array.isArray(alert.evidenceTweetIds) ? alert.evidenceTweetIds : [],
+  };
+}
+
+function serializePublicKeyEvent(record) {
+  const event = typeof record?.toJSON === "function" ? record.toJSON() : record || {};
+  const metadata = event.metadata && typeof event.metadata === "object" ? event.metadata : {};
+  return {
+    id: event.id,
+    tweetUrl: event.tweetUrl,
+    tweetId: event.tweetId,
+    eventType: event.eventType,
+    title: event.title || null,
+    authorHandle: event.authorHandle || null,
+    authorName: event.authorName || null,
+    authorAvatar: event.authorAvatar || null,
+    authorGlobalRank: event.authorGlobalRank ?? null,
+    eventAt: event.eventAt,
+    metadata: {
+      note: metadata.note || null,
+      tweetText: metadata.tweetText || null,
+      source: metadata.source || null,
+    },
+  };
 }
 
 function applyExcludeSelfMentionAlerts(where) {
@@ -313,7 +518,8 @@ function applyExcludeSelfMentionAlerts(where) {
 router.get("/me/access-summary", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
-    return res.json({ success: true, data: await getAccessSummary(req.authCenter) });
+    const summary = await getAccessSummary(req.authCenter);
+    return res.json({ success: true, data: { ...summary, boards: (summary.boards || []).map(serializePublicBoard) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCESS_SUMMARY_FAILED");
   }
@@ -322,7 +528,8 @@ router.get("/me/access-summary", async (req, res) => {
 router.get("/boards", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
-    return res.json({ success: true, data: await listAccessibleBoards(req.authCenter) });
+    const boards = await listAccessibleBoards(req.authCenter);
+    return res.json({ success: true, data: boards.map(serializePublicBoard) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_BOARDS_FAILED");
   }
@@ -331,7 +538,7 @@ router.get("/boards", async (req, res) => {
 router.get("/boards/:boardId", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
-    return res.json({ success: true, data: await getBoardDetail(req.params.boardId, req.authCenter) });
+    return res.json({ success: true, data: serializePublicBoard(await getBoardDetail(req.params.boardId, req.authCenter)) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_BOARD_FAILED");
   }
@@ -354,7 +561,7 @@ router.get("/boards/:boardId/overview", async (req, res) => {
     return res.json({
       success: true,
       data: {
-        board: await getBoardDetail(board.id),
+        board: serializePublicBoard(await getBoardDetail(board.id)),
         rangeKey,
         state: storedSnapshot ? "ready" : (board.status === "failed" ? "failed" : (snapshot ? "ready" : "processing")),
         snapshot: buildSnapshotResponse(snapshot),
@@ -381,7 +588,7 @@ router.get("/boards/:boardId/posts", async (req, res) => {
       success: true,
       data: {
         rangeKey,
-        items: result.rows.map(serializePost),
+        items: result.rows.map(serializePublicPost),
         page,
         pageSize,
         total: result.count,
@@ -438,7 +645,7 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
     applySignalPostFilter(where, req.query);
     const result = await EchohuntSocialListeningAccountSignal.findAndCountAll({ where, order: [["occurredAt", "DESC"]], offset, limit, raw: true });
     const rows = await enrichSignalAvatars(await enrichSignalPostSources(result.rows, board.id));
-    return res.json({ success: true, data: { rangeKey, items: rows.map(serializeAccountSignal), page, pageSize, total: result.count } });
+    return res.json({ success: true, data: { rangeKey, items: rows.map(serializePublicAccountSignal), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCOUNTS_FAILED");
   }
@@ -472,7 +679,7 @@ router.get("/boards/:boardId/accounts/:twitterId", async (req, res) => {
       }),
     ]);
     const enrichedSignals = await enrichSignalAvatars(await enrichSignalPostSources(signals, board.id));
-    return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals: enrichedSignals.map(serializeAccountSignal), posts: posts.map(serializePost) } });
+    return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals: enrichedSignals.map(serializePublicAccountSignal), posts: posts.map(serializePublicPost) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCOUNT_DETAIL_FAILED");
   }
@@ -491,7 +698,7 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
       ? await appendDerivedNegativeContentAlert(board, window, result.rows, { type: req.query.type })
       : { rows: result.rows, appended: false };
     const items = await enrichInfluentialAlertRanks(derived.rows.slice(0, limit), board.id);
-    return res.json({ success: true, data: { rangeKey, items: items.map((item) => serializeAlert(item, { lang: req.query.lang })), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
+    return res.json({ success: true, data: { rangeKey, items: items.map((item) => serializePublicAlert(item, { lang: req.query.lang })), page, pageSize, total: result.count + (derived.appended ? 1 : 0) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ALERTS_FAILED");
   }
@@ -506,7 +713,7 @@ router.get("/boards/:boardId/alerts/:alertId", async (req, res) => {
     });
     if (!alert) throw publicError("ALERT_NOT_FOUND", 404, "预警不存在。");
     const [item] = await enrichInfluentialAlertRanks([alert], board.id);
-    return res.json({ success: true, data: serializeAlert(item || alert, { lang: req.query.lang }) });
+    return res.json({ success: true, data: serializePublicAlert(item || alert, { lang: req.query.lang }) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ALERT_FAILED");
   }
@@ -522,7 +729,7 @@ router.get("/boards/:boardId/events", async (req, res) => {
       order: [["eventAt", "DESC"]],
       raw: true,
     });
-    return res.json({ success: true, data: { rangeKey, items } });
+    return res.json({ success: true, data: { rangeKey, items: items.map(serializePublicKeyEvent) } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_EVENTS_FAILED");
   }
@@ -538,7 +745,7 @@ router.post("/boards/:boardId/events", async (req, res) => {
       xhuntUserId: req.authCenter.user.xhuntUserId || null,
       ...buildKeyEventPayloadFromSnapshot(board, parsed, snapshot, req.body),
     });
-    return res.json({ success: true, data: event });
+    return res.json({ success: true, data: serializePublicKeyEvent(event) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_EVENT_CREATE_FAILED");
   }
@@ -565,7 +772,7 @@ router.patch("/boards/:boardId/events/:eventId", async (req, res) => {
         metadata: { ...(event.metadata || {}), note: req.body?.note !== undefined ? req.body.note : event.metadata?.note || null },
       });
     }
-    return res.json({ success: true, data: event });
+    return res.json({ success: true, data: serializePublicKeyEvent(event) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_EVENT_UPDATE_FAILED");
   }

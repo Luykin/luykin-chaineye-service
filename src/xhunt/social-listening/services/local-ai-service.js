@@ -1,57 +1,16 @@
 const { structuredChat } = require("../../../lib/llm");
 const {
-  STRICT_DOMAIN_TAG_VERSION,
   STRICT_DOMAIN_TAGS,
   STRICT_CRYPTO_SUB_TAGS,
   STRICT_AI_SUB_TAGS,
 } = require("./ai-prompt-templates");
 
-const TWEET_TAG_SCHEMA = Object.freeze({
-  type: "object",
-  properties: {
-    crypto_relevant: { type: "boolean" },
-    tags: { type: "array", items: { type: "string" } },
-    summary_cn: { type: "string" },
-    summary_en: { type: "string" },
-    domain_tag: { type: "string", enum: STRICT_DOMAIN_TAGS },
-    domain_tag_version: { type: "string", enum: [STRICT_DOMAIN_TAG_VERSION] },
-    crypto_sub_tags: { type: "array", items: { type: "string", enum: STRICT_CRYPTO_SUB_TAGS } },
-    ai_sub_tags: { type: "array", items: { type: "string", enum: STRICT_AI_SUB_TAGS } },
-    hot_tags: { type: "array", items: { type: "string" } },
-  },
-  required: ["crypto_relevant", "tags", "domain_tag", "domain_tag_version", "crypto_sub_tags", "ai_sub_tags", "hot_tags"],
-});
-
-const PROJECT_ATTITUDE_SCHEMA = Object.freeze({
-  type: "object",
-  properties: {
-    score: { type: "number" },
-    sentiment: { type: "string", enum: ["positive", "neutral", "negative", "unknown"] },
-    relevant_to_project: { type: "boolean" },
-    confidence: { type: "number" },
-    summary: { type: "string" },
-  },
-  required: ["score", "sentiment", "relevant_to_project", "confidence", "summary"],
-});
-
-const TWEET_SUMMARY_SCHEMA = Object.freeze({
-  type: "object",
-  properties: {
-    summary: { type: "string" },
-    post_zh: { type: "string" },
-  },
-  required: ["summary"],
-});
-
 const TWEET_ANALYSIS_SCHEMA = Object.freeze({
   type: "object",
   properties: {
-    crypto_relevant: { type: "boolean" },
-    tags: { type: "array", items: { type: "string" } },
     summary_cn: { type: "string" },
     summary_en: { type: "string" },
     domain_tag: { type: "string", enum: STRICT_DOMAIN_TAGS },
-    domain_tag_version: { type: "string", enum: [STRICT_DOMAIN_TAG_VERSION] },
     crypto_sub_tags: { type: "array", items: { type: "string", enum: STRICT_CRYPTO_SUB_TAGS } },
     ai_sub_tags: { type: "array", items: { type: "string", enum: STRICT_AI_SUB_TAGS } },
     hot_tags: { type: "array", items: { type: "string" } },
@@ -62,12 +21,9 @@ const TWEET_ANALYSIS_SCHEMA = Object.freeze({
     attitude_summary: { type: "string" },
   },
   required: [
-    "crypto_relevant",
-    "tags",
     "summary_cn",
     "summary_en",
     "domain_tag",
-    "domain_tag_version",
     "crypto_sub_tags",
     "ai_sub_tags",
     "hot_tags",
@@ -136,32 +92,6 @@ async function generateTweetAnalysis({ prompt, aiConfig }) {
   };
 }
 
-async function generateTweetTagV2({ prompt, aiConfig }) {
-  const options = getLlmOptions(aiConfig, "tweetTag");
-  return timedStructuredChat("tweetTag", prompt, TWEET_TAG_SCHEMA, options);
-}
-
-async function generateProjectAttitude({ prompt, aiConfig }) {
-  const options = getLlmOptions(aiConfig, "projectAttitude");
-  const data = await timedStructuredChat("projectAttitude", prompt, PROJECT_ATTITUDE_SCHEMA, options);
-  const score = Math.max(0, Math.min(10, toNumber(data.score, 5)));
-  const rawConfidence = Number(data.confidence);
-  const confidence = Number.isFinite(rawConfidence) ? Math.max(0, Math.min(1, rawConfidence)) : null;
-  return {
-    ...data,
-    score,
-    confidence,
-  };
-}
-
-async function generateTweetSummaryMedia({ prompt, aiConfig }) {
-  const options = getLlmOptions(aiConfig, "tweetSummary");
-  return timedStructuredChat("tweetSummary", prompt, TWEET_SUMMARY_SCHEMA, options);
-}
-
 module.exports = {
   generateTweetAnalysis,
-  generateTweetTagV2,
-  generateProjectAttitude,
-  generateTweetSummaryMedia,
 };

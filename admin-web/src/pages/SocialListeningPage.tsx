@@ -134,7 +134,7 @@ const POST_FIELD_GUIDE = [
 ];
 
 const DEFAULT_AI_PROMPTS = {
-  "tweetAnalysis": "你是 Crypto/Web3/AI 社媒内容结构化分析助手。请对同一条推文只分析一次，并一次性输出标签、摘要、项目态度 JSON。\n\n必须输出：crypto_relevant、domain_tag、domain_tag_version、crypto_sub_tags、ai_sub_tags、hot_tags、tags、summary_cn、summary_en、score、sentiment、relevant_to_project、confidence、attitude_summary。\n\n规则：\n1. 不需要翻译全文，不要输出 post_zh。\n2. 不添加推文没有的信息。\n3. 标签要短、可聚合；hot_tags 只能来自原文明确出现的项目名、代币名、协议名、产品名、叙事词。\n4. sentiment 只能是 positive、neutral、negative、unknown；证据不足或不相关时用 unknown，不要强行归入 neutral。\n5. 中文摘要尽量不超过 {words} 个词/短语，态度说明用中文。\n\n项目：{project}\n推文发布时间：{createdAt}\n推文：\n{text}\n\n媒体：\n{media}",
+  "tweetAnalysis": "一次分析下方推文，按 Schema 输出标签、摘要和项目态度 JSON；不要翻译/复述全文，不添加原文没有的事实。\n\n- 标签只能使用 Schema 枚举；无关或无法判断时 domain_tag=其他，子标签和 hot_tags 为空。\n- hot_tags 优先 2-6 个核心词（最多 12）：只取原文出现的核心实体、事件、动作、争议或叙事词；不要用 crypto、Web3、AI 等泛类目凑数。\n- 词云排除词：{keywordExclusions}；即使原文出现，也不得放入 hot_tags。\n- summary_cn 不超过 {words} 个词/短语；summary_en 为短句。\n- 当前项目：{project}；可识别名称/别名/官方 Handle：{projectAliases}。命中任一名称或 @Handle 才可视为讨论当前项目。\n- score、sentiment、attitude_summary 只判断对当前项目的态度；只有确认相关但无褒贬才为 neutral。无关、证据不足或态度不可靠时 sentiment=unknown、relevant_to_project=false 或 confidence<0.5。\n\n发布时间：{createdAt}\n推文：{text}\n媒体：{media}",
 };
 
 const EXTRA_LLM_MODEL_OPTIONS: LlmModelOption[] = [

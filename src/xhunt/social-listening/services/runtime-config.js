@@ -175,7 +175,7 @@ function toText(value, fallback = "") {
 function normalizePromptMap(value, fallback = {}) {
   const source = isPlainObject(value) ? value : {};
   const base = isPlainObject(fallback) ? fallback : {};
-  const tweetAnalysis = toText(source.tweetAnalysis, base.tweetAnalysis || "");
+  const tweetAnalysis = toText(source.tweetAnalysis || source.tweetAnalysisPrompt, base.tweetAnalysis || "");
   return tweetAnalysis ? { tweetAnalysis: tweetAnalysis.slice(0, 30000) } : {};
 }
 
