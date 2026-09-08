@@ -700,6 +700,84 @@ function shouldRunInitialBackfill(board) {
   return !board.coverageStartAt && !board.processedThrough && !board.lastSuccessAt;
 }
 
+const MANUAL_JOB_RECOVERY_MINUTES = 5;
+
+function getJobHeartbeatAt(job) {
+  const progress = job?.progress && typeof job.progress === "object" ? job.progress : {};
+  return progress.heartbeatAt || progress.lastHeartbeatAt || job?.updatedAt || job?.startedAt || job?.createdAt || null;
+}
+
+function isJobHeartbeatStale(job, staleMinutes = MANUAL_JOB_RECOVERY_MINUTES) {
+  const heartbeatAt = getJobHeartbeatAt(job);
+  const heartbeatMs = heartbeatAt ? new Date(heartbeatAt).getTime() : NaN;
+  return !Number.isFinite(heartbeatMs) || Date.now() - heartbeatMs >= staleMinutes * 60 * 1000;
+}
+
+async function recoverStaleJob(jobId, adminId = null, redisClient = null) {
+  const job = await EchohuntSocialListeningJob.findByPk(jobId);
+  if (!job) throw publicError("JOB_NOT_FOUND", 404, "任务不存在。");
+  if (job.status !== JOB_STATUSES.RUNNING) {
+    throw publicError("JOB_NOT_RUNNING", 409, "只有运行中的任务可以恢复。");
+  }
+  if (!isJobHeartbeatStale(job)) {
+    throw publicError("JOB_HEARTBEAT_ACTIVE", 409, `任务心跳仍在 ${MANUAL_JOB_RECOVERY_MINUTES} 分钟内，暂不允许恢复。`);
+  }
+
+  const board = await EchohuntSocialListeningBoard.findByPk(job.boardId);
+  if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) {
+    throw publicError("BOARD_NOT_FOUND", 404, "关联看板不存在或已删除。");
+  }
+  if (board.status === BOARD_STATUSES.PAUSED) {
+    throw publicError("BOARD_PAUSED", 409, "看板已暂停，请先恢复监控后再重试任务。");
+  }
+
+  const recoveredAt = new Date();
+  const progress = job.progress && typeof job.progress === "object" ? job.progress : {};
+  const lastHeartbeatAt = getJobHeartbeatAt(job);
+  let retry;
+  await pgInstance.transaction(async (transaction) => {
+    await job.update({
+      status: JOB_STATUSES.FAILED,
+      finishedAt: recoveredAt,
+      errorCode: "MANUALLY_RECOVERED_STALE_JOB",
+      errorMessage: "管理员恢复了长时间未更新心跳的任务，已重新入队执行。",
+      progress: {
+        ...progress,
+        previousStage: progress.stage,
+        stage: "failed",
+        phase: "manual_recovered",
+        statusMessage: "管理员已恢复异常任务，并创建新的重试任务。",
+        lastHeartbeatAt,
+        recoveredAt: recoveredAt.toISOString(),
+        recoveredBy: "admin",
+      },
+    }, { transaction });
+    retry = await EchohuntSocialListeningJob.create({
+      boardId: job.boardId,
+      jobType: job.jobType,
+      status: JOB_STATUSES.PENDING,
+      rangeStartAt: job.rangeStartAt,
+      rangeEndAt: job.rangeEndAt,
+      triggeredBy: "admin",
+      triggeredByAdminId: adminId,
+      metadata: { ...(job.metadata || {}), retryFromJobId: job.id, source: "admin_stale_recovery" },
+    }, { transaction });
+  });
+
+  // 仅释放该看板的锁；全局锁可能属于其他正常任务，不能由后台操作强行删除。
+  const boardLockReleased = redisClient?.del
+    ? await redisClient.del(`echohunt:social-listening:job-lock:${job.boardId}`).then(Boolean).catch(() => false)
+    : false;
+  await enableSocialListeningScheduler(redisClient, { type: "admin", adminId }).catch(() => null);
+  await writeAudit({
+    boardId: job.boardId,
+    adminId,
+    action: "job_stale_recovered",
+    payload: { jobId: job.id, retryJobId: retry.id, lastHeartbeatAt, boardLockReleased },
+  });
+  return { job, retry, boardLockReleased };
+}
+
 async function createInitialBackfillJob(board, adminId = null) {
   const range = await getHistoryRange("recent_7d");
   return EchohuntSocialListeningJob.create({
@@ -1016,6 +1094,7 @@ module.exports = {
   resolveMonitoredAccount,
   createMonitoredAccount,
   resumeBoard,
+  recoverStaleJob,
   listMonitoredAccounts,
   updateBoard,
   grantBoardAccess,

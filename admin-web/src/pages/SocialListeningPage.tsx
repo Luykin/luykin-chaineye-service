@@ -60,6 +60,7 @@ import {
   pauseSocialListeningAiWorker,
   pauseSocialListeningBoard,
   refreshSocialListeningBoard,
+  recoverSocialListeningJob,
   resolveSocialListeningAccount,
   resumeSocialListeningAiWorker,
   resumeSocialListeningBoard,
@@ -175,7 +176,7 @@ const AI_POST_PROCESSING_STEPS = [
   {
     key: "tweetAnalysis",
     title: "1. 综合 AI 分析",
-    trigger: "开启「内容分析」或「态度评价」后执行",
+    trigger: "开启「综合 AI 分析」后执行",
     calls: "1 次 / 帖",
     model: "tweetAnalysisModel；为空使用该账号模型/默认模型",
     writes: [
@@ -356,6 +357,7 @@ const JOB_PHASE_LABELS: Record<string, string> = {
   snapshotting: "正在刷新看板快照",
   no_windows: "当前范围没有需要扫描的时间窗口",
   stale_recovered: "心跳超时，已自动标记失败",
+  manual_recovered: "管理员已恢复异常任务",
   succeeded: "任务已完成",
   failed: "任务执行失败",
 };
@@ -455,7 +457,7 @@ function getRunningJobNotice(job: SocialListeningJob, progress = asRecord(job.pr
     return {
       type: "warning" as const,
       message: "任务心跳较久未更新",
-      description: `最近心跳在 ${formatDurationSeconds(heartbeatSeconds)} 前；可能卡在只读库查询或进程中断，调度器会按超时阈值自动恢复，避免长期占住 running。`,
+      description: `最近心跳在 ${formatDurationSeconds(heartbeatSeconds)} 前；可能卡在只读库查询或进程中断。超过 5 分钟可点击“恢复”，将原任务标记失败并重新入队。`,
     };
   }
   if (!windowTotal && runtimeSeconds !== null && runtimeSeconds >= 2 * 60) {
@@ -466,6 +468,10 @@ function getRunningJobNotice(job: SocialListeningJob, progress = asRecord(job.pr
     };
   }
   return null;
+}
+
+function isRecoverableJob(job: SocialListeningJob) {
+  return job.status === "running" && (getSecondsSince(getJobHeartbeatAt(job)) || 0) >= 5 * 60;
 }
 
 function renderJobProgressCell(row: SocialListeningJob) {
@@ -534,15 +540,11 @@ function getBoardAiRuntimeFromMetadata(board?: SocialListeningBoard | null) {
 
 function renderBoardAiStatus(board: SocialListeningBoard) {
   const aiRuntime = getBoardAiRuntimeFromMetadata(board);
-  const contentOn = aiRuntime.contentEnabled === true;
-  const attitudeOn = aiRuntime.projectAttitudeEnabled === true;
+  const enabled = aiRuntime.contentEnabled === true || aiRuntime.projectAttitudeEnabled === true;
   const model = getString(aiRuntime.model);
   return (
     <Space direction="vertical" size={2}>
-      <Space size={4} wrap>
-        <Tag color={contentOn ? "green" : "default"}>内容 {contentOn ? "开" : "关"}</Tag>
-        <Tag color={attitudeOn ? "green" : "default"}>态度 {attitudeOn ? "开" : "关"}</Tag>
-      </Space>
+      <Tag color={enabled ? "green" : "default"}>综合 AI {enabled ? "开" : "关"}</Tag>
       <Text type="secondary" ellipsis style={{ maxWidth: 160 }}>{model || "未选模型"}</Text>
     </Space>
   );
@@ -1025,8 +1027,8 @@ function AiPostProcessingGuide({ compact = false, defaultCollapsed = false }: { 
       <Alert
         type="info"
         showIcon
-        message="AI 分为两个开关：内容分析、态度评价"
-        description="无论只开启内容分析、只开启态度评价，还是两者同时开启，每条帖子都只进行 1 次综合 AI 调用，并一次性生成标签、摘要和项目态度。关闭账号 AI 后，后续任务会跳过该账号的 AI 阶段，历史 AI 字段不会自动清空。"
+        message="每条帖子只调用一次综合 AI"
+        description="开启后一次生成标签、中文/英文摘要和项目态度。关闭后，后续任务跳过该账号 AI；历史 AI 字段不会自动清空。"
       />
       <Row gutter={[12, 12]} className="social-listening-ai-processing-steps">
         {AI_POST_PROCESSING_STEPS.map((step) => (
@@ -1109,13 +1111,19 @@ function AiRuntimeConfigPanel() {
   const stats = detail?.stats;
   const aiWorkerStatus = aiWorkerQuery.data?.data || detail?.aiWorkerStatus || null;
   const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningAiRuntimeConfig> | undefined;
-  const liveEstimate = calculateAiCost(watchedAi || detail?.config.ai, estimatePosts);
+  const watchedAiEnabled = Form.useWatch(["ai", "enabled"], form) as boolean | undefined;
+  const liveEstimate = calculateAiCost({
+    ...(watchedAi || detail?.config.ai),
+    contentEnabled: Boolean(watchedAiEnabled),
+    projectAttitudeEnabled: Boolean(watchedAiEnabled),
+  }, estimatePosts);
 
   useEffect(() => {
     if (!detail?.config?.ai) return;
     form.setFieldsValue({
       ai: {
         ...detail.config.ai,
+        enabled: Boolean(detail.config.ai.contentEnabled || detail.config.ai.projectAttitudeEnabled),
         apiKey: "",
         prompts: {
           tweetAnalysis: detail.config.ai.prompts?.tweetAnalysis || "",
@@ -1151,8 +1159,14 @@ function AiRuntimeConfigPanel() {
   const updateMutation = useMutation({
     mutationFn: async () => {
       const values = form.getFieldsValue(true) as { ai?: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig>; metricRefresh?: Partial<SocialListeningMetricRefreshConfig> };
+      const ai = { ...(values.ai || {}) } as Record<string, unknown>;
+      if (Object.prototype.hasOwnProperty.call(ai, "enabled")) {
+        ai.contentEnabled = Boolean(ai.enabled);
+        ai.projectAttitudeEnabled = Boolean(ai.enabled);
+        delete ai.enabled;
+      }
       return updateSocialListeningRuntimeConfig({
-        ai: values.ai || {},
+        ai,
         aiWorker: values.aiWorker || {},
         metricRefresh: values.metricRefresh || {},
       });
@@ -1271,12 +1285,7 @@ function AiRuntimeConfigPanel() {
                   </Form.Item>
                 </Col>
                 <Col xs={12} md={6}>
-                  <Form.Item name={["ai", "contentEnabled"]} label="内容分析总闸" valuePropName="checked" tooltip={aiHelp("contentEnabled")}> 
-                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-                  </Form.Item>
-                </Col>
-                <Col xs={12} md={6}>
-                  <Form.Item name={["ai", "projectAttitudeEnabled"]} label="态度评价总闸" valuePropName="checked" tooltip={aiHelp("projectAttitudeEnabled")}> 
+                  <Form.Item name={["ai", "enabled"]} label="综合 AI 总开关" valuePropName="checked" tooltip="开启后每条帖子只调用一次，同时生成标签、摘要和项目态度。">
                     <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                   </Form.Item>
                 </Col>
@@ -1413,18 +1422,18 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
   const stats = detail?.stats;
   const progress = detail?.progress;
   const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningBoardAiRuntimeConfig> | undefined;
+  const watchedAiEnabled = Form.useWatch(["ai", "enabled"], form) as boolean | undefined;
   const watchedAcceptCost = Form.useWatch("acceptCost", form) as boolean | undefined;
   const estimatePosts = Number(watchedAi?.estimatePosts ?? detail?.config.estimatePosts ?? 10000);
   const liveEstimate = calculateAiCost({
     ...runtime,
     ...watchedAi,
-    contentEnabled: Boolean(runtime?.contentEnabled && watchedAi?.contentEnabled),
-    projectAttitudeEnabled: Boolean(runtime?.projectAttitudeEnabled && watchedAi?.projectAttitudeEnabled),
+    contentEnabled: Boolean(runtime?.contentEnabled && watchedAiEnabled),
+    projectAttitudeEnabled: Boolean(runtime?.projectAttitudeEnabled && watchedAiEnabled),
   }, estimatePosts);
-  const wantsAi = Boolean(watchedAi?.contentEnabled || watchedAi?.projectAttitudeEnabled);
+  const wantsAi = Boolean(watchedAiEnabled);
   const modelReady = Boolean(watchedAi?.model || watchedAi?.tweetAnalysisModel || runtime?.tweetAnalysisModel);
-  const contentBlocked = Boolean(watchedAi?.contentEnabled && !runtime?.contentEnabled);
-  const attitudeBlocked = Boolean(watchedAi?.projectAttitudeEnabled && !runtime?.projectAttitudeEnabled);
+  const aiBlocked = Boolean(watchedAiEnabled && (!runtime?.contentEnabled || !runtime?.projectAttitudeEnabled));
 
   useEffect(() => {
     if (!detail?.config) return;
@@ -1437,8 +1446,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
     form.setFieldsValue({
       acceptCost: false,
       ai: {
-        contentEnabled: Boolean(detail.config.contentEnabled),
-        projectAttitudeEnabled: Boolean(detail.config.projectAttitudeEnabled),
+        enabled: Boolean(detail.config.contentEnabled || detail.config.projectAttitudeEnabled),
         model: detail.config.model || "",
         tweetAnalysisModel: detail.config.tweetAnalysisModel || "",
         estimatePosts: nextEstimatePosts,
@@ -1454,11 +1462,17 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
       const values = form.getFieldsValue(true) as { acceptCost?: boolean; ai?: Partial<SocialListeningBoardAiRuntimeConfig> };
       const ai = values.ai || {};
       if (!promptOverrideTouched && !detail?.config.promptOverride) delete ai.promptOverride;
-      const enabling = Boolean(ai.contentEnabled || ai.projectAttitudeEnabled);
+      const enabling = Boolean(ai.enabled);
       if (enabling && !values.acceptCost) throw new Error("开启该账号 AI 前，请先勾选确认预估成本。关闭 AI 不需要确认成本。");
+      const normalizedAi = {
+        ...ai,
+        contentEnabled: enabling,
+        projectAttitudeEnabled: enabling,
+      };
+      delete normalizedAi.enabled;
       return updateSocialListeningBoardAiConfig(boardId, {
         acceptCost: Boolean(values.acceptCost),
-        ai: { ...ai, acceptCost: Boolean(values.acceptCost) },
+        ai: { ...normalizedAi, acceptCost: Boolean(values.acceptCost) },
       });
     },
     onSuccess: () => {
@@ -1476,7 +1490,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         type="warning"
         showIcon
         message="按被监控账号单独控制 AI，默认关闭"
-        description="全局页只配置模型服务商、价格估算和总开关；这里才决定当前账号是否跑 AI。关闭后，后续采集任务到 AI 阶段会直接跳过该账号，已入库历史 AI 字段不会自动删除。"
+        description="全局页只配置模型服务商、价格估算和总开关；这里才决定当前账号是否跑综合 AI。一次调用会同时生成标签、摘要和项目态度；关闭后，历史 AI 字段不会自动删除。"
       />
       <AiPostProcessingGuide compact defaultCollapsed />
       {detail?.blockingReasons?.length ? (
@@ -1526,12 +1540,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item name={["ai", "contentEnabled"]} label="该账号内容分析" valuePropName="checked" extra={contentBlocked ? "全局内容分析总开关未开启，当前账号不能生效。" : "开启后参与综合 AI 调用：标签 + 中文摘要 + 英文摘要，约每条 1 次调用。"}>
-                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={8}>
-                  <Form.Item name={["ai", "projectAttitudeEnabled"]} label="该账号态度评价" valuePropName="checked" extra={attitudeBlocked ? "全局项目态度总开关未开启，当前账号不能生效。" : "开启后参与综合 AI 调用：评价对项目态度；和内容分析会合并为每条 1 次调用。"}>
+                  <Form.Item name={["ai", "enabled"]} label="启用综合 AI 分析" valuePropName="checked" extra={aiBlocked ? "全局综合 AI 总开关未开启，当前账号不能生效。" : "开启后每条帖子只调用 1 次，同时生成标签、中文/英文摘要和项目态度。"}>
                     <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                   </Form.Item>
                 </Col>
@@ -1558,10 +1567,8 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                         <Descriptions size="small" bordered column={2}>
                           <Descriptions.Item label="Base URL">{runtime?.baseURL || "未配置"}</Descriptions.Item>
                           <Descriptions.Item label="API Key">{runtime?.apiKeyConfigured ? runtime.apiKeyMasked || "已配置" : "未配置"}</Descriptions.Item>
-                          <Descriptions.Item label="全局内容总开关">{runtime?.contentEnabled ? <Tag color="green">开启</Tag> : <Tag>关闭</Tag>}</Descriptions.Item>
-                          <Descriptions.Item label="全局态度总开关">{runtime?.projectAttitudeEnabled ? <Tag color="green">开启</Tag> : <Tag>关闭</Tag>}</Descriptions.Item>
-                          <Descriptions.Item label="实际内容生效">{detail?.config.effective.contentEnabled ? <Tag color="green">生效</Tag> : <Tag>未生效</Tag>}</Descriptions.Item>
-                          <Descriptions.Item label="实际态度生效">{detail?.config.effective.projectAttitudeEnabled ? <Tag color="green">生效</Tag> : <Tag>未生效</Tag>}</Descriptions.Item>
+                          <Descriptions.Item label="全局综合 AI">{runtime?.contentEnabled && runtime?.projectAttitudeEnabled ? <Tag color="green">开启</Tag> : <Tag>关闭</Tag>}</Descriptions.Item>
+                          <Descriptions.Item label="当前账号实际生效">{detail?.config.effective.contentEnabled && detail?.config.effective.projectAttitudeEnabled ? <Tag color="green">生效</Tag> : <Tag>未生效</Tag>}</Descriptions.Item>
                         </Descriptions>
                       </Col>
                     </Row>
@@ -1721,6 +1728,11 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
     onSuccess: () => { messageApi.success("已创建重试任务"); void jobsQuery.refetch(); onChanged(); },
     onError: (error: Error) => messageApi.error(error.message || "重试失败"),
   });
+  const recoverMutation = useMutation({
+    mutationFn: recoverSocialListeningJob,
+    onSuccess: () => { messageApi.success("异常任务已恢复并重新入队"); void jobsQuery.refetch(); onChanged(); },
+    onError: (error: Error) => messageApi.error(error.message || "恢复失败"),
+  });
 
   const accessColumns: TableProps<SocialListeningAccess>["columns"] = [
     { title: "被分配 EchoHunt 账号", dataIndex: "twitterHandle", width: 220, render: (value: string) => <Text strong>@{value}</Text> },
@@ -1743,7 +1755,25 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
     { title: "范围", width: 260, render: (_, row) => <Text type="secondary">{formatDate(row.rangeStartAt)} → {formatDate(row.rangeEndAt)}</Text> },
     { title: "错误", dataIndex: "errorMessage", ellipsis: true, render: (value?: string | null) => value || "-" },
     { title: "创建时间", dataIndex: "createdAt", width: 170, render: formatDate },
-    { title: "操作", width: 80, render: (_, row) => row.status === "failed" ? <Button size="small" onClick={() => retryMutation.mutate(row.id)} loading={retryMutation.isPending}>重试</Button> : null },
+    {
+      title: "操作",
+      width: 100,
+      render: (_, row) => {
+        if (row.status === "failed") return <Button size="small" onClick={() => retryMutation.mutate(row.id)} loading={retryMutation.isPending}>重试</Button>;
+        if (!isRecoverableJob(row)) return null;
+        return (
+          <Popconfirm
+            title="恢复异常任务？"
+            description="原任务会标记失败，并按原范围新建一条待执行任务。"
+            okText="恢复并重试"
+            cancelText="取消"
+            onConfirm={() => recoverMutation.mutate(row.id)}
+          >
+            <Button size="small" danger loading={recoverMutation.isPending}>恢复</Button>
+          </Popconfirm>
+        );
+      },
+    },
   ];
 
   const alertColumns: TableProps<SocialListeningAlert>["columns"] = [
@@ -1958,6 +1988,11 @@ export function SocialListeningPage() {
     onSuccess: (response) => { messageApi.success(response.data.reused ? "已有任务运行中，已复用" : "刷新任务已创建"); void boardsQuery.refetch(); void jobsQuery.refetch(); },
     onError: (error: Error) => messageApi.error(error.message || "刷新失败"),
   });
+  const recoverJobMutation = useMutation({
+    mutationFn: recoverSocialListeningJob,
+    onSuccess: () => { messageApi.success("异常任务已恢复并重新入队"); void boardsQuery.refetch(); void jobsQuery.refetch(); },
+    onError: (error: Error) => messageApi.error(error.message || "恢复失败"),
+  });
   const pauseAiWorkerMutation = useMutation({
     mutationFn: pauseSocialListeningAiWorker,
     onSuccess: () => { messageApi.success("AI Worker 已暂停"); void aiWorkerQuery.refetch(); },
@@ -2089,7 +2124,7 @@ export function SocialListeningPage() {
           <Col xs={24} lg={12}>
             <PageSection
               title="最近任务"
-              description="自动每 15 秒刷新；展开行可查看窗口、心跳、counters 和写表结果。初始化阶段不再展示固定 12%，会显示准备中/心跳状态。"
+              description="自动每 15 秒刷新；展开行可查看窗口、心跳、counters 和写表结果。心跳超过 5 分钟的 running 任务可手动恢复并重新入队。"
               extra={
                 <Popover
                   trigger="click"
@@ -2118,7 +2153,7 @@ export function SocialListeningPage() {
                       </div>
                       <div>
                         <Text strong>补数与异常</Text>
-                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>恢复账号后先补最近 7 天，完成后再低优先级补齐 7–30 天。运行中任务 30 分钟未更新心跳会自动标记失败；可手动重试，或等待下一轮增量任务补上。</Paragraph>
+                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>恢复账号后先补最近 7 天，完成后再低优先级补齐 7–30 天。心跳超过 5 分钟的 running 任务可在任务列表点击“恢复”：原任务标记失败并按原范围重新入队；自动超时阈值由 Nacos 配置决定。</Paragraph>
                       </div>
                       <Text type="secondary" style={{ fontSize: 12 }}>频率、批大小和扫描窗口均可由 Nacos 运行配置调整；这里展示的是当前代码默认值。</Text>
                     </Space>
@@ -2140,6 +2175,21 @@ export function SocialListeningPage() {
                   { title: "状态", dataIndex: "status", render: statusTag },
                   { title: "进度", render: (_, row) => renderJobProgressCell(row) },
                   { title: "创建", dataIndex: "createdAt", render: formatDate },
+                  {
+                    title: "操作",
+                    width: 90,
+                    render: (_, row) => isRecoverableJob(row) ? (
+                      <Popconfirm
+                        title="恢复异常任务？"
+                        description="原任务会标记失败，并按原范围新建一条待执行任务。"
+                        okText="恢复并重试"
+                        cancelText="取消"
+                        onConfirm={() => recoverJobMutation.mutate(row.id)}
+                      >
+                        <Button size="small" danger loading={recoverJobMutation.isPending}>恢复</Button>
+                      </Popconfirm>
+                    ) : null,
+                  },
                 ]}
               />
             </PageSection>

@@ -16,6 +16,7 @@ const {
   resolveMonitoredAccount,
   createMonitoredAccount,
   resumeBoard,
+  recoverStaleJob,
   listMonitoredAccounts,
   updateBoard,
   grantBoardAccess,
@@ -259,10 +260,16 @@ function normalizeBoardAiRuntimeInput(current = {}, body = {}, runtimeAi = {}, a
   delete currentAi.tweetTagModel;
   delete currentAi.tweetSummaryModel;
   delete currentAi.projectAttitudeModel;
+  const combinedEnabled = hasOwnField(input, "enabled") ? Boolean(input.enabled) : null;
   const next = {
     ...currentAi,
-    contentEnabled: Boolean(input.contentEnabled),
-    projectAttitudeEnabled: Boolean(input.projectAttitudeEnabled),
+    // 新界面只暴露一个综合开关；仍读写旧字段，保证已有 metadata 和旧客户端兼容。
+    contentEnabled: combinedEnabled === null
+      ? (hasOwnField(input, "contentEnabled") ? Boolean(input.contentEnabled) : Boolean(current.contentEnabled))
+      : combinedEnabled,
+    projectAttitudeEnabled: combinedEnabled === null
+      ? (hasOwnField(input, "projectAttitudeEnabled") ? Boolean(input.projectAttitudeEnabled) : Boolean(current.projectAttitudeEnabled))
+      : combinedEnabled,
     model: pickStringField(input, current, "model"),
     tweetAnalysisModel: pickStringField(input, current, "tweetAnalysisModel"),
     estimatePosts: Math.max(0, Math.floor(toFiniteNumber(hasOwnField(input, "estimatePosts") ? input.estimatePosts : current.estimatePosts, 10000))),
@@ -1023,6 +1030,22 @@ router.post("/jobs/:jobId/retry", async (req, res) => {
     return res.json({ success: true, data: serializeJob(retry) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_JOB_RETRY_FAILED");
+  }
+});
+
+router.post("/jobs/:jobId/recover", async (req, res) => {
+  try {
+    const result = await recoverStaleJob(req.params.jobId, getAdminId(req), req.redisClient);
+    return res.json({
+      success: true,
+      data: {
+        job: serializeJob(result.job),
+        retry: serializeJob(result.retry),
+        boardLockReleased: result.boardLockReleased,
+      },
+    });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_JOB_RECOVER_FAILED");
   }
 });
 

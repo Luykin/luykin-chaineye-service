@@ -283,6 +283,7 @@ export interface SocialListeningRuntimeConfigResponse {
 }
 
 export interface SocialListeningBoardAiRuntimeConfig {
+  enabled?: boolean;
   contentEnabled: boolean;
   projectAttitudeEnabled: boolean;
   model: string;
@@ -453,6 +454,10 @@ export function fetchSocialListeningJobs(query?: { page?: number; pageSize?: num
 
 export function retrySocialListeningJob(jobId: string) {
   return apiRequest<{ success: boolean; data: SocialListeningJob }>(`${BASE_PATH}/jobs/${jobId}/retry`, { method: "POST" });
+}
+
+export function recoverSocialListeningJob(jobId: string) {
+  return apiRequest<{ success: boolean; data: { job: SocialListeningJob; retry: SocialListeningJob; boardLockReleased: boolean } }>(`${BASE_PATH}/jobs/${jobId}/recover`, { method: "POST" });
 }
 
 export function fetchSocialListeningAlerts(query?: { page?: number; pageSize?: number; boardId?: string; status?: string; type?: string; severity?: string }) {

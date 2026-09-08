@@ -388,7 +388,7 @@ async function processSocialListeningJob(jobId) {
 
 async function recoverStaleRunningJobs(options = {}) {
   const runtimeConfig = await getSocialListeningRuntimeConfig();
-  const staleMinutes = clampPositiveInteger(options.staleMinutes || runtimeConfig.scheduler?.staleRunningMinutes, 30, 10, 24 * 60);
+  const staleMinutes = clampPositiveInteger(options.staleMinutes || runtimeConfig.scheduler?.staleRunningMinutes, 15, 10, 15);
   const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000);
   const staleJobs = await EchohuntSocialListeningJob.findAll({
     where: {

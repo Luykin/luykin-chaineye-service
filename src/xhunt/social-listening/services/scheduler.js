@@ -12,7 +12,9 @@ const { findNextMetricRefreshCandidate, getMetricRefreshConfig } = require("./me
 const SCHEDULER_STATE_KEY = "echohunt:social-listening:scheduler:state";
 const SCHEDULER_ENABLED_VALUE = "running";
 const GLOBAL_JOB_LOCK_KEY = "echohunt:social-listening:job-execution-lock";
-const GLOBAL_JOB_LOCK_TTL_SECONDS = 30 * 60;
+// 全局锁在任务存活时会续期；进程重启时两类锁最多阻塞一个较短的恢复窗口。
+const GLOBAL_JOB_LOCK_TTL_SECONDS = 5 * 60;
+const BOARD_JOB_LOCK_TTL_SECONDS = 5 * 60;
 const RENEW_LOCK_LUA = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
 const RELEASE_LOCK_LUA = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
 
@@ -70,7 +72,7 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
   async function withBoardLock(boardId, fn) {
     const key = `echohunt:social-listening:job-lock:${boardId}`;
     if (!redisClient?.set) return fn();
-    const locked = await redisClient.set(key, String(process.pid), { NX: true, EX: 30 * 60 }).catch(() => null);
+    const locked = await redisClient.set(key, String(process.pid), { NX: true, EX: BOARD_JOB_LOCK_TTL_SECONDS }).catch(() => null);
     if (locked === null) return null;
     try {
       return await fn();
