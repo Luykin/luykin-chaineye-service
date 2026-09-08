@@ -35,6 +35,12 @@ const {
   INFLUENTIAL_GLOBAL_RANK_LIMIT,
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
+const {
+  getRecallExcludeAuthorHandles,
+  applyRecallExcludeAuthorFilter,
+  applyRecallExcludeInfluentialSignalFilter,
+  applyRecallExcludeAuthorAlertFilter,
+} = require("../services/post-filter");
 const { sendJsonError, publicError } = require("../services/errors");
 const { buildTweetUrl } = require("../utils/twitter");
 const {
@@ -341,7 +347,7 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
-    const snapshot = storedSnapshot
+    const snapshot = storedSnapshot && !getRecallExcludeAuthorHandles(board).length
       ? storedSnapshot
       : await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
     res.set("Cache-Control", "private, max-age=30");
@@ -363,7 +369,7 @@ router.get("/boards/:boardId/posts", async (req, res) => {
   try {
     const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
     const { page, pageSize, offset, limit } = normalizePage(req.query);
-    const { where, rangeKey } = buildPostWhere(board.id, req.query, { excludeUnknownSentiment: true });
+    const { where, rangeKey } = buildPostWhere(board, req.query, { excludeUnknownSentiment: true });
     const result = await EchohuntSocialListeningPost.findAndCountAll({
       where,
       order: buildPostOrder(req.query.sort),
@@ -425,6 +431,7 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
       { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } },
       board
     )));
+    applyRecallExcludeInfluentialSignalFilter(where, board);
     if (req.query.type) where.signalType = String(req.query.type);
     const q = String(req.query.q || "").trim();
     if (q) where[Op.or] = [{ handle: { [Op.iLike]: `%${q.replace(/^@+/, "")}%` } }, { name: { [Op.iLike]: `%${q}%` } }];
@@ -444,22 +451,22 @@ router.get("/boards/:boardId/accounts/:twitterId", async (req, res) => {
     const window = getWindowForRange(rangeKey);
     const [signals, posts] = await Promise.all([
       EchohuntSocialListeningAccountSignal.findAll({
-        where: applyExcludeUnknownMentionSignals({
+        where: applyRecallExcludeInfluentialSignalFilter(applyExcludeUnknownMentionSignals({
           boardId: board.id,
           twitterId: req.params.twitterId,
           occurredAt: { [Op.gte]: window.windowStartAt },
-        }),
+        }), board),
         order: [["occurredAt", "DESC"]],
         limit: 50,
         raw: true,
       }),
       EchohuntSocialListeningPost.findAll({
-        where: {
+        where: applyRecallExcludeAuthorFilter({
           boardId: board.id,
           authorTwitterId: req.params.twitterId,
           postCreatedAt: { [Op.gte]: window.windowStartAt },
           sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS },
-        },
+        }, board),
         order: [["postCreatedAt", "DESC"]],
         limit: 50,
       }),
@@ -477,7 +484,7 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = applyExcludeUnknownMentionAlerts(applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } }));
+    const where = applyRecallExcludeAuthorAlertFilter(applyExcludeUnknownMentionAlerts(applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } })));
     if (req.query.type) where.alertType = String(req.query.type);
     const result = await EchohuntSocialListeningAlert.findAndCountAll({ where, order: [["triggeredAt", "DESC"]], offset, limit, raw: true });
     const derived = offset === 0
@@ -494,7 +501,7 @@ router.get("/boards/:boardId/alerts/:alertId", async (req, res) => {
   try {
     const { board } = await assertBoardAccess(req.authCenter, req.params.boardId);
     const alert = await EchohuntSocialListeningAlert.findOne({
-      where: applyExcludeUnknownMentionAlerts({ id: req.params.alertId, boardId: board.id }),
+      where: applyRecallExcludeAuthorAlertFilter(applyExcludeUnknownMentionAlerts(applyExcludeSelfMentionAlerts({ id: req.params.alertId, boardId: board.id }))),
       raw: true,
     });
     if (!alert) throw publicError("ALERT_NOT_FOUND", 404, "预警不存在。");

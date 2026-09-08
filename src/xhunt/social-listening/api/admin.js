@@ -37,11 +37,18 @@ const {
 const {
   normalizeRangeKey,
   getWindowForRange,
+  buildSnapshotPayload,
   appendDerivedNegativeContentAlert,
   INFLUENTIAL_GLOBAL_RANK_LIMIT,
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
+const {
+  getRecallExcludeAuthorHandles,
+  applyRecallExcludeInfluentialSignalFilter,
+  applyRecallExcludeAuthorAlertFilter,
+} = require("../services/post-filter");
 const { enableSocialListeningScheduler } = require("../services/scheduler");
+const { buildTweetAnalysisPromptPreview } = require("../services/analysis-service");
 const {
   getSocialListeningAiWorkerStatus,
   pauseSocialListeningAiWorker,
@@ -359,6 +366,7 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
     },
     config: sanitized,
     runtime: sanitizeRuntimeConfig(runtimeConfig).ai,
+    promptPreview: await buildTweetAnalysisPromptPreview(board),
     stats,
     progress: buildBoardAiProgress(runtimeConfig, stats),
     costEstimate,
@@ -377,7 +385,6 @@ function buildRuntimeConfigDocument(currentConfig = {}, body = {}) {
   const currentAiWorker = currentConfig.aiWorker || {};
   const inputAi = body.ai && typeof body.ai === "object" ? body.ai : {};
   const inputAiWorker = body.aiWorker && typeof body.aiWorker === "object" ? body.aiWorker : {};
-  const apiKeyAction = String(body.apiKeyAction || inputAi.apiKeyAction || "keep").trim().toLowerCase();
   const nextAi = { ...currentAi, ...inputAi };
   const nextAiWorker = { ...currentAiWorker, ...inputAiWorker };
   delete nextAi.apiKeyMasked;
@@ -390,14 +397,11 @@ function buildRuntimeConfigDocument(currentConfig = {}, body = {}) {
   delete nextAi.tweetSummaryMaxTokens;
   delete nextAi.projectAttitudeMaxTokens;
 
-  if (apiKeyAction === "replace") {
-    nextAi.apiKey = String(inputAi.apiKey || "").trim();
-    if (!nextAi.apiKey) throw publicError("AI_API_KEY_REQUIRED", 400, "选择替换 API Key 时必须填写新 Key。");
-  } else if (apiKeyAction === "clear") {
-    nextAi.apiKey = "";
-  } else {
-    nextAi.apiKey = currentAi.apiKey || "";
-  }
+  // A non-empty value entered in the admin form takes effect immediately on
+  // save.  The form deliberately submits an empty value when the field is
+  // untouched, so saving other settings retains the current secret.
+  const submittedApiKey = String(inputAi.apiKey || "").trim();
+  nextAi.apiKey = submittedApiKey || currentAi.apiKey || "";
 
   return normalizeConfig({
     ...currentConfig,
@@ -549,7 +553,7 @@ router.post("/runtime-config", async (req, res) => {
       payload: {
         dataId: SOCIAL_LISTENING_CONFIG_DATA_ID,
         group: SOCIAL_LISTENING_CONFIG_GROUP,
-        apiKeyAction: String(req.body?.apiKeyAction || req.body?.ai?.apiKeyAction || "keep"),
+        apiKeyUpdated: Boolean(String(req.body?.ai?.apiKey || "").trim()),
         ai: {
           ...safeAi,
           apiKeyConfigured: Boolean(apiKey),
@@ -758,11 +762,14 @@ router.get("/boards/:boardId/overview", async (req, res) => {
     const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
     if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
     const rangeKey = normalizeRangeKey(req.query.range);
-    const snapshot = await EchohuntSocialListeningSnapshot.findOne({
+    const storedSnapshot = await EchohuntSocialListeningSnapshot.findOne({
       where: { boardId: board.id, rangeKey },
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
+    const snapshot = storedSnapshot && !getRecallExcludeAuthorHandles(board).length
+      ? storedSnapshot
+      : await buildSnapshotPayload(board, rangeKey);
     const accountSummary = snapshot?.accountSummary && typeof snapshot.accountSummary === "object" ? snapshot.accountSummary : {};
     const responseSnapshot = snapshot ? { ...snapshot } : null;
     if (responseSnapshot && Array.isArray(snapshot.topViewedPosts)) responseSnapshot.topViewedPosts = snapshot.topViewedPosts;
@@ -786,7 +793,7 @@ router.get("/boards/:boardId/posts", async (req, res) => {
     const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
     if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
     const { page, pageSize, offset, limit } = normalizePage(req.query);
-    const { where, rangeKey } = buildPostWhere(board.id, req.query);
+    const { where, rangeKey } = buildPostWhere(board, req.query);
     const result = await EchohuntSocialListeningPost.findAndCountAll({
       where,
       order: buildPostOrder(req.query.sort),
@@ -826,6 +833,7 @@ router.get("/boards/:boardId/accounts", async (req, res) => {
       { boardId: board.id, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } },
       board
     ));
+    applyRecallExcludeInfluentialSignalFilter(where, board);
     if (req.query.type) where.signalType = String(req.query.type);
     applySignalPostFilter(where, req.query);
     const result = await EchohuntSocialListeningAccountSignal.findAndCountAll({
@@ -849,7 +857,7 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
     const rangeKey = normalizeRangeKey(req.query.range);
     const window = getWindowForRange(rangeKey);
-    const where = applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } });
+    const where = applyRecallExcludeAuthorAlertFilter(applyExcludeSelfMentionAlerts({ boardId: board.id, triggeredAt: { [Op.gte]: window.windowStartAt } }));
     if (req.query.type) where.alertType = String(req.query.type);
     if (req.query.status) where.status = String(req.query.status);
     const result = await EchohuntSocialListeningAlert.findAndCountAll({
@@ -921,7 +929,7 @@ router.get("/jobs", async (req, res) => {
 router.get("/alerts", async (req, res) => {
   try {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
-    const where = applyExcludeSelfMentionAlerts({});
+    const where = applyRecallExcludeAuthorAlertFilter(applyExcludeSelfMentionAlerts({}));
     if (req.query.boardId) where.boardId = String(req.query.boardId);
     if (req.query.type) where.alertType = String(req.query.type);
     if (req.query.status) where.status = String(req.query.status);

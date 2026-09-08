@@ -9,6 +9,7 @@ const { RANGE_CONFIG, RANGE_KEYS, SENTIMENTS, ALERT_TYPES, ACCOUNT_SIGNAL_TYPES 
 const { fetchFollowSignalsForBoard, pickRank } = require("./data-source");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 const { buildTweetUrl } = require("../utils/twitter");
+const { applyRecallExcludeAuthorFilter, applyRecallExcludeAuthorAlertFilter } = require("./post-filter");
 
 const INFLUENTIAL_GLOBAL_RANK_LIMIT = 3000;
 
@@ -572,13 +573,14 @@ function getPreviousWindow(window) {
   };
 }
 
-async function fetchMetricPosts(boardId, windowStartAt, windowEndAt, options = {}) {
+async function fetchMetricPosts(board, windowStartAt, windowEndAt, options = {}) {
+  const boardId = typeof board === "object" ? board.id : board;
   return EchohuntSocialListeningPost.findAll({
-    where: {
+    where: applyRecallExcludeAuthorFilter({
       boardId,
       postCreatedAt: { [Op.gte]: windowStartAt, [Op.lt]: windowEndAt },
       ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
-    },
+    }, board),
     attributes: [
       "authorTwitterId",
       "postCreatedAt",
@@ -593,9 +595,10 @@ async function fetchMetricPosts(boardId, windowStartAt, windowEndAt, options = {
   });
 }
 
-async function countInfluentialMetricPosts(boardId, windowStartAt, windowEndAt, options = {}) {
+async function countInfluentialMetricPosts(board, windowStartAt, windowEndAt, options = {}) {
+  const boardId = typeof board === "object" ? board.id : board;
   return EchohuntSocialListeningPost.count({
-    where: {
+    where: applyRecallExcludeAuthorFilter({
       boardId,
       postCreatedAt: { [Op.gte]: windowStartAt, [Op.lt]: windowEndAt },
       ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
@@ -603,7 +606,7 @@ async function countInfluentialMetricPosts(boardId, windowStartAt, windowEndAt, 
         { authorGlobalRank: { [Op.between]: [1, INFLUENTIAL_GLOBAL_RANK_LIMIT] } },
         buildRawAuthorRankLiteral(),
       ],
-    },
+    }, board),
   });
 }
 
@@ -614,13 +617,13 @@ async function enrichSnapshotMetricComparisons(snapshot, boardId, options = {}) 
   if (Number.isNaN(windowStartAt.getTime()) || Number.isNaN(windowEndAt.getTime())) return snapshot;
   const previousWindow = getPreviousWindow({ windowStartAt, windowEndAt });
   if (!previousWindow) return snapshot;
-  const effectiveBoardId = boardId || snapshot.boardId;
-  const previousPosts = await fetchMetricPosts(effectiveBoardId, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
+  const effectiveBoard = boardId || snapshot.boardId;
+  const previousPosts = await fetchMetricPosts(effectiveBoard, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
   const previousMetrics = summarizeMetricPosts(getMetricPosts(previousPosts, options));
   const metrics = snapshot.metrics && typeof snapshot.metrics === "object" ? snapshot.metrics : {};
   const sentimentComposition = snapshot.sentimentComposition && typeof snapshot.sentimentComposition === "object" ? snapshot.sentimentComposition : {};
   const accountSummary = snapshot.accountSummary && typeof snapshot.accountSummary === "object" ? snapshot.accountSummary : {};
-  const influentialMentionCount = await countInfluentialMetricPosts(effectiveBoardId, windowStartAt, windowEndAt, options);
+  const influentialMentionCount = await countInfluentialMetricPosts(effectiveBoard, windowStartAt, windowEndAt, options);
   const currentMetrics = {
     ...metrics,
     positiveRatio: metrics.positiveRatio ?? sentimentComposition.positiveRatio,
@@ -642,11 +645,11 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   const now = options.now || new Date();
   const window = getWindowForRange(rangeKey, now);
   const posts = await EchohuntSocialListeningPost.findAll({
-    where: {
+    where: applyRecallExcludeAuthorFilter({
       boardId: board.id,
       postCreatedAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt },
       ...(shouldExcludeUnknownSentiment(options) ? { sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS } } : {}),
-    },
+    }, board),
     order: [["postCreatedAt", "ASC"]],
     raw: true,
   });
@@ -663,7 +666,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
 
   const previousWindow = getPreviousWindow(window);
   if (previousWindow) {
-    const previousPosts = await fetchMetricPosts(board.id, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
+    const previousPosts = await fetchMetricPosts(board, previousWindow.windowStartAt, previousWindow.windowEndAt, options);
     Object.assign(metrics, buildMetricComparisons(metrics, summarizeMetricPosts(getMetricPosts(previousPosts, options)), previousWindow));
   }
 
@@ -680,7 +683,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   const influentialCount = metricPosts.filter(isInfluentialPost).length;
 
   const activeAlertCount = await EchohuntSocialListeningAlert.count({
-    where: { boardId: board.id, status: "active", triggeredAt: { [Op.gte]: window.windowStartAt } },
+    where: applyRecallExcludeAuthorAlertFilter({ boardId: board.id, status: "active", triggeredAt: { [Op.gte]: window.windowStartAt } }),
   }).catch(() => 0);
 
   return {
@@ -751,7 +754,7 @@ async function generateInfluentialSignals(board, options = {}) {
   }
 
   const posts = await EchohuntSocialListeningPost.findAll({
-    where: {
+    where: applyRecallExcludeAuthorFilter({
       boardId: board.id,
       postCreatedAt: { [Op.gte]: since, [Op.lt]: until },
       sentiment: { [Op.in]: EFFECTIVE_SENTIMENTS },
@@ -760,7 +763,7 @@ async function generateInfluentialSignals(board, options = {}) {
         { authorGlobalRank: { [Op.between]: [1, INFLUENTIAL_GLOBAL_RANK_LIMIT] } },
         buildRawAuthorRankLiteral(),
       ],
-    },
+    }, board),
     order: [["postCreatedAt", "DESC"]],
     limit: 200,
     raw: true,
@@ -925,6 +928,7 @@ async function buildDerivedNegativeContentAlertForRange(board, window, options =
     sentiment: SENTIMENTS.NEGATIVE,
     postCreatedAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt },
   };
+  applyRecallExcludeAuthorFilter(where, board);
   const evidenceLimit = Math.min(Math.max(Number(options.evidenceLimit || 20), 1), 50);
   const [negativeCount, negativeAuthorCount, negativeViews, evidencePosts] = await Promise.all([
     EchohuntSocialListeningPost.count({ where }),
@@ -1011,11 +1015,11 @@ async function generateAggregateAlerts(board, options = {}) {
 
   const [currentPosts, baselinePosts] = await Promise.all([
     EchohuntSocialListeningPost.findAll({
-      where: { boardId: board.id, postCreatedAt: { [Op.gte]: currentStartAt, [Op.lt]: currentEndAt } },
+      where: applyRecallExcludeAuthorFilter({ boardId: board.id, postCreatedAt: { [Op.gte]: currentStartAt, [Op.lt]: currentEndAt } }, board),
       raw: true,
     }),
     EchohuntSocialListeningPost.findAll({
-      where: { boardId: board.id, postCreatedAt: { [Op.gte]: baselineStartAt, [Op.lt]: currentStartAt } },
+      where: applyRecallExcludeAuthorFilter({ boardId: board.id, postCreatedAt: { [Op.gte]: baselineStartAt, [Op.lt]: currentStartAt } }, board),
       attributes: ["tweetId", "authorTwitterId", "postCreatedAt", "sentiment", "viewsCount"],
       raw: true,
     }),

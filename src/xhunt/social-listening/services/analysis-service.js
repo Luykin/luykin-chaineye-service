@@ -476,27 +476,14 @@ function buildCombinedPromptSection(board, aiConfig, field, variables = {}) {
   return { prompt, trace };
 }
 
-async function callTweetAnalysisAi(board, post, options = {}) {
-  const aiConfig = await getBoardAiConfig(board);
+function buildTweetAnalysisPrompt(board, aiConfig, variables = {}) {
   const summaryWords = aiConfig.summaryWords || 5;
-  const aiText = getPostAiText(post, options);
-  const project = buildProjectPromptName(board);
-  const media = pickFirstMedia(post);
-  const createdAt = post.postCreatedAt ? new Date(post.postCreatedAt).toISOString() : "";
-  const variables = {
-    text: aiText.text,
-    project,
-    lang: "cn",
-    words: summaryWords,
-    media,
-    createdAt,
-  };
   const analysisPrompt = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_ANALYSIS, variables);
   const tagPrompt = buildCombinedPromptSection(board, aiConfig, PROMPT_FIELDS.TWEET_TAG, variables);
   const summaryPrompt = buildCombinedPromptSection(board, aiConfig, PROMPT_FIELDS.TWEET_SUMMARY, variables);
   const attitudePrompt = buildCombinedPromptSection(board, aiConfig, PROMPT_FIELDS.PROJECT_ATTITUDE, {
     ...variables,
-    text: `<<${createdAt}--${aiText.text}>>`,
+    text: `<<${variables.createdAt || ""}--${variables.text || ""}>>`,
   });
   const prompt = analysisPrompt.trace.configured || (!tagPrompt.trace.configured && !summaryPrompt.trace.configured && !attitudePrompt.trace.configured)
     ? analysisPrompt.prompt
@@ -515,16 +502,66 @@ async function callTweetAnalysisAi(board, post, options = {}) {
       attitudePrompt.prompt,
       "",
       `INPUT:\n${JSON.stringify({
-        tweet_text: aiText.text,
-        tweet_created_at: createdAt,
-        project,
-        media,
+        tweet_text: variables.text || "",
+        tweet_created_at: variables.createdAt || "",
+        project: variables.project || "",
+        media: variables.media || "",
       })}`,
     ].join("\n");
-  const promptTrace = { analysis: analysisPrompt.trace, tag: tagPrompt.trace, summary: summaryPrompt.trace, attitude: attitudePrompt.trace, length: prompt.length };
+  return {
+    prompt,
+    promptTrace: {
+      analysis: analysisPrompt.trace,
+      tag: tagPrompt.trace,
+      summary: summaryPrompt.trace,
+      attitude: attitudePrompt.trace,
+      length: prompt.length,
+    },
+  };
+}
+
+async function buildTweetAnalysisPromptPreview(board) {
+  const aiConfig = await getBoardAiConfig(board);
+  const project = buildProjectPromptName(board);
+  const variables = {
+    text: "{{tweet_text}}",
+    project,
+    lang: "cn",
+    words: aiConfig.summaryWords || 5,
+    media: "{{media}}",
+    createdAt: "{{tweet_created_at}}",
+  };
+  const { prompt, promptTrace } = buildTweetAnalysisPrompt(board, aiConfig, variables);
+  return {
+    systemPrompt: String(aiConfig.systemPrompt || "").trim() || "你是严格的 JSON 结构化分析助手。只输出符合 Schema 的 JSON。",
+    userPrompt: prompt,
+    variables,
+    promptTrace,
+    model: aiConfig.tweetAnalysisModel || aiConfig.model || "",
+    maxTokens: aiConfig.tweetAnalysisMaxTokens || aiConfig.maxTokens || 1200,
+    temperature: Number.isFinite(Number(aiConfig.temperature)) ? Number(aiConfig.temperature) : 0,
+  };
+}
+
+async function callTweetAnalysisAi(board, post, options = {}) {
+  const aiConfig = await getBoardAiConfig(board);
+  const summaryWords = aiConfig.summaryWords || 5;
+  const aiText = getPostAiText(post, options);
+  const project = buildProjectPromptName(board);
+  const media = pickFirstMedia(post);
+  const createdAt = post.postCreatedAt ? new Date(post.postCreatedAt).toISOString() : "";
+  const variables = {
+    text: aiText.text,
+    project,
+    lang: "cn",
+    words: summaryWords,
+    media,
+    createdAt,
+  };
+  const { prompt, promptTrace } = buildTweetAnalysisPrompt(board, aiConfig, variables);
   if (!aiText.text) {
     return {
-      tag: { topics: [], keywords: [], raw: {}, promptTrace: tagPrompt.trace },
+      tag: { topics: [], keywords: [], raw: {}, promptTrace: promptTrace.tag },
       summary: { summaryZh: null, summaryEn: null, raw: {} },
       attitude: { score: 5, sentiment: SENTIMENTS.UNKNOWN, relevantToProject: null, confidence: null, summary: null, raw: {} },
       promptTrace,
@@ -545,8 +582,8 @@ async function callTweetAnalysisAi(board, post, options = {}) {
     (Number.isFinite(confidence) && confidence < 0.5)
   ) ? SENTIMENTS.UNKNOWN : sentiment;
   return {
-    tag: { ...tag, promptTrace: tagPrompt.trace },
-    summary: { ...summary, promptTrace: summaryPrompt.trace },
+    tag: { ...tag, promptTrace: promptTrace.tag },
+    summary: { ...summary, promptTrace: promptTrace.summary },
     attitude: {
       score: data.score,
       sentiment: strictSentiment,
@@ -554,7 +591,7 @@ async function callTweetAnalysisAi(board, post, options = {}) {
       confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
       summary: data.attitude_summary || data.attitudeSummary || data.summary || null,
       raw: data,
-      promptTrace: attitudePrompt.trace,
+      promptTrace: promptTrace.attitude,
     },
     promptTrace,
     raw: data,
@@ -932,6 +969,7 @@ module.exports = {
   isContentAiEnabled,
   isProjectAttitudeEnabled,
   getBoardAiConfig,
+  buildTweetAnalysisPromptPreview,
   scoreToSentiment,
   buildPromptTrace,
   callProjectAttitudeAi,

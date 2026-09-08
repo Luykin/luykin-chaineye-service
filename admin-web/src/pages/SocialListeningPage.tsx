@@ -1134,13 +1134,11 @@ function AiRuntimeConfigPanel() {
   const stats = detail?.stats;
   const aiWorkerStatus = aiWorkerQuery.data?.data || detail?.aiWorkerStatus || null;
   const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningAiRuntimeConfig> | undefined;
-  const watchedApiKeyAction = Form.useWatch("apiKeyAction", form) as string | undefined;
   const liveEstimate = calculateAiCost(watchedAi || detail?.config.ai, estimatePosts);
 
   useEffect(() => {
     if (!detail?.config?.ai) return;
     form.setFieldsValue({
-      apiKeyAction: "keep",
       ai: {
         ...detail.config.ai,
         apiKey: "",
@@ -1176,9 +1174,8 @@ function AiRuntimeConfigPanel() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const values = form.getFieldsValue(true) as { apiKeyAction?: "keep" | "replace" | "clear"; ai?: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig> };
+      const values = form.getFieldsValue(true) as { ai?: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig> };
       return updateSocialListeningRuntimeConfig({
-        apiKeyAction: values.apiKeyAction || "keep",
         ai: values.ai || {},
         aiWorker: values.aiWorker || {},
       });
@@ -1271,28 +1268,15 @@ function AiRuntimeConfigPanel() {
                     <ModelAutoComplete options={modelOptions} placeholder="可下拉选择，也可直接输入模型名" />
                   </Form.Item>
                 </Col>
-                <Col xs={24} md={16}>
+                <Col xs={24} md={8}>
                   <Form.Item name={["ai", "baseURL"]} label="Base URL" tooltip={aiHelp("baseURL")} rules={[{ required: true, message: "请输入 baseURL" }]}>
                     <Input placeholder="https://aaii.xclaw.info/v1/" />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item name="apiKeyAction" label="API Key 操作" tooltip={aiHelp("apiKey")}> 
-                    <Select options={[{ value: "keep", label: "继续使用当前正在生效的 Key" }, { value: "replace", label: "将新 Key 设为正在使用的 Key" }, { value: "clear", label: "清空 Key（停用 AI）" }]} />
+                  <Form.Item name={["ai", "apiKey"]} label="API Key" tooltip={{ title: "填写后保存即替换 AI 正在使用的 Key；留空则保持当前 Key。", icon: <InfoCircleOutlined /> }}>
+                    <Input.Password placeholder={detail?.config.ai.apiKeyMasked || "粘贴 API Key"} autoComplete="new-password" />
                   </Form.Item>
-                </Col>
-                <Col xs={24} md={16}>
-                  <Form.Item name={["ai", "apiKey"]} label="新 API Key" tooltip={{ title: "仅在选择“将新 Key 设为正在使用的 Key”时写入 Nacos。", icon: <InfoCircleOutlined /> }}>
-                    <Input.Password disabled={watchedApiKeyAction !== "replace"} placeholder={watchedApiKeyAction === "replace" ? "粘贴新 API Key" : detail?.config.ai.apiKeyMasked || "未配置"} autoComplete="new-password" />
-                  </Form.Item>
-                </Col>
-                <Col span={24}>
-                  <Alert
-                    type={watchedApiKeyAction === "replace" ? "warning" : watchedApiKeyAction === "clear" ? "error" : "info"}
-                    showIcon
-                    message={watchedApiKeyAction === "replace" ? "保存后将替换正在使用的 API Key" : watchedApiKeyAction === "clear" ? "保存后将清空 API Key，AI 调用会停止" : "当前处于保持模式，保存不会替换正在使用的 API Key"}
-                    description={watchedApiKeyAction === "replace" ? "新 Key 会写入 Nacos；独立 AI Worker 会在下一次读取配置时切换，最长约 60 秒。正在执行中的请求不会中途换 Key。" : "右侧脱敏字符仅表示当前已经生效的 Key，不是可编辑的新 Key。需要换 Key 时，请先选择“将新 Key 设为正在使用的 Key”。"}
-                  />
                 </Col>
                 <Col xs={12} md={6}>
                   <Form.Item name={["ai", "contentEnabled"]} label="内容分析总闸" valuePropName="checked" tooltip={aiHelp("contentEnabled")}> 
@@ -1434,6 +1418,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
   const modelOptions = useMemo(() => mergeModelOptions(llmModelsQuery.data?.data || []), [llmModelsQuery.data?.data]);
   const detail = configQuery.data?.data || null;
   const runtime = detail?.runtime;
+  const promptPreview = detail?.promptPreview;
   const stats = detail?.stats;
   const progress = detail?.progress;
   const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningBoardAiRuntimeConfig> | undefined;
@@ -1584,6 +1569,28 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                       </Col>
                     </Row>
                   ),
+                }]}
+              />
+              <Collapse
+                bordered={false}
+                style={{ marginTop: 12 }}
+                items={[{
+                  key: "actual-ai-prompt",
+                  label: "查看实际发送给 AI 的 Prompt",
+                  children: promptPreview ? (
+                    <Space direction="vertical" size={10} className="social-listening-full">
+                      <Alert type="info" showIcon message="此预览由 AI Worker 的同一套拼装逻辑生成" description="已包含当前 Nacos、看板级覆盖和项目名。推文正文、发布时间、媒体链接会在每条任务运行时替换下方占位符。" />
+                      <Descriptions size="small" bordered column={3}>
+                        <Descriptions.Item label="模型">{promptPreview.model || "未配置"}</Descriptions.Item>
+                        <Descriptions.Item label="Temperature">{promptPreview.temperature}</Descriptions.Item>
+                        <Descriptions.Item label="Max Tokens">{promptPreview.maxTokens}</Descriptions.Item>
+                      </Descriptions>
+                      <Text strong>System Prompt（实际发送）</Text>
+                      <TextArea value={promptPreview.systemPrompt} readOnly autoSize={{ minRows: 2, maxRows: 8 }} />
+                      <Text strong>User Prompt（实际发送，动态内容使用占位符）</Text>
+                      <TextArea value={promptPreview.userPrompt} readOnly autoSize={{ minRows: 8, maxRows: 24 }} />
+                    </Space>
+                  ) : <Text type="secondary">正在读取实际 Prompt…</Text>,
                 }]}
               />
               <Space style={{ marginTop: 14 }} wrap>
@@ -2192,7 +2199,7 @@ export function SocialListeningPage() {
                       <>
                         <Alert className="social-listening-modal-alert" type="info" showIcon message="提示语保存到 metadata.aiPrompts.tweetAnalysis" description="每条推文只进行一次综合 AI 调用，同时生成标签、摘要和项目态度。" />
                         <Form.Item name="aiProjectName" label="AI 项目名" extra="覆盖项目态度 AI 的 project 名称；不填时使用项目名称。"><Input placeholder="默认使用项目名称" /></Form.Item>
-                        <Form.Item name="tweetAnalysisPrompt" label="综合分析 Prompt（当前生效）" extra="一次调用同时生成标签、summaryZh/summaryEn、sentiment/score/attitude_summary。支持变量：{text}、{project}、{createdAt}、{words}、{media}。"><TextArea rows={7} /></Form.Item>
+                        <Form.Item name="tweetAnalysisPrompt" label="看板级综合分析 Prompt 覆盖（可选）" extra="仅保存当前看板的覆盖模板；实际发送内容请在看板详情的「AI 开关」中查看。支持变量：{text}、{project}、{createdAt}、{words}、{media}。"><TextArea rows={7} /></Form.Item>
                       </>
                     ),
                   },

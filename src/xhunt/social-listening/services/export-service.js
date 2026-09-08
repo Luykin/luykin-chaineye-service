@@ -8,6 +8,7 @@ const { normalizeRangeKey, getWindowForRange, EFFECTIVE_SENTIMENTS } = require("
 const { serializePost } = require("./board-service");
 const { publicError } = require("./errors");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
+const { applyRecallExcludeAuthorFilter } = require("./post-filter");
 
 function rankOrderLiteral(paths, column) {
   const clauses = paths.map((path) => `
@@ -41,7 +42,8 @@ function normalizePostType(value) {
   return "";
 }
 
-function buildPostWhere(boardId, query = {}, options = {}) {
+function buildPostWhere(board, query = {}, options = {}) {
+  const boardId = typeof board === "object" ? board.id : board;
   const rangeKey = normalizeRangeKey(query.range);
   const window = getWindowForRange(rangeKey);
   const sortKey = String(query.sort || "").trim().toLowerCase();
@@ -105,7 +107,7 @@ function buildPostWhere(boardId, query = {}, options = {}) {
     : String(query.tweetIds || "").split(",");
   const normalizedTweetIds = tweetIds.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 200);
   if (normalizedTweetIds.length) where.tweetId = { [Op.in]: normalizedTweetIds };
-  return { where, rangeKey };
+  return { where: applyRecallExcludeAuthorFilter(where, board), rangeKey };
 }
 
 function buildPostOrder(sort) {
@@ -131,7 +133,7 @@ async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null
     if (ok === null) throw publicError("EXPORT_RATE_LIMITED", 429, "导出太频繁，请稍后再试。", { retryAfter: cooldownSeconds });
   }
 
-  const { where, rangeKey } = buildPostWhere(board.id, query, options);
+  const { where, rangeKey } = buildPostWhere(board, query, options);
   const total = await EchohuntSocialListeningPost.count({ where });
   if (total > exportMaxRows) {
     throw publicError("EXPORT_TOO_LARGE", 400, `导出数据超过 ${exportMaxRows} 行，请缩短时间范围或增加筛选条件。`);

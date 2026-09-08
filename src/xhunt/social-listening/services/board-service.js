@@ -30,6 +30,7 @@ const { publicError } = require("./errors");
 const { getHistoryRange } = require("./ingest-service");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 const { enableSocialListeningScheduler } = require("./scheduler");
+const { applyRecallExcludeAuthorFilter } = require("./post-filter");
 
 function toJson(record) {
   return typeof record?.toJSON === "function" ? record.toJSON() : record;
@@ -50,7 +51,9 @@ function buildBoardCountMap(rows = []) {
   }, new Map());
 }
 
-async function loadBoardListStats(boardIds = []) {
+async function loadBoardListStats(boards = []) {
+  const boardRows = boards.map(toJson).filter((board) => board?.id);
+  const boardIds = boardRows.map((board) => board.id);
   if (!boardIds.length) {
     return {
       accessCountByBoard: new Map(),
@@ -60,6 +63,9 @@ async function loadBoardListStats(boardIds = []) {
   }
 
   const boardWhere = { boardId: { [Op.in]: boardIds } };
+  const postWhere = {
+    [Op.or]: boardRows.map((board) => applyRecallExcludeAuthorFilter({ boardId: board.id }, board)),
+  };
   const [accessCountRows, postCountRows, jobs] = await Promise.all([
     EchohuntSocialListeningBoardAccess.findAll({
       attributes: ["boardId", [fn("COUNT", col("id")), "count"]],
@@ -69,7 +75,7 @@ async function loadBoardListStats(boardIds = []) {
     }),
     EchohuntSocialListeningPost.findAll({
       attributes: ["boardId", [fn("COUNT", col("id")), "count"]],
-      where: boardWhere,
+      where: postWhere,
       group: ["boardId"],
       raw: true,
     }),
@@ -750,8 +756,7 @@ async function listMonitoredAccounts(query = {}) {
     offset,
     limit,
   });
-  const boardIds = result.rows.map((row) => row.id).filter(Boolean);
-  const { accessCountByBoard, postCountByBoard, latestJobByBoard } = await loadBoardListStats(boardIds);
+  const { accessCountByBoard, postCountByBoard, latestJobByBoard } = await loadBoardListStats(result.rows);
   return {
     items: result.rows.map((row) => {
       const latestJob = latestJobByBoard.get(row.id);
@@ -929,7 +934,7 @@ async function getBoardDetail(boardId, authCenter = null) {
   const [latestJob, accessCount, postCount] = await Promise.all([
     EchohuntSocialListeningJob.findOne({ where: { boardId }, order: [["createdAt", "DESC"]] }),
     EchohuntSocialListeningBoardAccess.count({ where: { boardId, status: ACCESS_STATUSES.ACTIVE } }),
-    EchohuntSocialListeningPost.count({ where: { boardId } }),
+    EchohuntSocialListeningPost.count({ where: applyRecallExcludeAuthorFilter({ boardId }, board) }),
   ]);
   return serializeBoard(board, { latestJob: serializeJob(latestJob), accessCount, postCount });
 }

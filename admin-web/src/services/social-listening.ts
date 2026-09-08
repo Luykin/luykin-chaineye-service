@@ -299,6 +299,15 @@ export interface SocialListeningBoardAiConfigResponse {
   board: { id: string; officialHandle: string; projectName: string };
   config: SocialListeningBoardAiRuntimeConfig;
   runtime: SocialListeningAiRuntimeConfig;
+  promptPreview?: {
+    systemPrompt: string;
+    userPrompt: string;
+    variables: Record<string, string | number>;
+    promptTrace: Record<string, unknown>;
+    model: string;
+    maxTokens: number;
+    temperature: number;
+  };
   stats: SocialListeningAiPendingStats;
   progress?: SocialListeningAiProgress;
   costEstimate: SocialListeningAiCostEstimate;
@@ -337,7 +346,7 @@ export function fetchSocialListeningRuntimeConfig(query?: { estimatePosts?: numb
   return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(withQuery(`${BASE_PATH}/runtime-config`, query));
 }
 
-export function updateSocialListeningRuntimeConfig(payload: { ai: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig>; apiKeyAction?: "keep" | "replace" | "clear" }) {
+export function updateSocialListeningRuntimeConfig(payload: { ai: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig> }) {
   return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(`${BASE_PATH}/runtime-config`, {
     method: "POST",
     body: payload,
