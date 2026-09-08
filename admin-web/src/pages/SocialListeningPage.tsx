@@ -1922,10 +1922,6 @@ export function SocialListeningPage() {
     queryFn: () => fetchSocialListeningJobs({ pageSize: 8 }),
     refetchInterval: 15_000,
   });
-  const alertsQuery = useQuery({
-    queryKey: ["social-listening", "alerts", "active"],
-    queryFn: () => fetchSocialListeningAlerts({ status: "active", pageSize: 8 }),
-  });
   const aiWorkerQuery = useQuery({
     queryKey: ["social-listening", "ai-worker-status"],
     queryFn: fetchSocialListeningAiWorkerStatus,
@@ -2120,9 +2116,7 @@ export function SocialListeningPage() {
           <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1470 }} />
         </PageSection>
 
-        <Row gutter={16}>
-          <Col xs={24} lg={12}>
-            <PageSection
+        <PageSection
               title="最近任务"
               description="自动每 15 秒刷新；展开行可查看窗口、心跳、counters 和写表结果。心跳超过 5 分钟的 running 任务可手动恢复并重新入队。"
               extra={
@@ -2192,14 +2186,7 @@ export function SocialListeningPage() {
                   },
                 ]}
               />
-            </PageSection>
-          </Col>
-          <Col xs={24} lg={12}>
-            <PageSection title="活跃预警" description="聚合型预警会按小时去重合并。">
-              <Table<SocialListeningAlert> rowKey="id" size="small" dataSource={alertsQuery.data?.data.items || []} loading={alertsQuery.isFetching} pagination={false} columns={[{ title: "级别", dataIndex: "severity", render: severityTag }, { title: "标题", dataIndex: "titleZh" }, { title: "时间", dataIndex: "triggeredAt", render: formatDate }]} />
-            </PageSection>
-          </Col>
-        </Row>
+        </PageSection>
 
         <PageSection
           title="AI 总配置"
