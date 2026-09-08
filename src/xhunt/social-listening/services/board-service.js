@@ -490,6 +490,7 @@ function buildAlertI18nFallback(alert = {}) {
 
 function serializeAlert(record, options = {}) {
   const row = toJson(record) || {};
+  const currentValue = row.currentValue && typeof row.currentValue === "object" ? row.currentValue : {};
   const fallback = buildAlertI18nFallback(row);
   const titleZh = row.titleZh || row.titleEn || fallback.titleEn || "";
   const messageZh = row.messageZh || row.messageEn || fallback.messageEn || "";
@@ -497,6 +498,10 @@ function serializeAlert(record, options = {}) {
   const messageEn = row.messageEn || fallback.messageEn || messageZh;
   const lang = String(options.lang || "").toLowerCase();
   const useZh = lang.startsWith("zh");
+  const authorTwitterId = currentValue.authorTwitterId || null;
+  const authorHandle = currentValue.authorHandle || null;
+  const authorName = currentValue.authorName || null;
+  const authorAvatar = pickAvatarUrl(currentValue.authorAvatar);
   return {
     ...row,
     titleZh,
@@ -505,6 +510,10 @@ function serializeAlert(record, options = {}) {
     messageEn,
     title: useZh ? titleZh : titleEn,
     message: useZh ? messageZh : messageEn,
+    authorTwitterId,
+    authorHandle,
+    authorName,
+    authorAvatar,
   };
 }
 
@@ -551,21 +560,26 @@ async function enrichInfluentialAlertRanks(records = [], defaultBoardId = null) 
 
   const posts = await EchohuntSocialListeningPost.findAll({
     where: { boardId: { [Op.in]: boardIds }, tweetId: { [Op.in]: tweetIds } },
-    attributes: ["boardId", "tweetId", "authorGlobalRank", "authorCnRank", "rawAuthor"],
+    attributes: ["boardId", "tweetId", "authorTwitterId", "authorHandle", "authorName", "authorAvatar", "authorGlobalRank", "authorCnRank", "rawAuthor"],
     raw: true,
   }).catch(() => []);
-  const rankByKey = new Map(posts.map((post) => [`${post.boardId}:${post.tweetId}`, getPostDisplayRank(post)]));
+  const postByKey = new Map(posts.map((post) => [`${post.boardId}:${post.tweetId}`, post]));
 
   return rows.map((alert) => {
     if (alert.alertType !== "influential_mention") return alert;
     const boardId = String(alert.boardId || defaultBoardId || "").trim();
     const evidenceTweetIds = Array.isArray(alert.evidenceTweetIds) ? alert.evidenceTweetIds : [];
-    const rank = evidenceTweetIds.map((id) => rankByKey.get(`${boardId}:${String(id)}`)).find(Boolean);
-    if (!rank) return alert;
+    const post = evidenceTweetIds.map((id) => postByKey.get(`${boardId}:${String(id)}`)).find(Boolean);
+    if (!post) return alert;
+    const rank = getPostDisplayRank(post);
     return {
       ...alert,
       currentValue: {
         ...(alert.currentValue || {}),
+        authorTwitterId: post.authorTwitterId || alert.currentValue?.authorTwitterId || null,
+        authorHandle: post.authorHandle || alert.currentValue?.authorHandle || null,
+        authorName: post.authorName || alert.currentValue?.authorName || null,
+        authorAvatar: pickAvatarUrl(post.authorAvatar, pickProfileAvatar(post.rawAuthor?.profile), alert.currentValue?.authorAvatar),
         globalRank: rank.globalRank ?? alert.currentValue?.globalRank ?? null,
         cnRank: rank.cnRank ?? alert.currentValue?.cnRank ?? null,
       },

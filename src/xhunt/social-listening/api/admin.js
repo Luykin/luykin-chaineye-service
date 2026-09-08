@@ -232,6 +232,19 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
   };
 }
 
+function normalizeBoardPromptOverride(value, maxLength = 30000) {
+  return String(value || "").trim().slice(0, Math.max(200, Number(maxLength) || 30000));
+}
+
+function getBoardPromptSettings(board) {
+  const metadata = board?.metadata && typeof board.metadata === "object" ? board.metadata : {};
+  const prompts = metadata.aiPrompts && typeof metadata.aiPrompts === "object" ? metadata.aiPrompts : {};
+  return {
+    aiProjectName: String(metadata.aiProjectName || "").trim(),
+    promptOverride: String(prompts.tweetAnalysis || "").trim(),
+  };
+}
+
 function hasOwnField(source, key) {
   return Object.prototype.hasOwnProperty.call(source || {}, key);
 }
@@ -352,6 +365,7 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
   const boardAi = getBoardAiRuntime(board);
   const stats = await getAiPendingStats({ boardId: board.id });
   const sanitized = sanitizeBoardAiRuntime(boardAi, runtimeAi);
+  const promptSettings = getBoardPromptSettings(board);
   const estimatePosts = Math.max(
     0,
     Math.floor(toFiniteNumber(estimatePostsInput, sanitized.estimatePosts || Math.max(stats.contentPendingPosts, stats.projectAttitudePendingPosts, 10000)))
@@ -364,7 +378,7 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
       officialHandle: board.officialHandle,
       projectName: board.projectName,
     },
-    config: sanitized,
+    config: { ...sanitized, ...promptSettings },
     runtime: sanitizeRuntimeConfig(runtimeConfig).ai,
     promptPreview: await buildTweetAnalysisPromptPreview(board),
     stats,
@@ -729,6 +743,20 @@ router.post("/boards/:boardId/ai-config", async (req, res) => {
     const current = getBoardAiRuntime(board);
     const next = normalizeBoardAiRuntimeInput(current, req.body || {}, runtimeConfig.ai || {}, getAdminId(req));
     const metadata = board.metadata && typeof board.metadata === "object" ? { ...board.metadata } : {};
+    const inputAi = req.body?.ai && typeof req.body.ai === "object" ? req.body.ai : req.body || {};
+    const currentPrompts = metadata.aiPrompts && typeof metadata.aiPrompts === "object" ? { ...metadata.aiPrompts } : {};
+    if (hasOwnField(inputAi, "promptOverride")) {
+      const promptOverride = normalizeBoardPromptOverride(inputAi.promptOverride, runtimeConfig.ai?.promptMaxLength);
+      if (promptOverride) currentPrompts.tweetAnalysis = promptOverride;
+      else delete currentPrompts.tweetAnalysis;
+      if (Object.keys(currentPrompts).length) metadata.aiPrompts = currentPrompts;
+      else delete metadata.aiPrompts;
+    }
+    if (hasOwnField(inputAi, "aiProjectName")) {
+      const aiProjectName = String(inputAi.aiProjectName || "").trim().slice(0, 255);
+      if (aiProjectName) metadata.aiProjectName = aiProjectName;
+      else delete metadata.aiProjectName;
+    }
     metadata.aiRuntime = next;
     await board.update({ metadata, updatedByAdminId: getAdminId(req) });
     await writeAudit({
@@ -745,6 +773,8 @@ router.post("/boards/:boardId/ai-config", async (req, res) => {
         costAcceptedAt: next.costAcceptedAt,
         acceptedEstimatedUsd: next.acceptedEstimatedUsd,
         acceptedCalls: next.acceptedCalls,
+        promptOverrideConfigured: Boolean(metadata.aiPrompts?.tweetAnalysis),
+        aiProjectName: metadata.aiProjectName || null,
       },
     });
     const reloaded = await EchohuntSocialListeningBoard.findByPk(board.id);

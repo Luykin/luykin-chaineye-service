@@ -282,6 +282,8 @@ export interface SocialListeningBoardAiRuntimeConfig {
   acceptedEstimatedUsd?: number;
   acceptedCalls?: number;
   updatedAt?: string | null;
+  aiProjectName?: string;
+  promptOverride?: string;
   effective: {
     contentEnabled: boolean;
     projectAttitudeEnabled: boolean;

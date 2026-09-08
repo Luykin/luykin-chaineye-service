@@ -810,6 +810,7 @@ async function generateInfluentialSignals(board, options = {}) {
         authorTwitterId: post.authorTwitterId,
         authorHandle: post.authorHandle,
         authorName: post.authorName,
+        authorAvatar: post.authorAvatar,
         globalRank: rank.globalRank,
         cnRank: rank.cnRank,
         views: post.viewsCount,

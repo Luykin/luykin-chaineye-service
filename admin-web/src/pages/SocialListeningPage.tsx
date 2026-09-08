@@ -119,8 +119,8 @@ const FIELD_GUIDE = [
   { label: "召回排除账号", table: "Boards.metadata.recallExcludeAuthorHandles", desc: "这些账号自己发的帖子、回复或引用不会入库或进入 AI；其他账号仍只按关键词或回复/引用官方账号帖子两条规则召回。" },
   { label: "词云排除词", table: "Boards.metadata.wordCloudExcludeKeywords", desc: "只影响词云，不影响召回；适合品牌词、官方账号、ticker、刷屏但没信息量的词。" },
   { label: "关注关系源", table: "Boards.metadata.followSources", desc: "说明关注/取关信号来自哪些来源表；实际匹配账号用 officialTwitterId，不需要额外填写项目 key。" },
-  { label: "AI 项目名", table: "Boards.metadata.aiProjectName", desc: "覆盖项目态度 AI 中的 project 名称，适合项目名与品牌名/协议名不一致时使用。" },
-  { label: "AI 提示语", table: "Boards.metadata.aiPrompts.tweetAnalysis", desc: "把综合分析 Prompt 保存为可配置文本；一条推文只进行一次综合分析。" },
+  { label: "AI 项目名", table: "Boards.metadata.aiProjectName", desc: "在看板详情的 AI 面板配置；覆盖项目态度 AI 中的 project 名称，适合项目名与品牌名/协议名不一致时使用。" },
+  { label: "AI 提示语", table: "Boards.metadata.aiPrompts.tweetAnalysis", desc: "在看板详情的 AI 面板配置；保存后可在同处查看 Worker 实际发送的最终 Prompt。" },
 ];
 
 const POST_FIELD_GUIDE = [
@@ -565,7 +565,6 @@ function jsonPreview(value: unknown) {
 
 function boardFormInitialValues(board?: SocialListeningBoard | null) {
   const metadata = board?.metadata || {};
-  const aiPrompts = asRecord(metadata.aiPrompts);
   return {
     officialHandle: board?.officialHandle || "",
     projectName: board?.projectName || "",
@@ -579,35 +578,17 @@ function boardFormInitialValues(board?: SocialListeningBoard | null) {
     wordCloudExcludeKeywords: Array.isArray(metadata.wordCloudExcludeKeywords) ? metadata.wordCloudExcludeKeywords.join("\n") : "",
     token: typeof metadata.token === "string" ? metadata.token : "",
     followSources: Array.isArray(metadata.followSources) ? metadata.followSources : ["twitter_user_follow", "twitter_user_unfollow", "project_follow"],
-    aiProjectName: typeof metadata.aiProjectName === "string" ? metadata.aiProjectName : "",
-    tweetAnalysisPrompt: getString(aiPrompts.tweetAnalysis) || DEFAULT_AI_PROMPTS.tweetAnalysis,
     allowUnresolved: false,
   };
 }
 
-function normalizePromptForCompare(value: unknown) {
-  return String(value || "").trim().replace(/\r\n/g, "\n");
-}
-
-function buildPromptOverride(value: unknown, key: keyof typeof DEFAULT_AI_PROMPTS) {
-  const prompt = normalizePromptForCompare(value);
-  if (!prompt) return null;
-  if (prompt === normalizePromptForCompare(DEFAULT_AI_PROMPTS[key])) return null;
-  return prompt;
-}
-
 function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedTwitterAccount | null) {
-  const aiPrompts = {
-    tweetAnalysis: buildPromptOverride(values.tweetAnalysisPrompt, "tweetAnalysis"),
-  };
   const metadata = {
     token: values.token || null,
     recallExcludeKeywords: splitTextarea(String(values.recallExcludeKeywords || "")),
     recallExcludeAuthorHandles: splitTextarea(String(values.recallExcludeAuthorHandles || "")),
     wordCloudExcludeKeywords: splitTextarea(String(values.wordCloudExcludeKeywords || "")),
     followSources: values.followSources || [],
-    aiProjectName: values.aiProjectName || null,
-    aiPrompts,
   };
   return {
     officialHandle: values.officialHandle,
@@ -1451,6 +1432,8 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         model: detail.config.model || "",
         tweetAnalysisModel: detail.config.tweetAnalysisModel || "",
         estimatePosts: nextEstimatePosts,
+        aiProjectName: detail.config.aiProjectName || "",
+        promptOverride: detail.config.promptOverride || "",
       },
     });
   }, [detail, form]);
@@ -1467,7 +1450,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
       });
     },
     onSuccess: () => {
-      messageApi.success("该被监控账号的 AI 开关已保存");
+      messageApi.success("该账号 AI 配置与看板级 Prompt 已保存，实际 Prompt 预览已刷新");
       void configQuery.refetch();
       onChanged();
     },
@@ -1575,15 +1558,36 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 bordered={false}
                 style={{ marginTop: 12 }}
                 items={[{
+                  key: "board-prompt-override",
+                  label: "编辑看板级综合分析 Prompt（优先级最高）",
+                  children: (
+                    <Space direction="vertical" size={10} className="social-listening-full">
+                      <Alert type="info" showIcon message="这里编辑的是模板；下方预览展示 Worker 实际发送的最终内容" description="留空并保存即可恢复继承全局/默认模板。支持 {text}、{project}、{createdAt}、{words}、{media}；若模板未包含 {text}，Worker 会自动追加推文正文。" />
+                      <Form.Item name={["ai", "aiProjectName"]} label="AI 项目名" extra="不填时使用看板项目名称；这个值会直接替换最终 Prompt 中的 {project}。">
+                        <Input placeholder="默认使用项目名称" maxLength={255} />
+                      </Form.Item>
+                      <Form.Item name={["ai", "promptOverride"]} label="综合分析 Prompt 覆盖" extra="保存到当前看板，不影响其他项目。填写后优先级高于 Nacos 全局 Prompt。">
+                        <TextArea rows={12} maxLength={30000} placeholder="留空并保存，即恢复继承的全局/默认模板" />
+                      </Form.Item>
+                      <Button onClick={() => form.setFieldValue(["ai", "promptOverride"], "")}>清空覆盖，恢复继承</Button>
+                    </Space>
+                  ),
+                }]}
+              />
+              <Collapse
+                bordered={false}
+                style={{ marginTop: 12 }}
+                items={[{
                   key: "actual-ai-prompt",
                   label: "查看实际发送给 AI 的 Prompt",
                   children: promptPreview ? (
                     <Space direction="vertical" size={10} className="social-listening-full">
-                      <Alert type="info" showIcon message="此预览由 AI Worker 的同一套拼装逻辑生成" description="已包含当前 Nacos、看板级覆盖和项目名。推文正文、发布时间、媒体链接会在每条任务运行时替换下方占位符。" />
+                      <Alert type="info" showIcon message="此预览由 AI Worker 的同一套拼装逻辑生成" description="这是最后一次保存后的实际内容。编辑模板后点击下方保存，预览会随保存结果刷新；推文正文、发布时间、媒体链接会在每条任务运行时替换下方占位符。" />
                       <Descriptions size="small" bordered column={3}>
                         <Descriptions.Item label="模型">{promptPreview.model || "未配置"}</Descriptions.Item>
                         <Descriptions.Item label="Temperature">{promptPreview.temperature}</Descriptions.Item>
                         <Descriptions.Item label="Max Tokens">{promptPreview.maxTokens}</Descriptions.Item>
+                        <Descriptions.Item label="模板来源" span={3}>{getString(asRecord(asRecord(promptPreview.promptTrace).analysis).source) || "默认模板"}</Descriptions.Item>
                       </Descriptions>
                       <Text strong>System Prompt（实际发送）</Text>
                       <TextArea value={promptPreview.systemPrompt} readOnly autoSize={{ minRows: 2, maxRows: 8 }} />
@@ -1594,7 +1598,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 }]}
               />
               <Space style={{ marginTop: 14 }} wrap>
-                <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存该账号 AI 开关</Button>
+                <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存账号 AI 与 Prompt 配置</Button>
                 <Button onClick={() => configQuery.refetch()} loading={configQuery.isFetching}>重新读取</Button>
                 {wantsAi && !watchedAcceptCost ? <Text type="warning">开启前必须勾选成本确认。</Text> : <Text type="secondary">随时可关闭；关闭立即让后续任务跳过该账号 AI 阶段。</Text>}
               </Space>
@@ -2188,23 +2192,6 @@ export function SocialListeningPage() {
               <Form.Item name="wordCloudExcludeKeywords" label="词云排除词（每行一个）" extra="只影响词云展示，不影响推文召回和 AI 分析。适合填品牌词、官方账号、ticker、容易刷屏但没有信息量的词。">
                 <TextArea rows={3} placeholder={"binance\nbnb\ncz_binance"} />
               </Form.Item>
-              <Collapse
-                className="social-listening-ai-collapse"
-                bordered={false}
-                items={[
-                  {
-                    key: "ai-prompts",
-                    label: "AI 提示语配置（默认折叠，通常不需要改）",
-                    children: (
-                      <>
-                        <Alert className="social-listening-modal-alert" type="info" showIcon message="提示语保存到 metadata.aiPrompts.tweetAnalysis" description="每条推文只进行一次综合 AI 调用，同时生成标签、摘要和项目态度。" />
-                        <Form.Item name="aiProjectName" label="AI 项目名" extra="覆盖项目态度 AI 的 project 名称；不填时使用项目名称。"><Input placeholder="默认使用项目名称" /></Form.Item>
-                        <Form.Item name="tweetAnalysisPrompt" label="看板级综合分析 Prompt 覆盖（可选）" extra="仅保存当前看板的覆盖模板；实际发送内容请在看板详情的「AI 开关」中查看。支持变量：{text}、{project}、{createdAt}、{words}、{media}。"><TextArea rows={7} /></Form.Item>
-                      </>
-                    ),
-                  },
-                ]}
-              />
             </Form>
           </Col>
           <Col xs={24} lg={9}>
