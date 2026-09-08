@@ -16,6 +16,7 @@ const {
   generateAggregateAlerts,
 } = require("./aggregate-service");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
+const { refreshBoardMetrics } = require("./metric-refresh-service");
 
 function clampPositiveInteger(value, fallback, min, max) {
   const num = Number(value);
@@ -183,6 +184,23 @@ async function markJobFailed(job, error, progress = {}) {
   });
 }
 
+async function processMetricRefreshJob(job, board) {
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const counters = await refreshBoardMetrics(board, runtimeConfig);
+  if (counters.enabled && counters.selected) {
+    await generateAggregateAlerts(board);
+    await generateSnapshotsForBoard(await EchohuntSocialListeningBoard.findByPk(board.id));
+  }
+  await markJobSucceeded(job, {
+    counters,
+    phase: "metric_refresh_succeeded",
+    statusMessage: counters.selected
+      ? `互动指标回刷完成：更新 ${counters.updated || 0} 条，源库未命中 ${counters.missing || 0} 条。`
+      : "没有到期的互动指标需要回刷。",
+  });
+  return job;
+}
+
 async function processSocialListeningJob(jobId) {
   const job = await EchohuntSocialListeningJob.findByPk(jobId);
   if (!job) throw new Error("SOCIAL_LISTENING_JOB_NOT_FOUND");
@@ -204,6 +222,14 @@ async function processSocialListeningJob(jobId) {
   }
 
   await markJobRunning(job);
+  if (job.jobType === JOB_TYPES.METRIC_REFRESH) {
+    try {
+      return await processMetricRefreshJob(job, board);
+    } catch (error) {
+      await markJobFailed(job, error, { counters: {} });
+      throw error;
+    }
+  }
   const counters = { scanned: 0, upserted: 0, windows: 0 };
   try {
     const runtimeConfig = await getSocialListeningRuntimeConfig();

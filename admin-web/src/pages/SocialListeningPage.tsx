@@ -70,6 +70,7 @@ import {
   type ResolvedTwitterAccount,
   type SocialListeningAiRuntimeConfig,
   type SocialListeningAiWorkerConfig,
+  type SocialListeningMetricRefreshConfig,
   type SocialListeningBoardAiRuntimeConfig,
   type SocialListeningAccess,
   type SocialListeningAccountSignal,
@@ -164,10 +165,8 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   promptMaxLength: "全局/看板 Prompt 最大字符数，防止误填超长内容。",
   estimateInputPricePerMillion: "费用估算用的输入 token 单价，单位 USD / 100万 tokens；不影响真实调用。",
   estimateOutputPricePerMillion: "费用估算用的输出 token 单价，单位 USD / 100万 tokens；不影响真实调用。",
-  estimateContentInputTokens: "估算综合调用里内容标签/摘要部分的平均输入 token，用于预算。",
-  estimateContentOutputTokens: "估算综合调用里内容标签/摘要部分的平均输出 token，用于预算。",
-  estimateProjectAttitudeInputTokens: "估算综合调用里态度评价部分的平均输入 token，用于预算。",
-  estimateProjectAttitudeOutputTokens: "估算综合调用里态度评价部分的平均输出 token，用于预算。",
+  estimateCombinedInputTokens: "每条推文只发起一次综合 AI 分析；默认 1,594，来自 gemini-3.1-flash-lite 的实测请求。",
+  estimateCombinedOutputTokens: "每条推文只发起一次综合 AI 分析；默认 246，来自 gemini-3.1-flash-lite 的实测请求。",
   prompts: "优先配置 tweetAnalysis 综合 Prompt；看板详情里的看板级 Prompt 优先级更高。",
 };
 
@@ -266,14 +265,8 @@ function formatEtaMinutes(value?: number | null) {
 function calculateAiCost(ai?: Partial<SocialListeningAiRuntimeConfig>, postCount = 0) {
   const posts = Math.max(0, Math.floor(Number(postCount || 0)));
   const callsPerPost = ai?.contentEnabled || ai?.projectAttitudeEnabled ? 1 : 0;
-  const inputTokensPerPost = callsPerPost
-    ? (ai?.contentEnabled ? Number(ai?.estimateContentInputTokens || 1200) : 0)
-      + (ai?.projectAttitudeEnabled ? Number(ai?.estimateProjectAttitudeInputTokens || 900) : 0)
-    : 0;
-  const outputTokensPerPost = callsPerPost
-    ? (ai?.contentEnabled ? Number(ai?.estimateContentOutputTokens || 260) : 0)
-      + (ai?.projectAttitudeEnabled ? Number(ai?.estimateProjectAttitudeOutputTokens || 180) : 0)
-    : 0;
+  const inputTokensPerPost = callsPerPost ? Number(ai?.estimateCombinedInputTokens || 1594) : 0;
+  const outputTokensPerPost = callsPerPost ? Number(ai?.estimateCombinedOutputTokens || 246) : 0;
   const inputTokens = posts * inputTokensPerPost;
   const outputTokens = posts * outputTokensPerPost;
   const estimatedUsd = (inputTokens / 1_000_000) * Number(ai?.estimateInputPricePerMillion || 0)
@@ -1128,6 +1121,7 @@ function AiRuntimeConfigPanel() {
         },
       },
       aiWorker: detail.config.aiWorker || detail.aiWorkerStatus?.config,
+      metricRefresh: detail.config.metricRefresh,
     });
     const pending = Math.max(detail.stats.contentPendingPosts || 0, detail.stats.projectAttitudePendingPosts || 0);
     if (pending > 10000) setEstimatePosts((prev) => Math.max(prev, pending));
@@ -1155,14 +1149,15 @@ function AiRuntimeConfigPanel() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const values = form.getFieldsValue(true) as { ai?: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig> };
+      const values = form.getFieldsValue(true) as { ai?: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig>; metricRefresh?: Partial<SocialListeningMetricRefreshConfig> };
       return updateSocialListeningRuntimeConfig({
         ai: values.ai || {},
         aiWorker: values.aiWorker || {},
+        metricRefresh: values.metricRefresh || {},
       });
     },
     onSuccess: () => {
-      messageApi.success("AI 运行配置已发布到 Nacos；独立 AI Worker 最迟 1 分钟会读到新配置");
+      messageApi.success("Social Listening 运行配置已发布到 Nacos；后台任务最迟 1 分钟会读到新配置");
       void configQuery.refetch();
       void aiWorkerQuery.refetch();
     },
@@ -1240,6 +1235,21 @@ function AiRuntimeConfigPanel() {
                 <Descriptions.Item label="上次内容成功">{getNumberFromRecord(asRecord(aiWorkerStatus?.lastRun), "contentAnalyzed")}</Descriptions.Item>
                 <Descriptions.Item label="上次态度成功">{getNumberFromRecord(asRecord(aiWorkerStatus?.lastRun), "attitudeAnalyzed")}</Descriptions.Item>
               </Descriptions>
+            </Card>
+
+            <Card size="small" title="互动指标回刷" extra={<Tag color="blue">仅 monitoring 看板</Tag>}>
+              <Alert type="info" showIcon message="采集与回刷全局串行" description="每 20 分钟检查一次；新帖优先，已有任务执行时本任务保持等待，不会并发访问源库。" style={{ marginBottom: 12 }} />
+              <Row gutter={[12, 4]}>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "mode"]} label="回刷开关"><Select options={[{ value: "enabled", label: "开启" }, { value: "disabled", label: "关闭" }]} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "tickIntervalMinutes"]} label="调度间隔（分钟）"><InputNumber min={5} max={240} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "batchSize"]} label="每轮帖子数"><InputNumber min={100} max={2000} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "maxBatchesPerTick"]} label="每轮看板批次"><InputNumber min={1} max={5} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "recentHours"]} label="近期分界（小时）"><InputNumber min={1} max={48} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "recentIntervalMinutes"]} label="0–12 小时（分钟）"><InputNumber min={5} max={240} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "dayIntervalMinutes"]} label="12–36 小时（分钟）"><InputNumber min={10} max={1440} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "weekIntervalMinutes"]} label="36 小时–7 天（分钟）"><InputNumber min={30} max={4320} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["metricRefresh", "monthIntervalMinutes"]} label="7–30 天（分钟）"><InputNumber min={60} max={10080} style={{ width: "100%" }} /></Form.Item></Col>
+              </Row>
             </Card>
 
             <Card size="small" title="基础配置" extra={<Button size="small" icon={<ReloadOutlined />} loading={configQuery.isFetching} onClick={() => configQuery.refetch()}>重新读取</Button>}>
@@ -1326,10 +1336,8 @@ function AiRuntimeConfigPanel() {
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" tooltip={aiHelp("estimateInputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" tooltip={aiHelp("estimateOutputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "promptMaxLength"]} label="Prompt 最大长度" tooltip={aiHelp("promptMaxLength")}><InputNumber min={200} max={30000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentInputTokens"]} label="内容输入 token/次" tooltip={aiHelp("estimateContentInputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentOutputTokens"]} label="内容输出 token/次" tooltip={aiHelp("estimateContentOutputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeInputTokens"]} label="态度输入 token/次" tooltip={aiHelp("estimateProjectAttitudeInputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeOutputTokens"]} label="态度输出 token/次" tooltip={aiHelp("estimateProjectAttitudeOutputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateCombinedInputTokens"]} label="综合输入 token/次" tooltip={aiHelp("estimateCombinedInputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateCombinedOutputTokens"]} label="综合输出 token/次" tooltip={aiHelp("estimateCombinedOutputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col span={24}><Form.Item name={["ai", "systemPrompt"]} label="系统 Prompt" tooltip={{ title: "全局 systemPrompt，会拼到结构化 JSON 输出要求前面。", icon: <InfoCircleOutlined /> }}><TextArea rows={2} /></Form.Item></Col>
                       <Col span={24}>
                         <Alert type="info" showIcon message="每条推文只执行一次综合 AI 分析" description="一次调用会同时生成标签、摘要和项目态度。" style={{ marginBottom: 12 }} />
@@ -1343,7 +1351,7 @@ function AiRuntimeConfigPanel() {
               ]}
             />
             <Space className="social-listening-ai-runtime-actions" wrap>
-              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存全局 AI 配置到 Nacos</Button>
+              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存运行配置到 Nacos</Button>
               <Text type="secondary">不会立即消耗 AI；账号级开关默认关闭，必须逐个确认预算后才会跑。</Text>
             </Space>
           </Form>

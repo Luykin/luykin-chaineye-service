@@ -6,7 +6,7 @@ module.exports = (sequelize) => {
     {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true, comment: "后台任务 ID" },
       boardId: { type: DataTypes.UUID, allowNull: false, comment: "关联 EchohuntSocialListeningBoards.id" },
-      jobType: { type: DataTypes.STRING(64), allowNull: false, comment: "任务类型：history_backfill/incremental/manual_refresh/reanalyze" },
+      jobType: { type: DataTypes.STRING(64), allowNull: false, comment: "任务类型：history_backfill/incremental/manual_refresh/metric_refresh/reanalyze" },
       status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: "pending", comment: "任务状态：pending/running/succeeded/failed/skipped/cancelled" },
       rangeStartAt: { type: DataTypes.DATE, allowNull: true, comment: "本任务处理时间范围开始" },
       rangeEndAt: { type: DataTypes.DATE, allowNull: true, comment: "本任务处理时间范围结束" },

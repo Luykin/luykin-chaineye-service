@@ -28,6 +28,7 @@ module.exports = (sequelize) => {
       repostsCount: { type: DataTypes.BIGINT, allowNull: true, comment: "转推数快照，来自 dev.tweet.statistic.retweet_count" },
       quotesCount: { type: DataTypes.BIGINT, allowNull: true, comment: "引用数快照，来自 dev.tweet.statistic.quote_count" },
       repliesCount: { type: DataTypes.BIGINT, allowNull: true, comment: "回复数快照，来自 dev.tweet.statistic.reply_count" },
+      metricsRefreshedAt: { type: DataTypes.DATE, allowNull: true, comment: "互动指标最后一次完成源库回查的时间" },
       sentiment: { type: DataTypes.STRING(32), allowNull: true, comment: "项目态度情绪：positive/neutral/negative/unknown" },
       projectAttitudeScore: { type: DataTypes.DECIMAL(8, 4), allowNull: true, comment: "项目态度 AI 分数，旧口径 score < 4 为负面" },
       sentimentScore: { type: DataTypes.DECIMAL(8, 4), allowNull: true, comment: "兼容情绪分数字段，默认等同 projectAttitudeScore" },
@@ -56,6 +57,7 @@ module.exports = (sequelize) => {
       indexes: [
         { name: "ux_echohunt_sl_posts_board_tweet", fields: ["boardId", "tweetId"], unique: true },
         { name: "idx_echohunt_sl_posts_board_created", fields: ["boardId", "postCreatedAt"] },
+        { name: "idx_echohunt_sl_posts_board_metrics_refreshed", fields: ["boardId", "metricsRefreshedAt", "postCreatedAt"] },
         { name: "idx_echohunt_sl_posts_board_sentiment_created", fields: ["boardId", "sentiment", "postCreatedAt"] },
         { name: "idx_echohunt_sl_posts_board_author", fields: ["boardId", "authorTwitterId"] },
         { name: "idx_echohunt_sl_posts_board_global_rank", fields: ["boardId", "authorGlobalRank"] },

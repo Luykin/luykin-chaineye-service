@@ -175,10 +175,8 @@ export interface SocialListeningAiRuntimeConfig {
   tweetAnalysisMaxTokens?: number;
   estimateInputPricePerMillion: number;
   estimateOutputPricePerMillion: number;
-  estimateContentInputTokens: number;
-  estimateContentOutputTokens: number;
-  estimateProjectAttitudeInputTokens: number;
-  estimateProjectAttitudeOutputTokens: number;
+  estimateCombinedInputTokens: number;
+  estimateCombinedOutputTokens: number;
   prompts?: Record<string, string>;
 }
 
@@ -193,11 +191,24 @@ export interface SocialListeningAiWorkerConfig {
   maxTextLength: number;
 }
 
+export interface SocialListeningMetricRefreshConfig {
+  mode: "enabled" | "disabled";
+  tickIntervalMinutes: number;
+  batchSize: number;
+  maxBatchesPerTick: number;
+  recentHours: number;
+  recentIntervalMinutes: number;
+  dayIntervalMinutes: number;
+  weekIntervalMinutes: number;
+  monthIntervalMinutes: number;
+}
+
 export interface SocialListeningRuntimeConfig {
   version: string;
   scan?: Record<string, unknown>;
   ai: SocialListeningAiRuntimeConfig;
   aiWorker?: SocialListeningAiWorkerConfig;
+  metricRefresh?: SocialListeningMetricRefreshConfig;
   scheduler?: Record<string, unknown>;
   alert?: Record<string, unknown>;
   refresh?: Record<string, unknown>;
@@ -350,7 +361,11 @@ export function fetchSocialListeningRuntimeConfig(query?: { estimatePosts?: numb
   return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(withQuery(`${BASE_PATH}/runtime-config`, query));
 }
 
-export function updateSocialListeningRuntimeConfig(payload: { ai: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig> }) {
+export function updateSocialListeningRuntimeConfig(payload: {
+  ai: Partial<SocialListeningAiRuntimeConfig>;
+  aiWorker?: Partial<SocialListeningAiWorkerConfig>;
+  metricRefresh?: Partial<SocialListeningMetricRefreshConfig>;
+}) {
   return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(`${BASE_PATH}/runtime-config`, {
     method: "POST",
     body: payload,

@@ -16,6 +16,7 @@ const JOB_TYPES = Object.freeze({
   HISTORY_BACKFILL: "history_backfill",
   INCREMENTAL: "incremental",
   MANUAL_REFRESH: "manual_refresh",
+  METRIC_REFRESH: "metric_refresh",
   REANALYZE: "reanalyze",
 });
 

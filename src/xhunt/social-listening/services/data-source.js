@@ -358,6 +358,24 @@ async function fetchTweetRowsByIds(db, tweetIds, limit) {
   );
 }
 
+async function fetchTweetMetricsByIds(tweetIds, limit = 1000) {
+  if (!tweetIds.length) return [];
+  const db = getReadonlyDbOrThrow();
+  return queryReadonlyWithStatementTimeout(
+    db,
+    `
+      SELECT
+        t.id::text,
+        t.statistic,
+        t.metric_observed_at
+      FROM dev.tweet t
+      WHERE t.id::text = ANY($tweetIds::text[])
+      LIMIT $limit
+    `,
+    { bind: { tweetIds, limit }, type: QueryTypes.SELECT }
+  );
+}
+
 
 async function fetchTweetRowById(tweetId) {
   const db = getReadonlyDbOrThrow();
@@ -483,6 +501,19 @@ function pickStat(statistic = {}, ...keys) {
     if (value !== null) return value;
   }
   return null;
+}
+
+function mapTweetMetricRow(row = {}) {
+  const statistic = row.statistic && typeof row.statistic === "object" ? row.statistic : {};
+  return {
+    tweetId: String(row.id || ""),
+    viewsCount: pickStat(statistic, "views", "view_count", "impression_count"),
+    likesCount: pickStat(statistic, "likes", "like_count"),
+    repostsCount: pickStat(statistic, "retweet_count", "reposts", "repost_count"),
+    quotesCount: pickStat(statistic, "quote_count", "quotes"),
+    repliesCount: pickStat(statistic, "reply_count", "replies"),
+    metricObservedAt: row.metric_observed_at || null,
+  };
 }
 
 function detectSource(tweet, officialHandle, matchedKeywords) {
@@ -883,7 +914,9 @@ module.exports = {
   pickRank,
   buildBoardKeywords,
   mapTweetRowToPostPayload,
+  mapTweetMetricRow,
   fetchTweetRowById,
+  fetchTweetMetricsByIds,
   fetchTweetSnapshotFromCrawler,
   fetchCandidateTweetsForBoard,
   fetchFollowSignalsForBoard,

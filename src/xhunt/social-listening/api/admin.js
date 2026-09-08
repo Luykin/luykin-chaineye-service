@@ -97,12 +97,12 @@ function estimateAiCost(aiConfig = {}, postCount = 0) {
   const callsPerPost = aiConfig.contentEnabled || aiConfig.projectAttitudeEnabled ? 1 : 0;
   const inputPrice = Math.max(0, toFiniteNumber(aiConfig.estimateInputPricePerMillion, 0.25));
   const outputPrice = Math.max(0, toFiniteNumber(aiConfig.estimateOutputPricePerMillion, 1.5));
-  const contentInputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateContentInputTokens, 1200));
-  const contentOutputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateContentOutputTokens, 260));
-  const attitudeInputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateProjectAttitudeInputTokens, 900));
-  const attitudeOutputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateProjectAttitudeOutputTokens, 180));
-  const inputTokensPerPost = callsPerPost ? (aiConfig.contentEnabled ? contentInputTokens : 0) + (aiConfig.projectAttitudeEnabled ? attitudeInputTokens : 0) : 0;
-  const outputTokensPerPost = callsPerPost ? (aiConfig.contentEnabled ? contentOutputTokens : 0) + (aiConfig.projectAttitudeEnabled ? attitudeOutputTokens : 0) : 0;
+  // 内容标签、摘要和项目态度复用同一次结构化调用，不能把两套 token
+  // 预算相加，否则会把每条推文的成本高估为两次请求。
+  const combinedInputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateCombinedInputTokens, 1594));
+  const combinedOutputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateCombinedOutputTokens, 246));
+  const inputTokensPerPost = callsPerPost ? combinedInputTokens : 0;
+  const outputTokensPerPost = callsPerPost ? combinedOutputTokens : 0;
   const inputTokens = posts * inputTokensPerPost;
   const outputTokens = posts * outputTokensPerPost;
   const usd = (inputTokens / 1_000_000) * inputPrice + (outputTokens / 1_000_000) * outputPrice;
@@ -114,7 +114,7 @@ function estimateAiCost(aiConfig = {}, postCount = 0) {
     inputPricePerMillion: inputPrice,
     outputPricePerMillion: outputPrice,
     estimatedUsd: Number(usd.toFixed(4)),
-    assumption: "标签、摘要、项目态度已合并为每条推文 1 次结构化调用；不再生成全文翻译；费用仅用于上线前估算，实际以模型服务商账单为准。",
+    assumption: "标签、摘要、项目态度已合并为每条推文 1 次结构化调用；默认按 gemini-3.1-flash-lite 实测 1,594 输入 / 246 输出 tokens 估算；费用仅用于上线前估算，实际以模型服务商账单为准。",
   };
 }
 
@@ -402,8 +402,10 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
 function buildRuntimeConfigDocument(currentConfig = {}, body = {}) {
   const currentAi = currentConfig.ai || {};
   const currentAiWorker = currentConfig.aiWorker || {};
+  const currentMetricRefresh = currentConfig.metricRefresh || {};
   const inputAi = body.ai && typeof body.ai === "object" ? body.ai : {};
   const inputAiWorker = body.aiWorker && typeof body.aiWorker === "object" ? body.aiWorker : {};
+  const inputMetricRefresh = body.metricRefresh && typeof body.metricRefresh === "object" ? body.metricRefresh : {};
   const nextAi = { ...currentAi, ...inputAi };
   const nextAiWorker = { ...currentAiWorker, ...inputAiWorker };
   delete nextAi.apiKeyMasked;
@@ -427,6 +429,7 @@ function buildRuntimeConfigDocument(currentConfig = {}, body = {}) {
     version: body.version || currentConfig.version,
     ai: nextAi,
     aiWorker: nextAiWorker,
+    metricRefresh: { ...currentMetricRefresh, ...inputMetricRefresh },
   });
 }
 
@@ -528,6 +531,8 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "promptMaxLength", label: "Prompt 最大长度", desc: "运行时或看板级 Prompt 的最大字符长度，防止错误配置导致超长请求。" },
   { field: "estimateInputPricePerMillion", label: "输入单价估算", desc: "用于费用估算的输入 token 单价，单位 USD / 100万 tokens，不影响真实调用。" },
   { field: "estimateOutputPricePerMillion", label: "输出单价估算", desc: "用于费用估算的输出 token 单价，单位 USD / 100万 tokens，不影响真实调用。" },
+  { field: "estimateCombinedInputTokens", label: "综合调用输入 token", desc: "每条推文只会发起一次综合分析；默认 1,594，来自 gemini-3.1-flash-lite 的实测请求。" },
+  { field: "estimateCombinedOutputTokens", label: "综合调用输出 token", desc: "每条推文只会发起一次综合分析；默认 246，来自 gemini-3.1-flash-lite 的实测请求。" },
   { field: "prompts", label: "全局 Prompt 覆盖", desc: "配置 tweetAnalysis 综合 Prompt；看板级 Prompt 优先级更高。" },
 ];
 

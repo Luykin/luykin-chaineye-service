@@ -1,4 +1,5 @@
 const { Op } = require("sequelize");
+const { randomUUID } = require("crypto");
 const {
   EchohuntSocialListeningBoard,
   EchohuntSocialListeningJob,
@@ -6,9 +7,14 @@ const {
 const { BOARD_STATUSES, JOB_STATUSES, JOB_TYPES } = require("../constants");
 const { processSocialListeningJob, recoverStaleRunningJobs, getIncrementalRange } = require("./ingest-service");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
+const { findNextMetricRefreshCandidate, getMetricRefreshConfig } = require("./metric-refresh-service");
 
 const SCHEDULER_STATE_KEY = "echohunt:social-listening:scheduler:state";
 const SCHEDULER_ENABLED_VALUE = "running";
+const GLOBAL_JOB_LOCK_KEY = "echohunt:social-listening:job-execution-lock";
+const GLOBAL_JOB_LOCK_TTL_SECONDS = 30 * 60;
+const RENEW_LOCK_LUA = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
+const RELEASE_LOCK_LUA = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
 
 function formatSchedulerError(error) {
   if (!error || typeof error !== "object") return String(error);
@@ -73,6 +79,29 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     }
   }
 
+  async function withGlobalJobLock(fn) {
+    if (!redisClient?.set) return fn();
+    const lockToken = `${process.pid}:${randomUUID()}`;
+    const locked = await redisClient.set(GLOBAL_JOB_LOCK_KEY, lockToken, { NX: true, EX: GLOBAL_JOB_LOCK_TTL_SECONDS }).catch(() => null);
+    if (locked === null) return null;
+    const renewalTimer = setInterval(() => {
+      redisClient.eval(RENEW_LOCK_LUA, {
+        keys: [GLOBAL_JOB_LOCK_KEY],
+        arguments: [lockToken, String(GLOBAL_JOB_LOCK_TTL_SECONDS)],
+      }).catch(() => null);
+    }, GLOBAL_JOB_LOCK_TTL_SECONDS * 500);
+    renewalTimer.unref?.();
+    try {
+      return await fn();
+    } finally {
+      clearInterval(renewalTimer);
+      await redisClient.eval(RELEASE_LOCK_LUA, {
+        keys: [GLOBAL_JOB_LOCK_KEY],
+        arguments: [lockToken],
+      }).catch(() => null);
+    }
+  }
+
   async function enqueueDueIncrementalJobs() {
     const now = new Date();
     const runtimeConfig = await getSocialListeningRuntimeConfig();
@@ -115,29 +144,75 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     return created;
   }
 
-  async function processPendingJobs() {
+  async function enqueueDueMetricRefreshJobs() {
+    const now = new Date();
     const runtimeConfig = await getSocialListeningRuntimeConfig();
-    const maxJobs = Number(runtimeConfig.scheduler?.maxJobsPerTick || 3);
-    const jobs = await EchohuntSocialListeningJob.findAll({
-      where: { status: JOB_STATUSES.PENDING },
-      order: [["createdAt", "ASC"]],
-      limit: Math.max(1, Math.min(maxJobs, 10)),
+    const config = getMetricRefreshConfig(runtimeConfig);
+    if (config.mode === "disabled") return 0;
+    const existing = await EchohuntSocialListeningJob.findOne({
+      where: { jobType: JOB_TYPES.METRIC_REFRESH, status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] } },
+      attributes: ["id"],
     });
-
-    let processed = 0;
-    for (const job of jobs) {
-      const result = await withBoardLock(job.boardId, async () => {
-        try {
-          await processSocialListeningJob(job.id);
-        } catch (error) {
-          console.error(`[SocialListeningScheduler] job failed id=${job.id} board=${job.boardId} type=${job.jobType}:`, formatSchedulerError(error));
-          throw error;
-        }
-        return true;
+    if (existing) return 0;
+    const latest = await EchohuntSocialListeningJob.findOne({
+      where: { jobType: JOB_TYPES.METRIC_REFRESH },
+      order: [["createdAt", "DESC"]],
+      attributes: ["createdAt"],
+    });
+    if (latest?.createdAt && now.getTime() - new Date(latest.createdAt).getTime() < config.tickIntervalMinutes * 60 * 1000) return 0;
+    const boards = await EchohuntSocialListeningBoard.findAll({
+      where: { status: BOARD_STATUSES.MONITORING },
+      order: [["updatedAt", "ASC"]],
+      limit: 100,
+    });
+    const availableBoards = boards.slice();
+    let created = 0;
+    while (availableBoards.length && created < config.maxBatchesPerTick) {
+      const next = await findNextMetricRefreshCandidate(availableBoards, runtimeConfig, now);
+      if (!next) break;
+      await EchohuntSocialListeningJob.create({
+        boardId: next.board.id,
+        jobType: JOB_TYPES.METRIC_REFRESH,
+        status: JOB_STATUSES.PENDING,
+        triggeredBy: "system",
+        metadata: {
+          source: "metric_refresh_scheduler",
+          priority: next.candidate.metricRefreshPriority,
+          tier: next.candidate.metricRefreshTier,
+        },
       });
-      if (result) processed += 1;
+      created += 1;
+      const index = availableBoards.findIndex((board) => board.id === next.board.id);
+      if (index >= 0) availableBoards.splice(index, 1);
     }
-    return processed;
+    return created;
+  }
+
+  async function processPendingJobs() {
+    return (await withGlobalJobLock(async () => {
+      const runtimeConfig = await getSocialListeningRuntimeConfig();
+      const maxJobs = Number(runtimeConfig.scheduler?.maxJobsPerTick || 3);
+      const jobs = await EchohuntSocialListeningJob.findAll({
+        where: { status: JOB_STATUSES.PENDING },
+        order: [["createdAt", "ASC"]],
+        limit: Math.max(1, Math.min(maxJobs, 10)),
+      });
+
+      let processed = 0;
+      for (const job of jobs) {
+        const result = await withBoardLock(job.boardId, async () => {
+          try {
+            await processSocialListeningJob(job.id);
+          } catch (error) {
+            console.error(`[SocialListeningScheduler] job failed id=${job.id} board=${job.boardId} type=${job.jobType}:`, formatSchedulerError(error));
+            throw error;
+          }
+          return true;
+        });
+        if (result) processed += 1;
+      }
+      return processed;
+    })) || 0;
   }
 
   async function tick() {
@@ -158,9 +233,10 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
         return 0;
       });
       const enqueued = await enqueueDueIncrementalJobs();
+      const metricRefreshEnqueued = await enqueueDueMetricRefreshJobs();
       const processed = await processPendingJobs();
-      if (recovered || enqueued || processed) {
-        console.log(`[SocialListeningScheduler] tick recovered=${recovered} enqueued=${enqueued} processed=${processed}`);
+      if (recovered || enqueued || metricRefreshEnqueued || processed) {
+        console.log(`[SocialListeningScheduler] tick recovered=${recovered} enqueued=${enqueued} metricRefreshEnqueued=${metricRefreshEnqueued} processed=${processed}`);
       }
     } catch (error) {
       console.error("[SocialListeningScheduler] tick failed:", formatSchedulerError(error));
@@ -195,7 +271,7 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     timer = null;
   }
 
-  return { start, stop, tick, enqueueDueIncrementalJobs, processPendingJobs };
+  return { start, stop, tick, enqueueDueIncrementalJobs, enqueueDueMetricRefreshJobs, processPendingJobs };
 }
 
 module.exports = {
