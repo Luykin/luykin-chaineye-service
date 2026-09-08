@@ -1,7 +1,8 @@
-const { Op, literal } = require("sequelize");
+const { Op, literal, fn, col, where } = require("sequelize");
 const { EchohuntSocialListeningPost } = require("../../../models/postgres-start");
 const { SENTIMENTS } = require("../constants");
 const { normalizeTweetText } = require("../utils/text-normalize");
+const { normalizeTwitterHandle } = require("../utils/twitter");
 
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 const {
@@ -93,8 +94,7 @@ async function getBoardAiConfig(board) {
   const boardAi = getBoardAiRuntime(board);
   const boardModel = String(boardAi.model || "").trim();
   const tweetAnalysisModel = String(boardAi.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || "").trim();
-  const contentModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.tweetTagModel || boardAi.tweetSummaryModel);
-  const attitudeModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.projectAttitudeModel);
+  const modelReady = Boolean(boardModel || tweetAnalysisModel);
   return {
     ...runtimeAi,
     ...boardAi,
@@ -102,15 +102,12 @@ async function getBoardAiConfig(board) {
     baseURL: boardAi.baseURL || runtimeAi.baseURL,
     model: boardModel,
     tweetAnalysisModel,
-    tweetTagModel: boardAi.tweetTagModel || tweetAnalysisModel || boardModel,
-    tweetSummaryModel: boardAi.tweetSummaryModel || tweetAnalysisModel || boardModel,
-    projectAttitudeModel: boardAi.projectAttitudeModel || tweetAnalysisModel || boardModel,
     prompts: {
       ...(runtimeAi.prompts && typeof runtimeAi.prompts === "object" ? runtimeAi.prompts : {}),
       ...(boardAi.prompts && typeof boardAi.prompts === "object" ? boardAi.prompts : {}),
     },
-    contentEnabled: Boolean(runtimeAi.contentEnabled && boardAi.contentEnabled && contentModelReady),
-    projectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled && boardAi.projectAttitudeEnabled && attitudeModelReady),
+    contentEnabled: Boolean(runtimeAi.contentEnabled && boardAi.contentEnabled && modelReady),
+    projectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled && boardAi.projectAttitudeEnabled && modelReady),
   };
 }
 
@@ -136,6 +133,27 @@ function normalizePrompt(value, maxLength = 6000) {
 
 function getBoardMetadata(board) {
   return board?.metadata && typeof board.metadata === "object" ? board.metadata : {};
+}
+
+function getRecallExcludeAuthorHandles(board) {
+  const metadata = getBoardMetadata(board);
+  const values = Array.isArray(metadata.recallExcludeAuthorHandles) ? metadata.recallExcludeAuthorHandles : [];
+  return Array.from(new Set(values.map(normalizeTwitterHandle).filter(Boolean))).slice(0, 50);
+}
+
+function applyRecallExcludeAuthorFilter(where, board) {
+  const handles = getRecallExcludeAuthorHandles(board);
+  if (!handles.length) return where;
+  where[Op.and] = [
+    ...(where[Op.and] || []),
+    {
+      [Op.or]: [
+        { authorHandle: null },
+        where(fn("LOWER", col("authorHandle")), { [Op.notIn]: handles }),
+      ],
+    },
+  ];
+  return where;
 }
 
 function pickPromptValue(prompts, field) {
@@ -599,11 +617,11 @@ async function analyzePendingPostAi(board, options = {}) {
     );
   }
   const posts = await EchohuntSocialListeningPost.findAll({
-    where: {
+    where: applyRecallExcludeAuthorFilter({
       boardId: board.id,
       text: { [Op.ne]: null },
       [Op.or]: pendingClauses,
-    },
+    }, board),
     order: [
       [getAiTextLengthOrder(), "ASC"],
       [getAiRankOrder(), "ASC"],
@@ -729,7 +747,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
   const concurrency = clampInteger(options.concurrency || aiConfig.contentConcurrency, 1, 1, 20);
   const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
   const posts = await EchohuntSocialListeningPost.findAll({
-    where: {
+    where: applyRecallExcludeAuthorFilter({
       boardId: board.id,
       text: { [Op.ne]: null },
       [Op.or]: [
@@ -739,7 +757,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
         { summaryStatus: { [Op.in]: ["pending", "failed", "reused"] } },
         { aiSource: "dev_tweet_ai" },
       ],
-    },
+    }, board),
     order: [
       [getAiTextLengthOrder(), "ASC"],
       [getAiRankOrder(), "ASC"],
@@ -844,14 +862,14 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
   const concurrency = clampInteger(options.concurrency || aiConfig.projectAttitudeConcurrency, 1, 1, 30);
   const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
   const posts = await EchohuntSocialListeningPost.findAll({
-    where: {
+    where: applyRecallExcludeAuthorFilter({
       boardId: board.id,
       [Op.or]: [
         { attitudeStatus: null },
         { attitudeStatus: { [Op.in]: ["pending", "failed"] } },
       ],
       text: { [Op.ne]: null },
-    },
+    }, board),
     order: [
       [getAiTextLengthOrder(), "ASC"],
       [getAiRankOrder(), "ASC"],

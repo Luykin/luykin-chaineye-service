@@ -585,6 +585,9 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
   const projectName = String(input.projectName || resolved?.name || officialHandle).trim().slice(0, 255);
   if (!projectName) throw publicError("PROJECT_NAME_REQUIRED", 400, "请填写项目名称。");
   const inputMetadata = input.metadata && typeof input.metadata === "object" ? input.metadata : {};
+  const recallExcludeAuthorHandles = normalizeRecallExcludeAuthorHandles(
+    inputMetadata.recallExcludeAuthorHandles || input.recallExcludeAuthorHandles || []
+  );
   const keywords = normalizeKeywords([
     officialHandle,
     projectName,
@@ -610,6 +613,7 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
       keywords,
       aliases: normalizeKeywords(input.aliases || []),
       recallExcludeKeywords: normalizeKeywords(inputMetadata.recallExcludeKeywords || input.recallExcludeKeywords || []),
+      recallExcludeAuthorHandles,
       wordCloudExcludeKeywords: normalizeKeywords(inputMetadata.wordCloudExcludeKeywords || input.wordCloudExcludeKeywords || []),
       aiRuntime: {
         contentEnabled: false,
@@ -619,6 +623,18 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
       rankSource: resolved?.rankSource || null,
     },
   };
+}
+
+function normalizeRecallExcludeAuthorHandles(values = []) {
+  const output = [];
+  const seen = new Set();
+  for (const value of (Array.isArray(values) ? values : [values])) {
+    const handle = normalizeTwitterHandle(value);
+    if (!handle || seen.has(handle)) continue;
+    seen.add(handle);
+    output.push(handle);
+  }
+  return output.slice(0, 50);
 }
 
 async function createMonitoredAccount(input = {}, adminId = null) {
@@ -773,6 +789,11 @@ async function updateBoard(boardId, input = {}, adminId = null) {
   }
   if (Array.isArray(inputMetadata.recallExcludeKeywords) || Array.isArray(input.recallExcludeKeywords)) {
     patch.metadata.recallExcludeKeywords = normalizeKeywords(inputMetadata.recallExcludeKeywords || input.recallExcludeKeywords || []);
+  }
+  if (Array.isArray(inputMetadata.recallExcludeAuthorHandles) || Array.isArray(input.recallExcludeAuthorHandles)) {
+    patch.metadata.recallExcludeAuthorHandles = normalizeRecallExcludeAuthorHandles(
+      inputMetadata.recallExcludeAuthorHandles || input.recallExcludeAuthorHandles || []
+    );
   }
   if (input.status && Object.values(BOARD_STATUSES).includes(input.status)) patch.status = input.status;
   await board.update(patch);

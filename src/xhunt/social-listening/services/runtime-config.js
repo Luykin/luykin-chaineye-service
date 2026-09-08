@@ -25,9 +25,6 @@ const DEFAULT_SOCIAL_LISTENING_RUNTIME_CONFIG = Object.freeze({
     temperature: 0,
     maxTokens: 1200,
     tweetAnalysisModel: "",
-    tweetTagModel: "",
-    projectAttitudeModel: "",
-    tweetSummaryModel: "",
     systemPrompt: "",
     timeoutMs: 120000,
     maxRetries: 2,
@@ -167,12 +164,8 @@ function toText(value, fallback = "") {
 function normalizePromptMap(value, fallback = {}) {
   const source = isPlainObject(value) ? value : {};
   const base = isPlainObject(fallback) ? fallback : {};
-  const output = {};
-  Array.from(new Set([...Object.keys(base), ...Object.keys(source)])).forEach((key) => {
-    const prompt = toText(source[key], base[key] || "");
-    if (prompt) output[key] = prompt.slice(0, 30000);
-  });
-  return output;
+  const tweetAnalysis = toText(source.tweetAnalysis, base.tweetAnalysis || "");
+  return tweetAnalysis ? { tweetAnalysis: tweetAnalysis.slice(0, 30000) } : {};
 }
 
 function normalizeConfig(document = {}) {
@@ -198,9 +191,6 @@ function normalizeConfig(document = {}) {
       temperature: toNumber(getValue(merged, "ai.temperature", merged.ai.temperature), 0, 0, 2),
       maxTokens: toInteger(getValue(merged, "ai.maxTokens", merged.ai.maxTokens), 1200, 128, 8000),
       tweetAnalysisModel: toText(getValue(merged, "ai.tweetAnalysisModel", merged.ai.tweetAnalysisModel)),
-      tweetTagModel: toText(getValue(merged, "ai.tweetTagModel", merged.ai.tweetTagModel)),
-      projectAttitudeModel: toText(getValue(merged, "ai.projectAttitudeModel", merged.ai.projectAttitudeModel)),
-      tweetSummaryModel: toText(getValue(merged, "ai.tweetSummaryModel", merged.ai.tweetSummaryModel)),
       systemPrompt: toText(getValue(merged, "ai.systemPrompt", merged.ai.systemPrompt)),
       timeoutMs: toInteger(getValue(merged, "ai.timeoutMs", merged.ai.timeoutMs), 120000, 1000, 300000),
       maxRetries: toInteger(getValue(merged, "ai.maxRetries", merged.ai.maxRetries), 2, 0, 5),
@@ -222,9 +212,6 @@ function normalizeConfig(document = {}) {
       estimateProjectAttitudeInputTokens: toInteger(getValue(merged, "ai.estimateProjectAttitudeInputTokens", merged.ai.estimateProjectAttitudeInputTokens), 900, 1, 100000),
       estimateProjectAttitudeOutputTokens: toInteger(getValue(merged, "ai.estimateProjectAttitudeOutputTokens", merged.ai.estimateProjectAttitudeOutputTokens), 180, 1, 100000),
       tweetAnalysisMaxTokens: toInteger(getValue(merged, "ai.tweetAnalysisMaxTokens", merged.ai.tweetAnalysisMaxTokens), 1200, 128, 8000),
-      tweetTagMaxTokens: toInteger(getValue(merged, "ai.tweetTagMaxTokens", merged.ai.tweetTagMaxTokens), 1200, 128, 8000),
-      projectAttitudeMaxTokens: toInteger(getValue(merged, "ai.projectAttitudeMaxTokens", merged.ai.projectAttitudeMaxTokens), 800, 128, 8000),
-      tweetSummaryMaxTokens: toInteger(getValue(merged, "ai.tweetSummaryMaxTokens", merged.ai.tweetSummaryMaxTokens), 400, 64, 4000),
       prompts: normalizePromptMap(merged.ai?.prompts),
     },
     scheduler: {

@@ -158,9 +158,6 @@ export interface SocialListeningAiRuntimeConfig {
   temperature: number;
   maxTokens: number;
   tweetAnalysisModel?: string;
-  tweetTagModel?: string;
-  projectAttitudeModel?: string;
-  tweetSummaryModel?: string;
   systemPrompt?: string;
   timeoutMs: number;
   maxRetries: number;
@@ -176,9 +173,6 @@ export interface SocialListeningAiRuntimeConfig {
   negativeScoreThreshold: number;
   positiveScoreThreshold: number;
   tweetAnalysisMaxTokens?: number;
-  tweetTagMaxTokens?: number;
-  projectAttitudeMaxTokens?: number;
-  tweetSummaryMaxTokens?: number;
   estimateInputPricePerMillion: number;
   estimateOutputPricePerMillion: number;
   estimateContentInputTokens: number;
@@ -282,9 +276,6 @@ export interface SocialListeningBoardAiRuntimeConfig {
   projectAttitudeEnabled: boolean;
   model: string;
   tweetAnalysisModel?: string;
-  tweetTagModel?: string;
-  tweetSummaryModel?: string;
-  projectAttitudeModel?: string;
   estimatePosts: number;
   costAcceptedAt?: string | null;
   costAcceptedByAdminId?: number | null;
@@ -296,9 +287,6 @@ export interface SocialListeningBoardAiRuntimeConfig {
     projectAttitudeEnabled: boolean;
     model: string;
     tweetAnalysisModel?: string;
-    tweetTagModel: string;
-    tweetSummaryModel: string;
-    projectAttitudeModel: string;
     baseURL: string;
     apiKeyConfigured: boolean;
     globalContentEnabled: boolean;

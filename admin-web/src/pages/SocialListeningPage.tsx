@@ -116,10 +116,11 @@ const FIELD_GUIDE = [
   { label: "别名", table: "Boards.metadata.aliases", desc: "项目常见别称、代币名、缩写；也会参与召回，适合写 ticker、旧品牌名。" },
   { label: "Token", table: "Boards.metadata.token", desc: "项目代币符号或合约简称，会追加到召回关键词里；不是 API 密钥。" },
   { label: "召回排除词", table: "Boards.metadata.recallExcludeKeywords", desc: "命中后直接不入库，适合明显无关、诈骗、抽奖噪音等必须排除的文本。" },
+  { label: "召回排除账号", table: "Boards.metadata.recallExcludeAuthorHandles", desc: "这些账号自己发的帖子、回复或引用不会入库或进入 AI；其他账号仍只按关键词或回复/引用官方账号帖子两条规则召回。" },
   { label: "词云排除词", table: "Boards.metadata.wordCloudExcludeKeywords", desc: "只影响词云，不影响召回；适合品牌词、官方账号、ticker、刷屏但没信息量的词。" },
   { label: "关注关系源", table: "Boards.metadata.followSources", desc: "说明关注/取关信号来自哪些来源表；实际匹配账号用 officialTwitterId，不需要额外填写项目 key。" },
   { label: "AI 项目名", table: "Boards.metadata.aiProjectName", desc: "覆盖项目态度 AI 中的 project 名称，适合项目名与品牌名/协议名不一致时使用。" },
-  { label: "AI 提示语", table: "Boards.metadata.aiPrompts", desc: "把综合分析 Prompt 保存为可配置文本；旧拆分 Prompt 仅作兼容兜底。" },
+  { label: "AI 提示语", table: "Boards.metadata.aiPrompts.tweetAnalysis", desc: "把综合分析 Prompt 保存为可配置文本；一条推文只进行一次综合分析。" },
 ];
 
 const POST_FIELD_GUIDE = [
@@ -133,16 +134,6 @@ const POST_FIELD_GUIDE = [
 
 const DEFAULT_AI_PROMPTS = {
   "tweetAnalysis": "你是 Crypto/Web3/AI 社媒内容结构化分析助手。请对同一条推文只分析一次，并一次性输出标签、摘要、项目态度 JSON。\n\n必须输出：crypto_relevant、domain_tag、domain_tag_version、crypto_sub_tags、ai_sub_tags、hot_tags、tags、summary_cn、summary_en、score、sentiment、relevant_to_project、confidence、attitude_summary。\n\n规则：\n1. 不需要翻译全文，不要输出 post_zh。\n2. 不添加推文没有的信息。\n3. 标签要短、可聚合；hot_tags 只能来自原文明确出现的项目名、代币名、协议名、产品名、叙事词。\n4. sentiment 只能是 positive、neutral、negative、unknown；证据不足或不相关时用 unknown，不要强行归入 neutral。\n5. 中文摘要尽量不超过 {words} 个词/短语，态度说明用中文。\n\n项目：{project}\n推文发布时间：{createdAt}\n推文：\n{text}\n\n媒体：\n{media}",
-  "projectAttitude": "你是项目舆情分析助手。请判断下面推文对项目「{project}」的态度，按 project_attitude 兼容格式输出 JSON。\n\n输出字段：\n- score：范围 0-10；unknown 时为了兼容可给 5。\n- sentiment：必须从 positive、neutral、negative、unknown 中选择。\n- relevant_to_project：是否能确认推文在讨论项目「{project}」。\n- confidence：0-1，判断置信度。\n- summary：使用 {lang} 语言，简明说明判断依据。\n\n评分与归类规则：\n- 0-3.9：negative，负面/风险/批评/质疑/攻击/事故。\n- 4-6：neutral，仅用于确实相关但态度中性、客观新闻、没有明显倾向的内容。\n- 6.1-10：positive，正面/支持/认可/利好/合作/增长。\n- 如果推文只是提到项目且能确认相关但没有明显态度，sentiment=neutral，score 给 5 左右。\n- 如果推文和项目无关、证据不足、无法可靠判断是否在讨论项目或无法可靠判断态度，sentiment=unknown，relevant_to_project=false 或 confidence < 0.5；不要强行归入 neutral。\n\n推文：\n{text}",
-  "tweetTag": "你是 Crypto/Web3/AI 社媒内容严格分类器。请分析下面推文，按 tweet_tag_v2_strict 兼容格式输出 JSON。\n\n硬性规则：\n1. crypto_relevant：是否和 Crypto/Web3/AI/金融科技/链上生态明显相关。\n2. domain_tag 必须且只能从以下集合选择：crypto、ai、科技、金融、内容创作、其他、抽奖。\n3. domain_tag_version 固定返回 tweet_tag_v2_domain_filter_v5。\n4. crypto_sub_tags 最多 8 个，只能从以下集合选择：DeFi、Layer1、Layer2、Meme、NFT、GameFi、DePIN、CeFi、Wallet、Stablecoin、RWA、Mining、Airdrop、Exchange、Infra、Security、DAO、Bridge、Derivatives、Lending、Staking、Oracle、Payment、Launchpad。\n5. ai_sub_tags 最多 8 个，只能从以下集合选择：LLM、Agent、Infra、Model、Data、App、Robotics、Inference、Training、Chip。\n6. hot_tags 最多 12 个，只能抽取推文原文中明确出现的项目名、代币名、协议名、产品名、叙事词；不要编造原文没出现过的词。\n7. tags 仅作兼容补充，必须少量、短词；如果不确定返回空数组。\n8. 不确定、无关或无法判断时：domain_tag 返回 其他，子标签和 hot_tags 返回空数组。\n9. 禁止输出上述集合外的 domain_tag / crypto_sub_tags / ai_sub_tags。\n\n推文：\n{text}",
-  "tweetSummary": "你是社媒内容摘要助手。请基于下面推文生成一句 {lang} 摘要，尽量不超过 {words} 个词/中文短语，按 tweet_summary_media 兼容格式输出 JSON。\n\n要求：\n- 只保留核心事件、项目名、观点或动作。\n- 不添加推文没有的信息。\n- 如果媒体链接有助于理解，可以参考；无法访问媒体时忽略。\n- 不需要翻译全文，不要输出 post_zh；只输出摘要即可。\n\n推文：\n{text}\n\n媒体：\n{media}"
-};
-
-const LEGACY_FRONTEND_AI_PROMPTS = {
-  "tweetAnalysis": "",
-  "projectAttitude": "判断这条推文对 {project} 的态度。输入文本格式为 <<发布时间--推文正文>>。请输出 score、sentiment 和中文 summary/reason：score 为 0-10 分，低于 4 视为 negative，高于 6 视为 positive，其余为 neutral。",
-  "tweetTag": "从推文正文中抽取加密/AI/产品/市场相关主题标签和热词。请返回 topics/domain_tags 和 keywords/hot_tags，标签要短、可聚合、适合主题榜和词云。推文正文：{text}",
-  "tweetSummary": "请根据推文正文生成 {lang} 摘要，控制在 {words} 个词左右；如果有媒体链接可结合媒体语境，但不要编造未出现的信息。推文正文：{text}"
 };
 
 const EXTRA_LLM_MODEL_OPTIONS: LlmModelOption[] = [
@@ -155,9 +146,6 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   baseURL: "OpenAI-compatible 接口地址，例如官方 OpenAI、Gemini 代理或内部网关，以 /v1 结尾更稳。",
   model: "默认模型。综合分析模型为空时使用这个模型。",
   tweetAnalysisModel: "综合分析模型；一次调用同时生成标签、摘要和项目态度，通常只需要配置这个。",
-  tweetTagModel: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
-  tweetSummaryModel: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
-  projectAttitudeModel: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
   contentEnabled: "开启后参与综合 AI 调用，回填标签和中英文摘要；不再生成全文翻译。",
   projectAttitudeEnabled: "开启后参与综合 AI 调用，输出 0-10 分、情绪和判断原因；无关/证据不足/无法可靠判断写 unknown。",
   contentBatchSize: "AI Worker 每轮每个账号最多选取多少条内容待处理帖子；采集任务不再内联跑 AI。",
@@ -170,9 +158,6 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   temperature: "模型随机性。分类/打分建议为 0，结果更稳定。",
   maxTokens: "默认输出 token 上限。综合输出上限未配置时使用这个值。",
   tweetAnalysisMaxTokens: "综合分析结构化输出上限。",
-  tweetTagMaxTokens: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
-  tweetSummaryMaxTokens: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
-  projectAttitudeMaxTokens: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
   timeoutMs: "单次模型请求超时时间，单位毫秒。",
   maxRetries: "失败重试次数。过高会拖慢任务并可能增加调用次数。",
   summaryWords: "摘要 Prompt 中的目标摘要长度。",
@@ -201,16 +186,6 @@ const AI_POST_PROCESSING_STEPS = [
       "sentimentSummaryZh：中文判断依据",
       "tagStatus / summaryStatus / attitudeStatus / aiStatus：处理状态",
       "rawTweet.socialListeningAi：综合 AI 原始结果和 promptTrace",
-    ],
-  },
-  {
-    key: "legacyAi",
-    title: "2. 旧拆分任务兼容",
-    trigger: "仅保留给历史代码/历史 Prompt 兜底",
-    calls: "不作为新 AI Worker 的默认路径",
-    model: "旧 tweetTagModel / tweetSummaryModel / projectAttitudeModel",
-    writes: [
-      "旧字段仍兼容读取，但新回填优先使用综合分析。",
     ],
   },
 ];
@@ -600,14 +575,12 @@ function boardFormInitialValues(board?: SocialListeningBoard | null) {
     keywords: Array.isArray(metadata.keywords) ? metadata.keywords.join("\n") : "",
     aliases: Array.isArray(metadata.aliases) ? metadata.aliases.join("\n") : "",
     recallExcludeKeywords: Array.isArray(metadata.recallExcludeKeywords) ? metadata.recallExcludeKeywords.join("\n") : "",
+    recallExcludeAuthorHandles: Array.isArray(metadata.recallExcludeAuthorHandles) ? metadata.recallExcludeAuthorHandles.join("\n") : "",
     wordCloudExcludeKeywords: Array.isArray(metadata.wordCloudExcludeKeywords) ? metadata.wordCloudExcludeKeywords.join("\n") : "",
     token: typeof metadata.token === "string" ? metadata.token : "",
     followSources: Array.isArray(metadata.followSources) ? metadata.followSources : ["twitter_user_follow", "twitter_user_unfollow", "project_follow"],
     aiProjectName: typeof metadata.aiProjectName === "string" ? metadata.aiProjectName : "",
     tweetAnalysisPrompt: getString(aiPrompts.tweetAnalysis) || DEFAULT_AI_PROMPTS.tweetAnalysis,
-    projectAttitudePrompt: getString(aiPrompts.projectAttitude) || DEFAULT_AI_PROMPTS.projectAttitude,
-    tweetTagPrompt: getString(aiPrompts.tweetTag) || DEFAULT_AI_PROMPTS.tweetTag,
-    tweetSummaryPrompt: getString(aiPrompts.tweetSummary) || DEFAULT_AI_PROMPTS.tweetSummary,
     allowUnresolved: false,
   };
 }
@@ -620,20 +593,17 @@ function buildPromptOverride(value: unknown, key: keyof typeof DEFAULT_AI_PROMPT
   const prompt = normalizePromptForCompare(value);
   if (!prompt) return null;
   if (prompt === normalizePromptForCompare(DEFAULT_AI_PROMPTS[key])) return null;
-  if (prompt === normalizePromptForCompare(LEGACY_FRONTEND_AI_PROMPTS[key])) return null;
   return prompt;
 }
 
 function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedTwitterAccount | null) {
   const aiPrompts = {
     tweetAnalysis: buildPromptOverride(values.tweetAnalysisPrompt, "tweetAnalysis"),
-    projectAttitude: buildPromptOverride(values.projectAttitudePrompt, "projectAttitude"),
-    tweetTag: buildPromptOverride(values.tweetTagPrompt, "tweetTag"),
-    tweetSummary: buildPromptOverride(values.tweetSummaryPrompt, "tweetSummary"),
   };
   const metadata = {
     token: values.token || null,
     recallExcludeKeywords: splitTextarea(String(values.recallExcludeKeywords || "")),
+    recallExcludeAuthorHandles: splitTextarea(String(values.recallExcludeAuthorHandles || "")),
     wordCloudExcludeKeywords: splitTextarea(String(values.wordCloudExcludeKeywords || "")),
     followSources: values.followSources || [],
     aiProjectName: values.aiProjectName || null,
@@ -1056,6 +1026,12 @@ function BoardFormGuide() {
   return (
     <Card size="small" className="social-listening-form-guide" title="字段教材">
       <Space direction="vertical" size={10}>
+        <Alert
+          type="info"
+          showIcon
+          message="帖子召回规则"
+          description="仅召回：① 正文命中官方 Handle、项目名称、关键词、别名或 Token；② 回复或引用官方账号近 30 天帖子。转推、命中召回排除词的帖子，以及召回排除账号自己发的帖子/回复/引用不会入库。"
+        />
         {FIELD_GUIDE.map((item) => (
           <div key={item.label} className="social-listening-guide-item">
             <Text strong>{item.label}</Text>
@@ -1075,7 +1051,7 @@ function AiPostProcessingGuide({ compact = false, defaultCollapsed = false }: { 
         type="info"
         showIcon
         message="AI 分为两个开关：内容分析、态度评价"
-        description="只开启内容分析时，每条帖子会做标签分析 + 中英文摘要；只开启态度评价时，只判断这条帖子对当前被监控项目的态度。两个都开启时，单条帖子最多 4 次 AI 调用。关闭账号 AI 后，后续任务会跳过该账号的 AI 阶段，历史 AI 字段不会自动清空。"
+        description="无论只开启内容分析、只开启态度评价，还是两者同时开启，每条帖子都只进行 1 次综合 AI 调用，并一次性生成标签、摘要和项目态度。关闭账号 AI 后，后续任务会跳过该账号的 AI 阶段，历史 AI 字段不会自动清空。"
       />
       <Row gutter={[12, 12]} className="social-listening-ai-processing-steps">
         {AI_POST_PROCESSING_STEPS.map((step) => (
@@ -1116,7 +1092,7 @@ function AiPostProcessingGuide({ compact = false, defaultCollapsed = false }: { 
           {
             key: "ai-post-processing-guide",
             label: <Text strong>开启 AI 后，每个帖子会发生什么</Text>,
-            extra: <Tag color="purple">最多 4 次调用 / 帖</Tag>,
+            extra: <Tag color="purple">1 次综合调用 / 帖</Tag>,
             children: content,
           },
         ]}
@@ -1129,7 +1105,7 @@ function AiPostProcessingGuide({ compact = false, defaultCollapsed = false }: { 
       size="small"
       className="social-listening-ai-processing-guide"
       title="开启 AI 后，每个帖子会发生什么"
-      extra={<Tag color="purple">最多 4 次调用 / 帖</Tag>}
+      extra={<Tag color="purple">1 次综合调用 / 帖</Tag>}
     >
       {content}
     </Card>
@@ -1170,9 +1146,6 @@ function AiRuntimeConfigPanel() {
         apiKey: "",
         prompts: {
           tweetAnalysis: detail.config.ai.prompts?.tweetAnalysis || "",
-          projectAttitude: detail.config.ai.prompts?.projectAttitude || "",
-          tweetTag: detail.config.ai.prompts?.tweetTag || "",
-          tweetSummary: detail.config.ai.prompts?.tweetSummary || "",
         },
       },
       aiWorker: detail.config.aiWorker || detail.aiWorkerStatus?.config,
@@ -1211,7 +1184,7 @@ function AiRuntimeConfigPanel() {
       });
     },
     onSuccess: () => {
-      messageApi.success("AI 运行配置已发布到 Nacos，后端 1 分钟内会读到新配置");
+      messageApi.success("AI 运行配置已发布到 Nacos；独立 AI Worker 最迟 1 分钟会读到新配置");
       void configQuery.refetch();
       void aiWorkerQuery.refetch();
     },
@@ -1305,13 +1278,21 @@ function AiRuntimeConfigPanel() {
                 </Col>
                 <Col xs={24} md={8}>
                   <Form.Item name="apiKeyAction" label="API Key 操作" tooltip={aiHelp("apiKey")}> 
-                    <Select options={[{ value: "keep", label: "保持当前 Key" }, { value: "replace", label: "替换为新 Key" }, { value: "clear", label: "清空 Key（停用 AI）" }]} />
+                    <Select options={[{ value: "keep", label: "继续使用当前正在生效的 Key" }, { value: "replace", label: "将新 Key 设为正在使用的 Key" }, { value: "clear", label: "清空 Key（停用 AI）" }]} />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={16}>
-                  <Form.Item name={["ai", "apiKey"]} label="新 API Key" tooltip={{ title: "保持当前 Key 时这里留空；选择替换时才会写入 Nacos。", icon: <InfoCircleOutlined /> }}>
+                  <Form.Item name={["ai", "apiKey"]} label="新 API Key" tooltip={{ title: "仅在选择“将新 Key 设为正在使用的 Key”时写入 Nacos。", icon: <InfoCircleOutlined /> }}>
                     <Input.Password disabled={watchedApiKeyAction !== "replace"} placeholder={watchedApiKeyAction === "replace" ? "粘贴新 API Key" : detail?.config.ai.apiKeyMasked || "未配置"} autoComplete="new-password" />
                   </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Alert
+                    type={watchedApiKeyAction === "replace" ? "warning" : watchedApiKeyAction === "clear" ? "error" : "info"}
+                    showIcon
+                    message={watchedApiKeyAction === "replace" ? "保存后将替换正在使用的 API Key" : watchedApiKeyAction === "clear" ? "保存后将清空 API Key，AI 调用会停止" : "当前处于保持模式，保存不会替换正在使用的 API Key"}
+                    description={watchedApiKeyAction === "replace" ? "新 Key 会写入 Nacos；独立 AI Worker 会在下一次读取配置时切换，最长约 60 秒。正在执行中的请求不会中途换 Key。" : "右侧脱敏字符仅表示当前已经生效的 Key，不是可编辑的新 Key。需要换 Key 时，请先选择“将新 Key 设为正在使用的 Key”。"}
+                  />
                 </Col>
                 <Col xs={12} md={6}>
                   <Form.Item name={["ai", "contentEnabled"]} label="内容分析总闸" valuePropName="checked" tooltip={aiHelp("contentEnabled")}> 
@@ -1367,21 +1348,15 @@ function AiRuntimeConfigPanel() {
               items={[
                 {
                   key: "advanced",
-                  label: "高级参数：专项模型 / 费用单价 / Prompt",
+                  label: "高级参数：综合模型 / 费用单价 / Prompt",
                   children: (
                     <Row gutter={[12, 4]}>
                       <Col xs={24} md={8}><Form.Item name={["ai", "tweetAnalysisModel"]} label="综合分析模型" tooltip={aiHelp("tweetAnalysisModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="旧：标签模型" tooltip={aiHelp("tweetTagModel")}><ModelAutoComplete options={modelOptions} placeholder="兼容旧拆分任务，通常留空" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="旧：摘要模型" tooltip={aiHelp("tweetSummaryModel")}><ModelAutoComplete options={modelOptions} placeholder="兼容旧拆分任务，通常留空" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="旧：态度模型" tooltip={aiHelp("projectAttitudeModel")}><ModelAutoComplete options={modelOptions} placeholder="兼容旧拆分任务，通常留空" /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "temperature"]} label="温度" tooltip={aiHelp("temperature")}><InputNumber min={0} max={2} step={0.1} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "maxTokens"]} label="默认输出上限" tooltip={aiHelp("maxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "timeoutMs"]} label="超时时间 ms" tooltip={aiHelp("timeoutMs")}><InputNumber min={1000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "maxRetries"]} label="重试次数" tooltip={aiHelp("maxRetries")}><InputNumber min={0} max={5} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "tweetAnalysisMaxTokens"]} label="综合输出上限" tooltip={aiHelp("tweetAnalysisMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetTagMaxTokens"]} label="旧：标签输出上限" tooltip={aiHelp("tweetTagMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetSummaryMaxTokens"]} label="旧：摘要输出上限" tooltip={aiHelp("tweetSummaryMaxTokens")}><InputNumber min={64} max={4000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "projectAttitudeMaxTokens"]} label="旧：态度输出上限" tooltip={aiHelp("projectAttitudeMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "summaryWords"]} label="摘要词数" tooltip={aiHelp("summaryWords")}><InputNumber min={3} max={80} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" tooltip={aiHelp("estimateInputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" tooltip={aiHelp("estimateOutputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
@@ -1392,26 +1367,10 @@ function AiRuntimeConfigPanel() {
                       <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeOutputTokens"]} label="态度输出 token/次" tooltip={aiHelp("estimateProjectAttitudeOutputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col span={24}><Form.Item name={["ai", "systemPrompt"]} label="系统 Prompt" tooltip={{ title: "全局 systemPrompt，会拼到结构化 JSON 输出要求前面。", icon: <InfoCircleOutlined /> }}><TextArea rows={2} /></Form.Item></Col>
                       <Col span={24}>
-                        <Alert type="info" showIcon message="当前生效的是综合分析 Prompt" description="一次调用会同时生成标签、摘要和项目态度；优先使用 tweetAnalysis。下面旧的三段 Prompt 只作为兼容拆分规则，通常不需要再改。" style={{ marginBottom: 12 }} />
+                        <Alert type="info" showIcon message="每条推文只执行一次综合 AI 分析" description="一次调用会同时生成标签、摘要和项目态度。" style={{ marginBottom: 12 }} />
                         <Form.Item name={["ai", "prompts", "tweetAnalysis"]} label="综合分析 Prompt（当前生效）" tooltip={{ title: "覆盖代码默认 tweetAnalysis Prompt；看板级综合 Prompt 优先级更高。支持变量：{text}、{project}、{createdAt}、{words}、{media}。", icon: <InfoCircleOutlined /> }}>
                           <TextArea rows={7} placeholder={DEFAULT_AI_PROMPTS.tweetAnalysis} />
                         </Form.Item>
-                      </Col>
-                      <Col span={24}>
-                        <Collapse
-                          bordered={false}
-                          items={[{
-                            key: "legacy-prompts",
-                            label: "兼容旧拆分 Prompt（可选）",
-                            children: (
-                              <Row gutter={[12, 4]}>
-                                <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "projectAttitude"]} label="旧：项目态度 Prompt" tooltip={{ title: "未配置综合 Prompt 时才用于兼容拼接。", icon: <InfoCircleOutlined /> }}><TextArea rows={3} /></Form.Item></Col>
-                                <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetTag"]} label="旧：标签 Prompt" tooltip={{ title: "未配置综合 Prompt 时才用于兼容拼接。", icon: <InfoCircleOutlined /> }}><TextArea rows={3} /></Form.Item></Col>
-                                <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetSummary"]} label="旧：摘要 Prompt" tooltip={{ title: "未配置综合 Prompt 时才用于兼容拼接；不再要求全文翻译。", icon: <InfoCircleOutlined /> }}><TextArea rows={3} /></Form.Item></Col>
-                              </Row>
-                            ),
-                          }]}
-                        />
                       </Col>
                     </Row>
                   ),
@@ -1506,9 +1465,6 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         projectAttitudeEnabled: Boolean(detail.config.projectAttitudeEnabled),
         model: detail.config.model || "",
         tweetAnalysisModel: detail.config.tweetAnalysisModel || "",
-        tweetTagModel: detail.config.tweetTagModel || "",
-        tweetSummaryModel: detail.config.tweetSummaryModel || "",
-        projectAttitudeModel: detail.config.projectAttitudeModel || "",
         estimatePosts: nextEstimatePosts,
       },
     });
@@ -1612,13 +1568,10 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 bordered={false}
                 items={[{
                   key: "advanced-board-ai",
-                  label: "综合/旧拆分模型覆盖（可选）",
+                  label: "综合模型覆盖（可选）",
                   children: (
                     <Row gutter={12}>
                       <Col xs={24} md={8}><Form.Item name={["ai", "tweetAnalysisModel"]} label="综合分析模型" extra="为空使用该账号模型；一次调用生成标签、摘要和态度。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="旧：标签模型" extra="兼容旧拆分任务；新 Worker 通常不需要填写。"><ModelAutoComplete options={modelOptions} placeholder="通常留空" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="旧：摘要模型" extra="兼容旧拆分任务；新 Worker 通常不需要填写。"><ModelAutoComplete options={modelOptions} placeholder="通常留空" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="旧：态度模型" extra="兼容旧拆分任务；新 Worker 通常不需要填写。"><ModelAutoComplete options={modelOptions} placeholder="通常留空" /></Form.Item></Col>
                       <Col span={24}>
                         <Descriptions size="small" bordered column={2}>
                           <Descriptions.Item label="Base URL">{runtime?.baseURL || "未配置"}</Descriptions.Item>
@@ -2222,6 +2175,9 @@ export function SocialListeningPage() {
               <Form.Item name="recallExcludeKeywords" label="召回排除词（每行一个）" extra="命中后这条推文直接不入库。只填必须排除的明显噪音；例如 scam、fake airdrop、单独刷屏词。">
                 <TextArea rows={3} placeholder={"scam giveaway\nfake airdrop"} />
               </Form.Item>
+              <Form.Item name="recallExcludeAuthorHandles" label="召回排除账号（每行一个）" extra="填 X handle（可带 @）。仅跳过这些账号自己发的帖子和回复；其他账号仍按原有关键词、官方账号互动规则召回和分析。">
+                <TextArea rows={3} placeholder={"spam_account\n@noisy_account"} />
+              </Form.Item>
               <Form.Item name="wordCloudExcludeKeywords" label="词云排除词（每行一个）" extra="只影响词云展示，不影响推文召回和 AI 分析。适合填品牌词、官方账号、ticker、容易刷屏但没有信息量的词。">
                 <TextArea rows={3} placeholder={"binance\nbnb\ncz_binance"} />
               </Form.Item>
@@ -2234,23 +2190,9 @@ export function SocialListeningPage() {
                     label: "AI 提示语配置（默认折叠，通常不需要改）",
                     children: (
                       <>
-                        <Alert className="social-listening-modal-alert" type="warning" showIcon message="提示语保存到 metadata.aiPrompts" description="现在每条推文只做一次综合 AI 调用。优先编辑「综合分析 Prompt」；旧的三段 Prompt 仅用于兼容历史配置。" />
+                        <Alert className="social-listening-modal-alert" type="info" showIcon message="提示语保存到 metadata.aiPrompts.tweetAnalysis" description="每条推文只进行一次综合 AI 调用，同时生成标签、摘要和项目态度。" />
                         <Form.Item name="aiProjectName" label="AI 项目名" extra="覆盖项目态度 AI 的 project 名称；不填时使用项目名称。"><Input placeholder="默认使用项目名称" /></Form.Item>
                         <Form.Item name="tweetAnalysisPrompt" label="综合分析 Prompt（当前生效）" extra="一次调用同时生成标签、summaryZh/summaryEn、sentiment/score/attitude_summary。支持变量：{text}、{project}、{createdAt}、{words}、{media}。"><TextArea rows={7} /></Form.Item>
-                        <Collapse
-                          bordered={false}
-                          items={[{
-                            key: "legacy-board-prompts",
-                            label: "兼容旧拆分 Prompt（可选）",
-                            children: (
-                              <>
-                                <Form.Item name="projectAttitudePrompt" label="旧：项目态度 Prompt" extra="未配置综合 Prompt 时才用于兼容拼接。"><TextArea rows={4} /></Form.Item>
-                                <Form.Item name="tweetTagPrompt" label="旧：推文标签 Prompt" extra="未配置综合 Prompt 时才用于兼容拼接。"><TextArea rows={4} /></Form.Item>
-                                <Form.Item name="tweetSummaryPrompt" label="旧：推文摘要 Prompt" extra="未配置综合 Prompt 时才用于兼容拼接；不再要求全文翻译。"><TextArea rows={4} /></Form.Item>
-                              </>
-                            ),
-                          }]}
-                        />
                       </>
                     ),
                   },

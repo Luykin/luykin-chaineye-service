@@ -185,8 +185,7 @@ function getBoardAiRuntime(board) {
 function getEffectiveBoardAiConfig(runtimeAi = {}, boardAi = {}) {
   const boardModel = String(boardAi.model || "").trim();
   const tweetAnalysisModel = String(boardAi.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || "").trim();
-  const contentModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.tweetTagModel || boardAi.tweetSummaryModel);
-  const attitudeModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.projectAttitudeModel);
+  const modelReady = Boolean(boardModel || tweetAnalysisModel);
   return {
     ...runtimeAi,
     ...boardAi,
@@ -194,11 +193,8 @@ function getEffectiveBoardAiConfig(runtimeAi = {}, boardAi = {}) {
     baseURL: boardAi.baseURL || runtimeAi.baseURL || "",
     model: boardModel,
     tweetAnalysisModel,
-    tweetTagModel: boardAi.tweetTagModel || tweetAnalysisModel || boardModel,
-    tweetSummaryModel: boardAi.tweetSummaryModel || tweetAnalysisModel || boardModel,
-    projectAttitudeModel: boardAi.projectAttitudeModel || tweetAnalysisModel || boardModel,
-    contentEnabled: Boolean(runtimeAi.contentEnabled && boardAi.contentEnabled && contentModelReady),
-    projectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled && boardAi.projectAttitudeEnabled && attitudeModelReady),
+    contentEnabled: Boolean(runtimeAi.contentEnabled && boardAi.contentEnabled && modelReady),
+    projectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled && boardAi.projectAttitudeEnabled && modelReady),
   };
 }
 
@@ -209,9 +205,6 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
     projectAttitudeEnabled: Boolean(boardAi.projectAttitudeEnabled),
     model: boardAi.model || "",
     tweetAnalysisModel: boardAi.tweetAnalysisModel || "",
-    tweetTagModel: boardAi.tweetTagModel || "",
-    tweetSummaryModel: boardAi.tweetSummaryModel || "",
-    projectAttitudeModel: boardAi.projectAttitudeModel || "",
     estimatePosts: Math.max(0, Math.floor(toFiniteNumber(boardAi.estimatePosts, 10000))),
     costAcceptedAt: boardAi.costAcceptedAt || null,
     costAcceptedByAdminId: boardAi.costAcceptedByAdminId || null,
@@ -223,9 +216,6 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
       projectAttitudeEnabled: effective.projectAttitudeEnabled,
       model: effective.model,
       tweetAnalysisModel: effective.tweetAnalysisModel || effective.model,
-      tweetTagModel: effective.tweetTagModel || effective.model,
-      tweetSummaryModel: effective.tweetSummaryModel || effective.model,
-      projectAttitudeModel: effective.projectAttitudeModel || effective.model,
       baseURL: effective.baseURL,
       apiKeyConfigured: Boolean(String(runtimeAi.apiKey || "").trim()),
       globalContentEnabled: Boolean(runtimeAi.contentEnabled),
@@ -246,15 +236,16 @@ function pickStringField(input = {}, current = {}, key) {
 
 function normalizeBoardAiRuntimeInput(current = {}, body = {}, runtimeAi = {}, adminId = null) {
   const input = body.ai && typeof body.ai === "object" ? body.ai : body;
+  const currentAi = { ...current };
+  delete currentAi.tweetTagModel;
+  delete currentAi.tweetSummaryModel;
+  delete currentAi.projectAttitudeModel;
   const next = {
-    ...current,
+    ...currentAi,
     contentEnabled: Boolean(input.contentEnabled),
     projectAttitudeEnabled: Boolean(input.projectAttitudeEnabled),
     model: pickStringField(input, current, "model"),
     tweetAnalysisModel: pickStringField(input, current, "tweetAnalysisModel"),
-    tweetTagModel: pickStringField(input, current, "tweetTagModel"),
-    tweetSummaryModel: pickStringField(input, current, "tweetSummaryModel"),
-    projectAttitudeModel: pickStringField(input, current, "projectAttitudeModel"),
     estimatePosts: Math.max(0, Math.floor(toFiniteNumber(hasOwnField(input, "estimatePosts") ? input.estimatePosts : current.estimatePosts, 10000))),
   };
   const wantsAi = next.contentEnabled || next.projectAttitudeEnabled;
@@ -392,6 +383,12 @@ function buildRuntimeConfigDocument(currentConfig = {}, body = {}) {
   delete nextAi.apiKeyMasked;
   delete nextAi.apiKeyConfigured;
   delete nextAi.apiKeyAction;
+  delete nextAi.tweetTagModel;
+  delete nextAi.tweetSummaryModel;
+  delete nextAi.projectAttitudeModel;
+  delete nextAi.tweetTagMaxTokens;
+  delete nextAi.tweetSummaryMaxTokens;
+  delete nextAi.projectAttitudeMaxTokens;
 
   if (apiKeyAction === "replace") {
     nextAi.apiKey = String(inputAi.apiKey || "").trim();
@@ -490,9 +487,6 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "baseURL", label: "Base URL", desc: "模型服务地址，例如 https://api.openai.com/v1 或内部代理 https://aaii.xclaw.info/v1/。" },
   { field: "model", label: "默认模型", desc: "AI 默认使用的模型；综合分析模型为空时回落到它。" },
   { field: "tweetAnalysisModel", label: "综合分析模型", desc: "可单独指定综合分析模型；一次调用同时生成标签、摘要和项目态度。为空则使用默认模型。" },
-  { field: "tweetTagModel", label: "旧：标签模型", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
-  { field: "tweetSummaryModel", label: "旧：摘要模型", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
-  { field: "projectAttitudeModel", label: "旧：态度模型", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
   { field: "contentEnabled", label: "内容分析开关", desc: "开启后参与综合 AI 调用，回填标签和中英文摘要；不再生成全文翻译。" },
   { field: "projectAttitudeEnabled", label: "项目态度开关", desc: "开启后参与综合 AI 调用，回填 0-10 分、positive/neutral/negative/unknown 和中文原因；无关、证据不足、无法可靠判断不强行归为 neutral。" },
   { field: "contentBatchSize", label: "内容批大小", desc: "AI Worker 每轮每个账号最多选取多少条内容待处理帖子；采集任务不再内联跑 AI。" },
@@ -505,16 +499,13 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "temperature", label: "温度", desc: "模型随机性，舆情分类建议保持 0，保证结果稳定可复现。" },
   { field: "maxTokens", label: "默认输出上限", desc: "未配置综合分析 maxTokens 时使用的输出 token 上限。" },
   { field: "tweetAnalysisMaxTokens", label: "综合输出上限", desc: "综合分析结构化输出的 maxTokens。" },
-  { field: "tweetTagMaxTokens", label: "旧：标签输出上限", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
-  { field: "tweetSummaryMaxTokens", label: "旧：摘要输出上限", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
-  { field: "projectAttitudeMaxTokens", label: "旧：态度输出上限", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
   { field: "timeoutMs", label: "超时时间", desc: "单次模型请求超时时间，单位毫秒。" },
   { field: "maxRetries", label: "重试次数", desc: "模型请求失败后的最大重试次数；过高会放大延迟和潜在费用。" },
   { field: "summaryWords", label: "摘要词数", desc: "传给摘要 Prompt 的目标词数/短语长度。" },
   { field: "promptMaxLength", label: "Prompt 最大长度", desc: "运行时或看板级 Prompt 的最大字符长度，防止错误配置导致超长请求。" },
   { field: "estimateInputPricePerMillion", label: "输入单价估算", desc: "用于费用估算的输入 token 单价，单位 USD / 100万 tokens，不影响真实调用。" },
   { field: "estimateOutputPricePerMillion", label: "输出单价估算", desc: "用于费用估算的输出 token 单价，单位 USD / 100万 tokens，不影响真实调用。" },
-  { field: "prompts", label: "全局 Prompt 覆盖", desc: "优先配置 tweetAnalysis 综合 Prompt；旧 projectAttitude、tweetTag、tweetSummary 仅用于兼容拼接。看板级 Prompt 优先级更高。" },
+  { field: "prompts", label: "全局 Prompt 覆盖", desc: "配置 tweetAnalysis 综合 Prompt；看板级 Prompt 优先级更高。" },
 ];
 
 router.get("/runtime-config", async (req, res) => {
@@ -746,9 +737,6 @@ router.post("/boards/:boardId/ai-config", async (req, res) => {
         projectAttitudeEnabled: next.projectAttitudeEnabled,
         model: next.model,
         tweetAnalysisModel: next.tweetAnalysisModel,
-        tweetTagModel: next.tweetTagModel,
-        tweetSummaryModel: next.tweetSummaryModel,
-        projectAttitudeModel: next.projectAttitudeModel,
         estimatePosts: next.estimatePosts,
         costAcceptedAt: next.costAcceptedAt,
         acceptedEstimatedUsd: next.acceptedEstimatedUsd,

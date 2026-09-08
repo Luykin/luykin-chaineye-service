@@ -5,7 +5,7 @@ const {
   getPostgresReadOnlyStatus,
   isPostgresReadOnlyConfigured,
 } = require("../../../infra/k8s/postgres-readonly");
-const { assertTwitterHandle } = require("../utils/twitter");
+const { assertTwitterHandle, normalizeTwitterHandle } = require("../utils/twitter");
 const { normalizeTweetText, collectMatchedKeywords, normalizeKeywords } = require("../utils/text-normalize");
 const { ACCOUNT_SIGNAL_TYPES } = require("../constants");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
@@ -245,6 +245,12 @@ function buildBoardRecallExcludeKeywords(board) {
   ]);
 }
 
+function buildBoardRecallExcludeAuthorHandles(board) {
+  const metadata = board?.metadata && typeof board.metadata === "object" ? board.metadata : {};
+  const values = Array.isArray(metadata.recallExcludeAuthorHandles) ? metadata.recallExcludeAuthorHandles : [];
+  return Array.from(new Set(values.map(normalizeTwitterHandle).filter(Boolean))).slice(0, 50);
+}
+
 async function fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, limit) {
   if (!isNumericId(board?.officialTwitterId)) return [];
   const rows = await queryReadonlyWithStatementTimeout(
@@ -295,6 +301,15 @@ async function fetchCandidateTweetPage(db, bind, keywordClause, excludeClause) {
       WHERE t.create_time >= $startAt
         AND t.create_time < $endAt
         AND t.retweet_id IS NULL
+        AND (
+          cardinality($recallExcludeAuthorHandles::text[]) = 0
+          OR NOT EXISTS (
+            SELECT 1
+            FROM dev.twitter_user excluded_author
+            WHERE excluded_author.id::text = t.twitter_user_id::text
+              AND lower(COALESCE(excluded_author.username, '')) = ANY($recallExcludeAuthorHandles::text[])
+          )
+        )
         AND (
           $cursorCreateTime::timestamptz IS NULL
           OR t.create_time < $cursorCreateTime::timestamptz
@@ -551,6 +566,7 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
   const officialPostLimit = clampInteger(options.officialPostScanLimit || scanConfig.officialPostScanLimit, scanConfig.officialPostScanLimit || 1000, 50, 5000);
   const keywords = buildBoardKeywords(board).slice(0, 10);
   const recallExcludeKeywords = buildBoardRecallExcludeKeywords(board).slice(0, 20);
+  const recallExcludeAuthorHandles = buildBoardRecallExcludeAuthorHandles(board);
   const patterns = keywords.map(buildKeywordScanPattern);
   const excludePatterns = recallExcludeKeywords.map((keyword, index) => ({
     ...buildKeywordScanPattern(keyword, index),
@@ -580,6 +596,7 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
     scanLimit,
     matchLimit: limit,
     recallExcludeCount: recallExcludeKeywords.length,
+    recallExcludeAuthorCount: recallExcludeAuthorHandles.length,
     officialPostLimit,
     officialPostCount: 0,
     pagesScanned: 0,
@@ -605,6 +622,7 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
         cursorCreateTime,
         cursorTweetId: cursorTweetId || "0",
         officialTweetIds,
+        recallExcludeAuthorHandles,
       };
       patterns.forEach((item) => { bind[item.key] = item.value; });
       excludePatterns.forEach((item) => { bind[item.key] = item.value; });
