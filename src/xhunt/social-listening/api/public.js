@@ -14,6 +14,7 @@ const {
   assertBoardAccess,
   getBoardDetail,
   createManualRefreshJob,
+  serializeBoard,
   serializeJob,
   serializePost,
   serializeAccountSignal,

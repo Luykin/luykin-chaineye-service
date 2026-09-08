@@ -19,6 +19,7 @@ import {
   InputNumber,
   Modal,
   Pagination,
+  Popover,
   Popconfirm,
   Progress,
   Row,
@@ -2086,7 +2087,47 @@ export function SocialListeningPage() {
 
         <Row gutter={16}>
           <Col xs={24} lg={12}>
-            <PageSection title="最近任务" description="自动每 15 秒刷新；展开行可查看窗口、心跳、counters 和写表结果。初始化阶段不再展示固定 12%，会显示准备中/心跳状态。">
+            <PageSection
+              title="最近任务"
+              description="自动每 15 秒刷新；展开行可查看窗口、心跳、counters 和写表结果。初始化阶段不再展示固定 12%，会显示准备中/心跳状态。"
+              extra={
+                <Popover
+                  trigger="click"
+                  placement="leftTop"
+                  title="任务执行说明（当前默认配置）"
+                  content={
+                    <Space direction="vertical" size={12} style={{ width: 460 }}>
+                      <div>
+                        <Text strong>统一排队</Text>
+                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>调度器每 60 秒检查一次。所有采集和指标回刷共用全局锁，同一时间只执行 1 个任务；同一账号也有独立锁，不会重复并行处理。待执行任务按创建时间先进先出，每轮最多取 3 条，但会依次执行。</Paragraph>
+                      </div>
+                      <div>
+                        <Text strong>incremental（增量采集）</Text>
+                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>账号的 processedThrough 落后当前时间 15 分钟后才会入队；若该账号已有 pending / running 任务则不重复创建。扫描从上次游标前回退 2 小时开始（首次从当前前 2 小时开始），按 30 分钟窗口拉取、去重入库，再更新游标、信号、预警和看板快照。AI 不在该任务内执行，由独立 AI Worker 回填。</Paragraph>
+                      </div>
+                      <div>
+                        <Text strong>metric_refresh（互动指标回刷）</Text>
+                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>全局最短每 20 分钟只创建 1 个回刷任务，且已有 metric_refresh 排队或运行时不会重复入队。它只按 tweetId 回刷浏览、点赞、转发、引用和回复，不重新召回正文；成功后会刷新相关预警和快照。</Paragraph>
+                        <ul style={{ margin: "6px 0 0", paddingLeft: 20, color: "#667085" }}>
+                          <li>最近 12 小时：每 20 分钟，约 50% 配额</li>
+                          <li>12–36 小时：每 60 分钟，约 25% 配额</li>
+                          <li>36 小时–7 天：每 5 小时，约 15% 配额</li>
+                          <li>7–30 天：每 18 小时，剩余约 10% 配额</li>
+                        </ul>
+                        <Paragraph type="secondary" style={{ margin: "6px 0 0" }}>每批最多 1,000 条；跨账号时优先较新的高优先级帖子。同一批源库未命中的帖子也会记录本次尝试时间，避免每轮重复查询。</Paragraph>
+                      </div>
+                      <div>
+                        <Text strong>补数与异常</Text>
+                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>恢复账号后先补最近 7 天，完成后再低优先级补齐 7–30 天。运行中任务 30 分钟未更新心跳会自动标记失败；可手动重试，或等待下一轮增量任务补上。</Paragraph>
+                      </div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>频率、批大小和扫描窗口均可由 Nacos 运行配置调整；这里展示的是当前代码默认值。</Text>
+                    </Space>
+                  }
+                >
+                  <Button type="text" icon={<InfoCircleOutlined />} aria-label="查看任务执行说明">任务说明</Button>
+                </Popover>
+              }
+            >
               <Table<SocialListeningJob>
                 rowKey="id"
                 size="small"
