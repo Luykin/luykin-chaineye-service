@@ -284,6 +284,7 @@ export interface SocialListeningBoardAiRuntimeConfig {
   updatedAt?: string | null;
   aiProjectName?: string;
   promptOverride?: string;
+  effectivePromptTemplate?: string;
   effective: {
     contentEnabled: boolean;
     projectAttitudeEnabled: boolean;
@@ -304,6 +305,7 @@ export interface SocialListeningBoardAiConfigResponse {
   promptPreview?: {
     systemPrompt: string;
     userPrompt: string;
+    template?: string;
     variables: Record<string, string | number>;
     promptTrace: Record<string, unknown>;
     model: string;

@@ -227,6 +227,7 @@ function buildPromptInfo(board, aiConfig, field, variables = {}) {
   }
   return {
     prompt,
+    template,
     trace: {
       key: field,
       source,
@@ -510,6 +511,7 @@ function buildTweetAnalysisPrompt(board, aiConfig, variables = {}) {
     ].join("\n");
   return {
     prompt,
+    analysisTemplate: analysisPrompt.template,
     promptTrace: {
       analysis: analysisPrompt.trace,
       tag: tagPrompt.trace,
@@ -531,10 +533,11 @@ async function buildTweetAnalysisPromptPreview(board) {
     media: "{{media}}",
     createdAt: "{{tweet_created_at}}",
   };
-  const { prompt, promptTrace } = buildTweetAnalysisPrompt(board, aiConfig, variables);
+  const { prompt, promptTrace, analysisTemplate } = buildTweetAnalysisPrompt(board, aiConfig, variables);
   return {
     systemPrompt: String(aiConfig.systemPrompt || "").trim() || "你是严格的 JSON 结构化分析助手。只输出符合 Schema 的 JSON。",
     userPrompt: prompt,
+    template: analysisTemplate,
     variables,
     promptTrace,
     model: aiConfig.tweetAnalysisModel || aiConfig.model || "",

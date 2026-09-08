@@ -1385,6 +1385,7 @@ function AiProgressLine({
 function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; open: boolean; onChanged: () => void }) {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm();
+  const [promptOverrideTouched, setPromptOverrideTouched] = useState(false);
   const configQuery = useQuery({
     queryKey: ["social-listening", "board-ai-config", boardId],
     queryFn: () => fetchSocialListeningBoardAiConfig(boardId),
@@ -1433,15 +1434,17 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         tweetAnalysisModel: detail.config.tweetAnalysisModel || "",
         estimatePosts: nextEstimatePosts,
         aiProjectName: detail.config.aiProjectName || "",
-        promptOverride: detail.config.promptOverride || "",
+        promptOverride: detail.config.promptOverride || detail.config.effectivePromptTemplate || "",
       },
     });
+    setPromptOverrideTouched(false);
   }, [detail, form]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
       const values = form.getFieldsValue(true) as { acceptCost?: boolean; ai?: Partial<SocialListeningBoardAiRuntimeConfig> };
       const ai = values.ai || {};
+      if (!promptOverrideTouched && !detail?.config.promptOverride) delete ai.promptOverride;
       const enabling = Boolean(ai.contentEnabled || ai.projectAttitudeEnabled);
       if (enabling && !values.acceptCost) throw new Error("开启该账号 AI 前，请先勾选确认预估成本。关闭 AI 不需要确认成本。");
       return updateSocialListeningBoardAiConfig(boardId, {
@@ -1504,7 +1507,9 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         </Col>
         <Col xs={24} lg={17}>
           <Card size="small" title="账号 AI 开关">
-            <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()}>
+            <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()} onValuesChange={(changedValues) => {
+              if (Object.prototype.hasOwnProperty.call(asRecord(changedValues.ai), "promptOverride")) setPromptOverrideTouched(true);
+            }}>
               <Row gutter={12}>
                 <Col xs={24} md={8}>
                   <Form.Item name={["ai", "model"]} label="该账号默认模型" extra="综合分析模型为空时使用；如果全局/账号综合分析模型已配置，这里可留空。" rules={[{ required: wantsAi && !modelReady, message: "开启账号 AI 前必须填写账号模型或综合分析模型" }]}>
@@ -1562,14 +1567,14 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                   label: "编辑看板级综合分析 Prompt（优先级最高）",
                   children: (
                     <Space direction="vertical" size={10} className="social-listening-full">
-                      <Alert type="info" showIcon message="这里编辑的是模板；下方预览展示 Worker 实际发送的最终内容" description="留空并保存即可恢复继承全局/默认模板。支持 {text}、{project}、{createdAt}、{words}、{media}；若模板未包含 {text}，Worker 会自动追加推文正文。" />
+                      <Alert type="info" showIcon message="已填入后端当前实际生效的模板，可直接在此修改" description="未改动该字段时，保存其他 AI 设置仍会继续继承当前模板；修改后才创建当前看板覆盖。清空并保存可恢复继承。支持 {text}、{project}、{createdAt}、{words}、{media}；若模板未包含 {text}，Worker 会自动追加推文正文。" />
                       <Form.Item name={["ai", "aiProjectName"]} label="AI 项目名" extra="不填时使用看板项目名称；这个值会直接替换最终 Prompt 中的 {project}。">
                         <Input placeholder="默认使用项目名称" maxLength={255} />
                       </Form.Item>
                       <Form.Item name={["ai", "promptOverride"]} label="综合分析 Prompt 覆盖" extra="保存到当前看板，不影响其他项目。填写后优先级高于 Nacos 全局 Prompt。">
                         <TextArea rows={12} maxLength={30000} placeholder="留空并保存，即恢复继承的全局/默认模板" />
                       </Form.Item>
-                      <Button onClick={() => form.setFieldValue(["ai", "promptOverride"], "")}>清空覆盖，恢复继承</Button>
+                      <Button onClick={() => { form.setFieldValue(["ai", "promptOverride"], ""); setPromptOverrideTouched(true); }}>清空覆盖，恢复继承</Button>
                     </Space>
                   ),
                 }]}

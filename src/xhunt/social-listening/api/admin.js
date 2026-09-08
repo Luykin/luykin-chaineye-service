@@ -372,15 +372,20 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
   );
   const estimateBoardAi = { ...boardAi, estimatePosts };
   const costEstimate = estimateAiCost(getEffectiveBoardAiConfig(runtimeAi, estimateBoardAi), estimatePosts);
+  const promptPreview = await buildTweetAnalysisPromptPreview(board);
   return {
     board: {
       id: board.id,
       officialHandle: board.officialHandle,
       projectName: board.projectName,
     },
-    config: { ...sanitized, ...promptSettings },
+    config: {
+      ...sanitized,
+      ...promptSettings,
+      effectivePromptTemplate: String(promptPreview?.template || "").trim(),
+    },
     runtime: sanitizeRuntimeConfig(runtimeConfig).ai,
-    promptPreview: await buildTweetAnalysisPromptPreview(board),
+    promptPreview,
     stats,
     progress: buildBoardAiProgress(runtimeConfig, stats),
     costEstimate,
