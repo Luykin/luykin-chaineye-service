@@ -2291,7 +2291,7 @@ export function SocialListeningPage() {
         </Row>
       </Modal>
 
-      <BoardDrawer board={drawerBoard} open={Boolean(drawerBoard)} initialTab={drawerInitialTab} onClose={() => setDrawerBoard(null)} onChanged={() => { void boardsQuery.refetch(); void jobsQuery.refetch(); void alertsQuery.refetch(); }} />
+      <BoardDrawer board={drawerBoard} open={Boolean(drawerBoard)} initialTab={drawerInitialTab} onClose={() => setDrawerBoard(null)} onChanged={() => { void boardsQuery.refetch(); void jobsQuery.refetch(); }} />
     </PermissionGuard>
   );
 }
