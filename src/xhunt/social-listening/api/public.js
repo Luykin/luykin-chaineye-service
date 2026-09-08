@@ -298,7 +298,7 @@ function buildSnapshotResponse(snapshot) {
       [type]: name,
       [`${type}Zh`]: localizedName,
       count: Number(item.count || 0),
-      ...(type === "topic" ? {
+      ...(Array.isArray(item.buckets) || Array.isArray(item.values) ? {
         buckets: Array.isArray(item.buckets) ? item.buckets : [],
         values: Array.isArray(item.values) ? item.values : [],
       } : { sentiment: item.sentiment || "unknown" }),
@@ -344,8 +344,9 @@ function buildSnapshotResponse(snapshot) {
       analyzed: Number(composition.analyzed || 0),
       positiveRatio: composition.positiveRatio ?? null,
     },
-    topics: (Array.isArray(snapshot.topics) ? snapshot.topics : []).map((item) => serializeAggregate(item, "topic")),
-    topicTrends: (Array.isArray(snapshot.topicTrends) ? snapshot.topicTrends : []).map((item) => serializeAggregate(item, "topic")),
+    keywordTrends: (Array.isArray(snapshot.keywordTrends) ? snapshot.keywordTrends : [])
+      .filter((item) => item?.source === "ai_hot_tags")
+      .map((item) => serializeAggregate(item, "word")),
     wordCloud: (Array.isArray(snapshot.wordCloud) ? snapshot.wordCloud : []).map((item) => serializeAggregate(item, "word")),
     viewpoints: {
       positive: viewpoints.positive || "",

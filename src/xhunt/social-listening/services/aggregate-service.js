@@ -315,25 +315,29 @@ function buildBucketKeys(window) {
   return keys;
 }
 
-function buildTopicTrends(posts, topTopics, window) {
+function buildKeywordTrends(posts, topKeywords, board, window) {
   const buckets = buildBucketKeys(window);
   const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
-  return topTopics.slice(0, 3).map((topic) => {
+  return topKeywords.slice(0, 5).map((keyword) => {
     const values = buckets.map(() => 0);
     posts.forEach((post) => {
-      const postTopics = Array.isArray(post.topics) ? post.topics.map((item) => normalizeAggregateItem(item)?.name).filter(Boolean) : [];
-      if (!postTopics.includes(topic.name)) return;
+      const postKeywordKeys = new Set(filterDiscussionKeywords(post.keywords, board)
+        .map((item) => normalizeAggregateItem(item)?.name)
+        .map(normalizeWordKey)
+        .filter(Boolean));
+      if (!postKeywordKeys.has(normalizeWordKey(keyword.name || keyword.word))) return;
       const index = bucketIndex.get(startOfBucket(post.postCreatedAt, window.bucketSize));
       if (index !== undefined) values[index] += 1;
     });
     return {
-      topic: topic.name,
-      topicZh: topic.topicZh || getTopicZh(topic.name),
-      name: topic.name,
-      count: topic.count,
-      mentions: topic.count,
+      word: keyword.word || keyword.name,
+      wordZh: keyword.wordZh || keyword.name,
+      name: keyword.name,
+      count: keyword.count,
+      mentions: keyword.count,
       buckets,
       values,
+      source: "ai_hot_tags",
     };
   });
 }
@@ -678,6 +682,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
   });
 
   const topTopics = sortAggregate(topicMap, 20);
+  const topKeywords = sortAggregate(wordMap, 5);
   const wordCloud = sortAggregate(wordMap, 50);
 
   const influentialCount = metricPosts.filter(isInfluentialPost).length;
@@ -709,7 +714,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     })),
     sentimentComposition,
     topics: topTopics,
-    topicTrends: buildTopicTrends(metricPosts, topTopics, window),
+    keywordTrends: buildKeywordTrends(metricPosts, topKeywords, board, window),
     wordCloud,
     viewpoints: buildViewpoints(metricPosts, board),
     accountSummary: {

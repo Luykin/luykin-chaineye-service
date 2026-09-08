@@ -16,7 +16,7 @@ module.exports = (sequelize) => {
       sentimentSeries: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], comment: "情绪趋势序列" },
       sentimentComposition: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, comment: "情绪占比与样本数统计" },
       topics: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], comment: "主题榜聚合结果" },
-      topicTrends: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], comment: "Top 3 主题在当前范围内的趋势序列" },
+      keywordTrends: { type: DataTypes.JSONB, field: "topicTrends", allowNull: false, defaultValue: [], comment: "Top 5 热门关键词在当前范围内的趋势序列" },
       wordCloud: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], comment: "词云聚合结果" },
       viewpoints: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, comment: "当前范围正面/负面观点聚合摘要" },
       accountSummary: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, comment: "关键账号动态摘要" },
