@@ -472,6 +472,10 @@ export function fetchSocialListeningPosts(boardId: string, query?: { page?: numb
   return apiRequest<{ success: boolean; data: SocialListeningPageData<SocialListeningPost> }>(withQuery(`${BASE_PATH}/boards/${boardId}/posts`, query));
 }
 
+export function reanalyzeSocialListeningPost(boardId: string, postId: string) {
+  return apiRequest<{ success: boolean; data: { post: SocialListeningPost; result: Record<string, unknown> } }>(`${BASE_PATH}/boards/${boardId}/posts/${postId}/reanalyze`, { method: "POST" });
+}
+
 export function buildSocialListeningExportUrl(boardId: string, query?: { range?: string; sentiment?: string; source?: string; q?: string; sort?: string; ai?: string }) {
   return buildApiUrl(withQuery(`${BASE_PATH}/boards/${boardId}/posts/export`, query));
 }

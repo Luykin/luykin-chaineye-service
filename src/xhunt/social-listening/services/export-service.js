@@ -86,6 +86,7 @@ function buildPostWhere(board, query = {}, options = {}) {
   if (q) {
     where[Op.or] = [
       { text: { [Op.iLike]: `%${q}%` } },
+      { tweetId: { [Op.iLike]: `%${q}%` } },
       { authorHandle: { [Op.iLike]: `%${q.replace(/^@+/, "")}%` } },
       { authorName: { [Op.iLike]: `%${q}%` } },
     ];

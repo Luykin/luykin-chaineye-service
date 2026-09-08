@@ -41,10 +41,13 @@ const DEFAULT_LOCAL_AI_PROMPTS = Object.freeze({
 
 - 标签只能使用 Schema 枚举；无关或无法判断时 domain_tag=其他，子标签和 hot_tags 为空。
 - hot_tags 优先 2-6 个核心词（最多 12）：只取原文出现的核心实体、事件、动作、争议或叙事词；不要用 crypto、Web3、AI 等泛类目凑数。
+- hot_tags 不要重复：大小写、空格或 @/#/$ 前缀不同但实际相同的词只保留一个（如 BSC 与 bsc）。
 - 词云排除词：{keywordExclusions}；即使原文出现，也不得放入 hot_tags。
 - summary_cn 不超过 {words} 个词/短语；summary_en 为短句。
 - 当前项目：{project}；可识别名称/别名/官方 Handle：{projectAliases}。命中任一名称或 @Handle 才可视为讨论当前项目；不要把行业词、其他项目或歧义词归入当前项目。
-- score、sentiment、attitude_summary 只判断对当前项目的态度，不判断大盘、宏观或其他项目。0-3.9=negative，4-6=neutral，6.1-10=positive；只有确认相关但无褒贬才为 neutral。无关、证据不足或态度不可靠时 sentiment=unknown、relevant_to_project=false 或 confidence<0.5。
+- 先判断评价对象：提到项目名、账号或相关人物，不等于在评价当前项目。若评价的是文章、转发内容、其他项目、人物，或只是提到项目相关人物，relevant_to_project=false、sentiment=unknown。
+- score、sentiment、attitude_summary 只判断对当前项目的态度，不判断大盘、宏观或其他项目。0-3.9=negative，4-6=neutral，6.1-10=positive；只有确认相关但无褒贬才为 neutral。
+- 不可只按负面词打分：😂、😆 等笑脸、玩笑、夸张或反讽语气，如无对当前项目明确且严肃的风险、损失、指控或抵制，应为 neutral（确认相关）或 unknown（评价对象不明）。“差评😆”“违反投资条款😂”这类调侃不能仅凭关键词判 negative。
 
 发布时间：{createdAt}
 推文：{text}

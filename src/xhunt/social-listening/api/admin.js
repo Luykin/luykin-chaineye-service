@@ -1,6 +1,6 @@
 const express = require("express");
 const { Op, literal } = require("sequelize");
-const { requirePermission } = require("../../../admin/middleware/adminAuth");
+const { requireRole, requirePermission } = require("../../../admin/middleware/adminAuth");
 const {
   EchohuntSocialListeningBoard,
   EchohuntSocialListeningBoardAccess,
@@ -48,7 +48,7 @@ const {
   applyRecallExcludeAuthorAlertFilter,
 } = require("../services/post-filter");
 const { enableSocialListeningScheduler } = require("../services/scheduler");
-const { buildTweetAnalysisPromptPreview } = require("../services/analysis-service");
+const { buildTweetAnalysisPromptPreview, reanalyzeSocialListeningPostAi } = require("../services/analysis-service");
 const {
   getSocialListeningAiWorkerStatus,
   pauseSocialListeningAiWorker,
@@ -571,7 +571,7 @@ router.get("/runtime-config", async (req, res) => {
   }
 });
 
-router.post("/runtime-config", async (req, res) => {
+router.post("/runtime-config", requireRole("super"), async (req, res) => {
   try {
     const currentConfig = await getSocialListeningRuntimeConfig({ force: true });
     const nextConfig = buildRuntimeConfigDocument(currentConfig, req.body || {});
@@ -618,7 +618,7 @@ router.get("/ai-worker/status", async (req, res) => {
   }
 });
 
-router.post("/ai-worker/pause", async (req, res) => {
+router.post("/ai-worker/pause", requireRole("super"), async (req, res) => {
   try {
     const result = await pauseSocialListeningAiWorker(req.redisClient, { type: "admin", adminId: getAdminId(req) });
     await writeAudit({ adminId: getAdminId(req), action: "ai_worker_pause", payload: result });
@@ -628,7 +628,7 @@ router.post("/ai-worker/pause", async (req, res) => {
   }
 });
 
-router.post("/ai-worker/resume", async (req, res) => {
+router.post("/ai-worker/resume", requireRole("super"), async (req, res) => {
   try {
     const result = await resumeSocialListeningAiWorker(req.redisClient, { type: "admin", adminId: getAdminId(req) });
     await writeAudit({ adminId: getAdminId(req), action: "ai_worker_resume", payload: result });
@@ -847,6 +847,31 @@ router.get("/boards/:boardId/posts", async (req, res) => {
     return res.json({ success: true, data: { rangeKey, items: result.rows.map(serializePost), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_POSTS_FAILED");
+  }
+});
+
+router.post("/boards/:boardId/posts/:postId/reanalyze", async (req, res) => {
+  try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+    const post = await EchohuntSocialListeningPost.findOne({ where: { id: req.params.postId, boardId: board.id } });
+    if (!post) throw publicError("POST_NOT_FOUND", 404, "推文不存在或不属于当前看板。");
+    const result = await reanalyzeSocialListeningPostAi(board, post.id);
+    if (!result.enabled) throw publicError("BOARD_AI_DISABLED", 409, "当前看板的综合 AI 未开启或模型配置不完整，无法重跑。");
+    if (!result.selected) throw publicError("POST_AI_NOT_AVAILABLE", 409, "该推文没有可供 AI 分析的正文。");
+    if (result.content.failed || result.attitude.failed) {
+      throw publicError("POST_AI_REANALYZE_FAILED", 502, "AI 重跑失败，详情已写入推文 AI 错误字段。", { result });
+    }
+    const refreshedPost = await EchohuntSocialListeningPost.findByPk(post.id);
+    await writeAudit({
+      boardId: board.id,
+      adminId: getAdminId(req),
+      action: "post_ai_reanalyze",
+      payload: { postId: post.id, tweetId: post.tweetId, result },
+    });
+    return res.json({ success: true, data: { post: serializePost(refreshedPost), result } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_POST_REANALYZE_FAILED");
   }
 });
 

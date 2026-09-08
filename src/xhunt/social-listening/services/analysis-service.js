@@ -355,9 +355,30 @@ function normalizeKeywordExclusion(value) {
   return normalizeSearchText(String(value || "").trim().replace(/^[@#$]+/, ""));
 }
 
+function shouldPreferKeywordDisplay(current, candidate) {
+  const existing = String(current || "").trim();
+  const next = String(candidate || "").trim();
+  const existingIsLowercaseLatin = existing === existing.toLowerCase() && /[a-z]/.test(existing);
+  const nextIsUppercaseAcronym = next === next.toUpperCase() && /^[A-Z0-9]{2,}$/.test(next);
+  return existingIsLowercaseLatin && nextIsUppercaseAcronym;
+}
+
 function filterExcludedKeywords(values, exclusions = []) {
   const exclusionSet = new Set(normalizeList(exclusions).map(normalizeKeywordExclusion).filter(Boolean));
-  return normalizeList(values).filter((value) => !exclusionSet.has(normalizeKeywordExclusion(value)));
+  const output = [];
+  const indexByKeyword = new Map();
+  for (const value of normalizeList(values)) {
+    const key = normalizeKeywordExclusion(value);
+    if (!key || exclusionSet.has(key)) continue;
+    const existingIndex = indexByKeyword.get(key);
+    if (existingIndex === undefined) {
+      indexByKeyword.set(key, output.length);
+      output.push(value);
+    } else if (shouldPreferKeywordDisplay(output[existingIndex], value)) {
+      output[existingIndex] = value;
+    }
+  }
+  return output;
 }
 
 function normalizeHotTags(value, text, limit = 12, exclusions = []) {
@@ -557,6 +578,9 @@ async function analyzePendingPostAi(board, options = {}) {
   const aiConfig = await getBoardAiConfig(board);
   const contentEnabled = Boolean(aiConfig.contentEnabled && hasLocalAiConfig(aiConfig));
   const attitudeEnabled = Boolean(aiConfig.projectAttitudeEnabled && hasLocalAiConfig(aiConfig));
+  const force = Boolean(options.force);
+  const postId = String(options.postId || "").trim();
+  if (force && !postId) throw new Error("SOCIAL_LISTENING_REANALYZE_POST_ID_REQUIRED");
   if (!contentEnabled && !attitudeEnabled) {
     return {
       enabled: false,
@@ -583,12 +607,13 @@ async function analyzePendingPostAi(board, options = {}) {
       { attitudeStatus: { [Op.in]: ["pending", "failed"] } }
     );
   }
-  const posts = await EchohuntSocialListeningPost.findAll({
-    where: applyRecallExcludeAuthorFilter({
+  const postWhere = {
       boardId: board.id,
       text: { [Op.ne]: null },
-      [Op.or]: pendingClauses,
-    }, board),
+      ...(force ? { id: postId } : { [Op.or]: pendingClauses }),
+    };
+  const posts = await EchohuntSocialListeningPost.findAll({
+    where: applyRecallExcludeAuthorFilter(postWhere, board),
     order: [
       [getAiTextLengthOrder(), "ASC"],
       [getAiRankOrder(), "ASC"],
@@ -605,8 +630,8 @@ async function analyzePendingPostAi(board, options = {}) {
   await runWithConcurrency(posts, concurrency, async (post) => {
     const itemStartedAt = Date.now();
     const aiText = getPostAiText(post, { maxTextLength });
-    const shouldGenerateContent = contentEnabled && isPendingContentPost(post);
-    const shouldGenerateAttitude = attitudeEnabled && isPendingAttitudePost(post);
+    const shouldGenerateContent = contentEnabled && (force || isPendingContentPost(post));
+    const shouldGenerateAttitude = attitudeEnabled && (force || isPendingAttitudePost(post));
     if (!shouldGenerateContent && !shouldGenerateAttitude) return;
     if (shouldGenerateContent) content.selected += 1;
     if (shouldGenerateAttitude) attitude.selected += 1;
@@ -626,7 +651,7 @@ async function analyzePendingPostAi(board, options = {}) {
       const result = await callTweetAnalysisAi(board, post, { maxTextLength });
       const patch = {};
       const rawAi = { ...(post.rawTweet?.socialListeningAi || {}) };
-      const shouldReplaceOldAiFields = post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
+      const shouldReplaceOldAiFields = force || post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
 
       if (shouldGenerateContent) {
         const matchedKeywords = Array.isArray(post.rawTweet?.matchedKeywords) ? post.rawTweet.matchedKeywords : [];
@@ -708,10 +733,15 @@ async function analyzePendingPostAi(board, options = {}) {
   return { enabled: true, content, attitude, promptOverrides, selected: posts.length, concurrency, maxTextLength, durationMs };
 }
 
+async function reanalyzeSocialListeningPostAi(board, postId) {
+  return analyzePendingPostAi(board, { postId, force: true, limit: 1, concurrency: 1 });
+}
+
 module.exports = {
   getBoardAiConfig,
   buildTweetAnalysisPromptPreview,
   scoreToSentiment,
   buildPromptTrace,
   analyzePendingPostAi,
+  reanalyzeSocialListeningPostAi,
 };

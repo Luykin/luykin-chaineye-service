@@ -40,6 +40,7 @@ import {
 } from "antd";
 import { DeleteOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { fetchVipLists } from "@/services/feature-flags";
@@ -60,6 +61,7 @@ import {
   pauseSocialListeningAiWorker,
   pauseSocialListeningBoard,
   refreshSocialListeningBoard,
+  reanalyzeSocialListeningPost,
   recoverSocialListeningJob,
   resolveSocialListeningAccount,
   resumeSocialListeningAiWorker,
@@ -136,7 +138,7 @@ const POST_FIELD_GUIDE = [
 ];
 
 const DEFAULT_AI_PROMPTS = {
-  "tweetAnalysis": "一次分析下方推文，按 Schema 输出标签、摘要和项目态度 JSON；不要翻译/复述全文，不添加原文没有的事实。\n\n- 标签只能使用 Schema 枚举；无关或无法判断时 domain_tag=其他，子标签和 hot_tags 为空。\n- hot_tags 优先 2-6 个核心词（最多 12）：只取原文出现的核心实体、事件、动作、争议或叙事词；不要用 crypto、Web3、AI 等泛类目凑数。\n- 词云排除词：{keywordExclusions}；即使原文出现，也不得放入 hot_tags。\n- summary_cn 不超过 {words} 个词/短语；summary_en 为短句。\n- 当前项目：{project}；可识别名称/别名/官方 Handle：{projectAliases}。命中任一名称或 @Handle 才可视为讨论当前项目。\n- score、sentiment、attitude_summary 只判断对当前项目的态度；只有确认相关但无褒贬才为 neutral。无关、证据不足或态度不可靠时 sentiment=unknown、relevant_to_project=false 或 confidence<0.5。\n\n发布时间：{createdAt}\n推文：{text}\n媒体：{media}",
+  "tweetAnalysis": "一次分析下方推文，按 Schema 输出标签、摘要和项目态度 JSON；不要翻译/复述全文，不添加原文没有的事实。\n\n- 标签只能使用 Schema 枚举；无关或无法判断时 domain_tag=其他，子标签和 hot_tags 为空。\n- hot_tags 优先 2-6 个核心词（最多 12）：只取原文出现的核心实体、事件、动作、争议或叙事词；不要用 crypto、Web3、AI 等泛类目凑数。\n- hot_tags 不要重复：大小写、空格或 @/#/$ 前缀不同但实际相同的词只保留一个（如 BSC 与 bsc）。\n- 词云排除词：{keywordExclusions}；即使原文出现，也不得放入 hot_tags。\n- summary_cn 不超过 {words} 个词/短语；summary_en 为短句。\n- 当前项目：{project}；可识别名称/别名/官方 Handle：{projectAliases}。命中任一名称或 @Handle 才可视为讨论当前项目。\n- 先判断评价对象：提到项目名、账号或相关人物，不等于在评价当前项目。若评价的是文章、转发内容、其他项目、人物，或只是提到项目相关人物，relevant_to_project=false、sentiment=unknown。\n- score、sentiment、attitude_summary 只判断对当前项目的态度；只有确认相关但无褒贬才为 neutral。\n- 不可只按负面词打分：😂、😆 等笑脸、玩笑、夸张或反讽语气，如无对当前项目明确且严肃的风险、损失、指控或抵制，应为 neutral（确认相关）或 unknown（评价对象不明）。“差评😆”“违反投资条款😂”这类调侃不能仅凭关键词判 negative。\n\n发布时间：{createdAt}\n推文：{text}\n媒体：{media}",
 };
 
 const EXTRA_LLM_MODEL_OPTIONS: LlmModelOption[] = [
@@ -846,27 +848,62 @@ function ConfigGuide({ board }: { board?: SocialListeningBoard | null }) {
 }
 
 function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open: boolean }) {
+  const [messageApi, contextHolder] = message.useMessage();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const samplesQuery = useQuery({
-    queryKey: ["social-listening", "latest-ai-samples", boardId, page, pageSize],
-    queryFn: () => fetchSocialListeningPosts(boardId, { range: "30D", page, pageSize, sort: "ai_recent", ai: "analyzed" }),
+    queryKey: ["social-listening", "latest-ai-samples", boardId, page, pageSize, searchTerm],
+    queryFn: () => fetchSocialListeningPosts(boardId, { range: "30D", page, pageSize, q: searchTerm, sort: "ai_recent", ai: "analyzed" }),
     enabled: open && Boolean(boardId),
     refetchInterval: open ? 15_000 : false,
   });
   const pageData = samplesQuery.data?.data;
   const samples = pageData?.items || [];
   const total = pageData?.total || 0;
+  const reanalyzeMutation = useMutation({
+    mutationFn: (postId: string) => reanalyzeSocialListeningPost(boardId, postId),
+    onSuccess: () => { messageApi.success("已按当前提示词重新完成 AI 分析"); void samplesQuery.refetch(); },
+    onError: (error: Error) => messageApi.error(error.message || "重新 AI 分析失败"),
+  });
+
+  function applySearch(value: string) {
+    setSearchInput(value);
+    setSearchTerm(value.trim());
+    setPage(1);
+  }
 
   return (
     <Space direction="vertical" size={12} className="social-listening-full">
+      {contextHolder}
       <Alert
         type="info"
         showIcon
         message="AI 回填检查"
-        description="按 aiAnalyzedAt 倒序展示最近回填过的帖子；字段状态、摘要、标签、态度和字段来源放在一起看，方便判断综合 Prompt 质量。"
+        description="按 AI 分析时间倒序查看。可搜索推文正文、作者或 Tweet ID；单条重跑会直接使用当前生效的提示词覆盖旧 AI 结果，不重新采集原文。"
         action={<Space size={8} wrap><Text type="secondary">共 {formatNumber(total)} 条</Text><Button size="small" icon={<ReloadOutlined />} loading={samplesQuery.isFetching} onClick={() => samplesQuery.refetch()}>刷新样本</Button></Space>}
       />
+      <Card size="small" bordered={false} style={{ background: "#f8fafc" }}>
+        <Space wrap className="social-listening-full" size={10}>
+          <Input.Search
+            allowClear
+            value={searchInput}
+            onChange={(event) => {
+              setSearchInput(event.target.value);
+              if (!event.target.value) {
+                setSearchTerm("");
+                setPage(1);
+              }
+            }}
+            onSearch={applySearch}
+            placeholder="搜索推文正文、作者或 Tweet ID"
+            enterButton="搜索"
+            style={{ width: "min(440px, 100%)" }}
+          />
+          {searchTerm ? <Tag color="blue">筛选：{searchTerm}</Tag> : <Text type="secondary">仅展示已完成 AI 分析的推文</Text>}
+        </Space>
+      </Card>
       <Collapse
         bordered={false}
         items={[{
@@ -916,7 +953,20 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
                     <Text type="secondary">AI：{formatDate(getString(ai.aiAnalyzedAt))}</Text>
                   </Space>
                 )}
-                extra={<a href={post.tweetUrl} target="_blank" rel="noreferrer">打开推文</a>}
+                extra={(
+                  <Space size={8}>
+                    <Popconfirm
+                      title="按当前提示词重新分析？"
+                      description="将覆盖这条推文现有的标签、摘要和项目态度，并产生 1 次 AI 调用。"
+                      okText="重新分析"
+                      cancelText="取消"
+                      onConfirm={() => reanalyzeMutation.mutate(post.id)}
+                    >
+                      <Button size="small" icon={<ReloadOutlined />} loading={reanalyzeMutation.isPending && reanalyzeMutation.variables === post.id}>重新 AI 分析</Button>
+                    </Popconfirm>
+                    <a href={post.tweetUrl} target="_blank" rel="noreferrer">打开推文</a>
+                  </Space>
+                )}
               >
                 <Space direction="vertical" size={12} className="social-listening-full">
                   <Space size={[4, 4]} wrap>
@@ -1092,6 +1142,8 @@ function AiPostProcessingGuide({ compact = false, defaultCollapsed = false }: { 
 function AiRuntimeConfigPanel() {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm();
+  const { user } = useAuth();
+  const canManageRuntimeConfig = user?.role === "super";
   const [estimatePosts, setEstimatePosts] = useState(10000);
   const configQuery = useQuery({
     queryKey: ["social-listening", "runtime-config"],
@@ -1183,6 +1235,7 @@ function AiRuntimeConfigPanel() {
     <Space direction="vertical" size={12} className="social-listening-full social-listening-ai-runtime-panel">
       {contextHolder}
       {detail?.loadError ? <Alert type="warning" showIcon message="当前使用默认配置" description={detail.loadError} /> : null}
+      {!canManageRuntimeConfig ? <Alert type="info" showIcon message="当前为只读模式" description="AI 总配置、AI Worker 的暂停和恢复仅超级管理员可操作。" /> : null}
       <AiPostProcessingGuide />
       <Row gutter={[16, 16]} align="top">
         <Col xs={24} xl={6}>
@@ -1209,18 +1262,18 @@ function AiRuntimeConfigPanel() {
           </Card>
         </Col>
         <Col xs={24} xl={18}>
-          <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()}>
+          <Form form={form} layout="vertical" disabled={!canManageRuntimeConfig} onFinish={() => updateMutation.mutate()}>
             <Card
               size="small"
               title="AI Worker（独立回填任务）"
               extra={<Space>
                 {aiWorkerStatus?.enabled ? <Tag color="green">运行中</Tag> : <Tag color="orange">已暂停</Tag>}
                 <Button size="small" icon={<ReloadOutlined />} loading={aiWorkerQuery.isFetching} onClick={() => aiWorkerQuery.refetch()}>刷新状态</Button>
-                {aiWorkerStatus?.enabled ? (
+                {canManageRuntimeConfig && aiWorkerStatus?.enabled ? (
                   <Button size="small" icon={<PauseCircleOutlined />} loading={pauseAiWorkerMutation.isPending} onClick={() => pauseAiWorkerMutation.mutate()}>暂停 AI</Button>
-                ) : (
+                ) : canManageRuntimeConfig ? (
                   <Button size="small" type="primary" icon={<PlayCircleOutlined />} loading={resumeAiWorkerMutation.isPending} onClick={() => resumeAiWorkerMutation.mutate()}>恢复 AI</Button>
-                )}
+                ) : null}
               </Space>}
             >
               <Alert
@@ -1348,10 +1401,10 @@ function AiRuntimeConfigPanel() {
                       <Col xs={24} md={8}><Form.Item name={["ai", "promptMaxLength"]} label="Prompt 最大长度" tooltip={aiHelp("promptMaxLength")}><InputNumber min={200} max={30000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "estimateCombinedInputTokens"]} label="综合输入 token/次" tooltip={aiHelp("estimateCombinedInputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "estimateCombinedOutputTokens"]} label="综合输出 token/次" tooltip={aiHelp("estimateCombinedOutputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col span={24}><Form.Item name={["ai", "systemPrompt"]} label="系统 Prompt" tooltip={{ title: "全局 systemPrompt，会拼到结构化 JSON 输出要求前面。", icon: <InfoCircleOutlined /> }}><TextArea rows={2} /></Form.Item></Col>
+                      <Col span={24}><Form.Item name={["ai", "systemPrompt"]} label="全局系统提示词" tooltip={{ title: "适用于所有看板，会拼到结构化 JSON 输出要求前面。", icon: <InfoCircleOutlined /> }}><TextArea rows={2} /></Form.Item></Col>
                       <Col span={24}>
                         <Alert type="info" showIcon message="每条推文只执行一次综合 AI 分析" description="一次调用会同时生成标签、摘要和项目态度。" style={{ marginBottom: 12 }} />
-                        <Form.Item name={["ai", "prompts", "tweetAnalysis"]} label="综合分析 Prompt（当前生效）" tooltip={{ title: "覆盖代码默认 tweetAnalysis Prompt；看板级综合 Prompt 优先级更高。支持变量：{text}、{project}、{createdAt}、{words}、{media}。", icon: <InfoCircleOutlined /> }}>
+                        <Form.Item name={["ai", "prompts", "tweetAnalysis"]} label="全局默认提示词" tooltip={{ title: "所有未单独设置覆盖提示词的看板都会使用它。当前看板若设置了覆盖提示词，会优先使用看板自己的版本。支持变量：{text}、{project}、{createdAt}、{words}、{media}。", icon: <InfoCircleOutlined /> }}>
                           <TextArea rows={7} placeholder={DEFAULT_AI_PROMPTS.tweetAnalysis} />
                         </Form.Item>
                       </Col>
@@ -1361,7 +1414,7 @@ function AiRuntimeConfigPanel() {
               ]}
             />
             <Space className="social-listening-ai-runtime-actions" wrap>
-              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存运行配置到 Nacos</Button>
+              {canManageRuntimeConfig ? <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存运行配置到 Nacos</Button> : null}
               <Text type="secondary">不会立即消耗 AI；账号级开关默认关闭，必须逐个确认预算后才会跑。</Text>
             </Space>
           </Form>
@@ -1476,7 +1529,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
       });
     },
     onSuccess: () => {
-      messageApi.success("该账号 AI 配置与看板级 Prompt 已保存，实际 Prompt 预览已刷新");
+      messageApi.success("该账号 AI 配置与当前看板覆盖提示词已保存，实际提示词预览已刷新");
       void configQuery.refetch();
       onChanged();
     },
@@ -1580,17 +1633,17 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 style={{ marginTop: 12 }}
                 items={[{
                   key: "board-prompt-override",
-                  label: "编辑看板级综合分析 Prompt（优先级最高）",
+                  label: "仅当前看板覆盖提示词（可选）",
                   children: (
                     <Space direction="vertical" size={10} className="social-listening-full">
-                      <Alert type="info" showIcon message="已填入后端当前实际生效的模板，可直接在此修改" description="未改动该字段时，保存其他 AI 设置仍会继续继承当前模板；修改后才创建当前看板覆盖。清空并保存可恢复继承。支持 {text}、{project}、{createdAt}、{words}、{media}；若模板未包含 {text}，Worker 会自动追加推文正文。" />
+                      <Alert type="info" showIcon message="留空时使用全局默认提示词；填写后只影响当前看板" description="这是当前看板的专属覆盖版本，优先级高于全局默认提示词。清空并保存即可恢复使用全局版本。支持 {text}、{project}、{createdAt}、{words}、{media}；若模板未包含 {text}，Worker 会自动追加推文正文。" />
                       <Form.Item name={["ai", "aiProjectName"]} label="AI 项目名" extra="不填时使用看板项目名称；这个值会直接替换最终 Prompt 中的 {project}。">
                         <Input placeholder="默认使用项目名称" maxLength={255} />
                       </Form.Item>
-                      <Form.Item name={["ai", "promptOverride"]} label="综合分析 Prompt 覆盖" extra="保存到当前看板，不影响其他项目。填写后优先级高于 Nacos 全局 Prompt。">
-                        <TextArea rows={12} maxLength={30000} placeholder="留空并保存，即恢复继承的全局/默认模板" />
+                      <Form.Item name={["ai", "promptOverride"]} label="当前看板覆盖提示词" extra="只影响当前看板；填写后替代全局默认提示词。">
+                        <TextArea rows={12} maxLength={30000} placeholder="留空并保存，即恢复使用全局默认提示词" />
                       </Form.Item>
-                      <Button onClick={() => { form.setFieldValue(["ai", "promptOverride"], ""); setPromptOverrideTouched(true); }}>清空覆盖，恢复继承</Button>
+                      <Button onClick={() => { form.setFieldValue(["ai", "promptOverride"], ""); setPromptOverrideTouched(true); }}>清空覆盖，改用全局默认</Button>
                     </Space>
                   ),
                 }]}
