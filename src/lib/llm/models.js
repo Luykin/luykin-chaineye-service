@@ -85,7 +85,9 @@ function getChatModel(options = {}) {
     temperature,
     streaming,
     maxTokens,
-    openAIApiKey: apiKey,
+    // @langchain/openai v1 reads `apiKey`; the legacy `openAIApiKey` field
+    // is ignored and causes an unintended fallback to OPENAI_API_KEY.
+    apiKey,
     modelKwargs: Object.keys(modelKwargs).length > 0 ? modelKwargs : undefined,
     configuration: {
       baseURL: baseURLOverride || config.baseURL,
