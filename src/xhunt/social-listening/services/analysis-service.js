@@ -141,11 +141,11 @@ function getRecallExcludeAuthorHandles(board) {
   return Array.from(new Set(values.map(normalizeTwitterHandle).filter(Boolean))).slice(0, 50);
 }
 
-function applyRecallExcludeAuthorFilter(where, board) {
+function applyRecallExcludeAuthorFilter(queryWhere, board) {
   const handles = getRecallExcludeAuthorHandles(board);
-  if (!handles.length) return where;
-  where[Op.and] = [
-    ...(where[Op.and] || []),
+  if (!handles.length) return queryWhere;
+  queryWhere[Op.and] = [
+    ...(queryWhere[Op.and] || []),
     {
       [Op.or]: [
         { authorHandle: null },
@@ -153,7 +153,7 @@ function applyRecallExcludeAuthorFilter(where, board) {
       ],
     },
   ];
-  return where;
+  return queryWhere;
 }
 
 function pickPromptValue(prompts, field) {
