@@ -4,7 +4,12 @@ const {
   EchohuntSocialListeningPost,
   EchohuntSocialListeningAccessAuditLog,
 } = require("../../../models/postgres-start");
-const { normalizeRangeKey, getWindowForRange, EFFECTIVE_SENTIMENTS } = require("./aggregate-service");
+const {
+  normalizeRangeKey,
+  getWindowForRange,
+  EFFECTIVE_SENTIMENTS,
+  INFLUENTIAL_GLOBAL_RANK_LIMIT,
+} = require("./aggregate-service");
 const { serializePost } = require("./board-service");
 const { publicError } = require("./errors");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
@@ -40,6 +45,24 @@ function normalizePostType(value) {
   if (text === "reply") return "reply";
   if (["post", "normal", "original", "non_reply", "non-reply"].includes(text)) return "post";
   return "";
+}
+
+function buildInfluentialRankCondition() {
+  return {
+    [Op.or]: [
+      { authorGlobalRank: { [Op.between]: [1, INFLUENTIAL_GLOBAL_RANK_LIMIT] } },
+      literal(`
+        (
+          (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}') ~ '^[0-9]+$'
+            AND ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolRank}')::int BETWEEN 1 AND ${INFLUENTIAL_GLOBAL_RANK_LIMIT})
+          OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}') ~ '^[0-9]+$'
+            AND ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,globalRank}')::int BETWEEN 1 AND ${INFLUENTIAL_GLOBAL_RANK_LIMIT})
+          OR (("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}') ~ '^[0-9]+$'
+            AND ("EchohuntSocialListeningPost"."rawAuthor"#>>'{feature,rank,kolGlobalRank}')::int BETWEEN 1 AND ${INFLUENTIAL_GLOBAL_RANK_LIMIT})
+        )
+      `),
+    ],
+  };
 }
 
 function buildPostWhere(board, query = {}, options = {}) {
@@ -108,6 +131,9 @@ function buildPostWhere(board, query = {}, options = {}) {
     : String(query.tweetIds || "").split(",");
   const normalizedTweetIds = tweetIds.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 200);
   if (normalizedTweetIds.length) where.tweetId = { [Op.in]: normalizedTweetIds };
+  if (["1", "true", "yes"].includes(String(query.influence || "").trim().toLowerCase())) {
+    appendWhereAnd(where, buildInfluentialRankCondition());
+  }
   return { where: applyRecallExcludeAuthorFilter(where, board), rangeKey };
 }
 
