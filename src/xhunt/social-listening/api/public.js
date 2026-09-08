@@ -36,7 +36,6 @@ const {
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const {
-  getRecallExcludeAuthorHandles,
   applyRecallExcludeAuthorFilter,
   applyRecallExcludeInfluentialSignalFilter,
   applyRecallExcludeAuthorAlertFilter,
@@ -347,9 +346,10 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
-    const snapshot = storedSnapshot && !getRecallExcludeAuthorHandles(board).length
-      ? storedSnapshot
-      : await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
+    // Snapshots are generated with the same recall-excluded-author filter as
+    // the live calculation, so using the stored result preserves the current
+    // board rules without rebuilding the full range on every request.
+    const snapshot = storedSnapshot || await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
     res.set("Cache-Control", "private, max-age=30");
     return res.json({
       success: true,

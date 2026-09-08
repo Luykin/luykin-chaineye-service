@@ -43,7 +43,6 @@ const {
 } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const {
-  getRecallExcludeAuthorHandles,
   applyRecallExcludeInfluentialSignalFilter,
   applyRecallExcludeAuthorAlertFilter,
 } = require("../services/post-filter");
@@ -807,9 +806,7 @@ router.get("/boards/:boardId/overview", async (req, res) => {
       order: [["generatedAt", "DESC"]],
       raw: true,
     });
-    const snapshot = storedSnapshot && !getRecallExcludeAuthorHandles(board).length
-      ? storedSnapshot
-      : await buildSnapshotPayload(board, rangeKey);
+    const snapshot = storedSnapshot || await buildSnapshotPayload(board, rangeKey);
     const accountSummary = snapshot?.accountSummary && typeof snapshot.accountSummary === "object" ? snapshot.accountSummary : {};
     const responseSnapshot = snapshot ? { ...snapshot } : null;
     if (responseSnapshot && Array.isArray(snapshot.topViewedPosts)) responseSnapshot.topViewedPosts = snapshot.topViewedPosts;
