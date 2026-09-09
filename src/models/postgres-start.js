@@ -43,6 +43,7 @@ const EchohuntSocialListeningBoardModel = require("../xhunt/social-listening/mod
 const EchohuntSocialListeningBoardAccessModel = require("../xhunt/social-listening/models/EchohuntSocialListeningBoardAccess");
 const EchohuntSocialListeningAccessAuditLogModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAccessAuditLog");
 const EchohuntSocialListeningPostModel = require("../xhunt/social-listening/models/EchohuntSocialListeningPost");
+const EchohuntSocialListeningTextCondensationModel = require("../xhunt/social-listening/models/EchohuntSocialListeningTextCondensation");
 const EchohuntSocialListeningSnapshotModel = require("../xhunt/social-listening/models/EchohuntSocialListeningSnapshot");
 const EchohuntSocialListeningAccountSignalModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAccountSignal");
 const EchohuntSocialListeningAlertModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAlert");
@@ -131,6 +132,7 @@ const EchohuntSocialListeningBoard = EchohuntSocialListeningBoardModel(pgInstanc
 const EchohuntSocialListeningBoardAccess = EchohuntSocialListeningBoardAccessModel(pgInstance);
 const EchohuntSocialListeningAccessAuditLog = EchohuntSocialListeningAccessAuditLogModel(pgInstance);
 const EchohuntSocialListeningPost = EchohuntSocialListeningPostModel(pgInstance);
+const EchohuntSocialListeningTextCondensation = EchohuntSocialListeningTextCondensationModel(pgInstance);
 const EchohuntSocialListeningSnapshot = EchohuntSocialListeningSnapshotModel(pgInstance);
 const EchohuntSocialListeningAccountSignal = EchohuntSocialListeningAccountSignalModel(pgInstance);
 const EchohuntSocialListeningAlert = EchohuntSocialListeningAlertModel(pgInstance);
@@ -539,6 +541,7 @@ module.exports = {
   EchohuntSocialListeningBoardAccess,
   EchohuntSocialListeningAccessAuditLog,
   EchohuntSocialListeningPost,
+  EchohuntSocialListeningTextCondensation,
   EchohuntSocialListeningSnapshot,
   EchohuntSocialListeningAccountSignal,
   EchohuntSocialListeningAlert,

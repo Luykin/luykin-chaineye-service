@@ -1,5 +1,9 @@
 const { Op, literal, fn, col, where } = require("sequelize");
-const { EchohuntSocialListeningPost } = require("../../../models/postgres-start");
+const { createHash } = require("crypto");
+const {
+  EchohuntSocialListeningPost,
+  EchohuntSocialListeningTextCondensation,
+} = require("../../../models/postgres-start");
 const { SENTIMENTS } = require("../constants");
 const { normalizeTweetText } = require("../utils/text-normalize");
 const { normalizeTwitterHandle } = require("../utils/twitter");
@@ -14,7 +18,7 @@ const {
   STRICT_AI_SUB_TAGS,
   DEFAULT_LOCAL_AI_PROMPTS,
 } = require("./ai-prompt-templates");
-const { generateTweetAnalysis } = require("./local-ai-service");
+const { generateTweetAnalysis, generateTweetTextCondensation } = require("./local-ai-service");
 const { fetchTweetRowsByIds } = require("./data-source");
 
 
@@ -24,14 +28,29 @@ function clampInteger(value, fallback, min, max) {
   return Math.min(Math.max(Math.floor(num), min), max);
 }
 
+function truncateText(value, maxLength) {
+  return Array.from(String(value || "")).slice(0, maxLength).join("");
+}
+
+function textHash(text) {
+  return createHash("sha256").update(String(text || "")).digest("hex");
+}
+
 function getPostAiText(post, options = {}) {
   const rawText = normalizeTweetText(post.text || post.normalizedText || "");
   const maxLength = clampInteger(options.maxTextLength, 1200, 200, 5000);
-  const truncated = rawText.length > maxLength;
+  const tweetId = String(post.tweetId || "");
+  const condensedText = normalizeTweetText(options.condensedTextsByTweetId?.get(tweetId) || "");
+  const longTextMode = options.longTextModesByTweetId?.get(tweetId) || "";
+  const rawLength = Array.from(rawText).length;
+  const fallbackTruncated = longTextMode === "truncated";
+  const truncated = fallbackTruncated || (!condensedText && rawLength > maxLength);
   return {
-    text: truncated ? rawText.slice(0, maxLength) : rawText,
-    rawLength: rawText.length,
+    text: condensedText ? truncateText(condensedText, maxLength) : (truncated ? truncateText(rawText, maxLength) : rawText),
+    rawLength,
     truncated,
+    condensed: longTextMode === "condensed",
+    fallbackTruncated,
     maxLength,
   };
 }
@@ -52,26 +71,36 @@ function getPostReferenceCandidates(post = {}) {
 
 function getPostReference(post, referenceRowsById, options = {}) {
   const references = getPostReferenceCandidates(post)
-    .map((reference) => ({ ...reference, rawText: normalizeTweetText(referenceRowsById.get(reference.tweetId)?.text || "") }))
+    .map((reference) => {
+      const rawText = normalizeTweetText(referenceRowsById.get(reference.tweetId)?.text || "");
+      const condensedText = normalizeTweetText(options.condensedTextsByTweetId?.get(reference.tweetId) || "");
+      const longTextMode = options.longTextModesByTweetId?.get(reference.tweetId) || "";
+      return { ...reference, rawText, condensedText, longTextMode };
+    })
     .filter((reference) => reference.rawText);
-  if (!references.length) return { context: "", rawLength: 0, truncated: false };
+  if (!references.length) return { context: "", rawLength: 0, truncated: false, condensedCount: 0, fallbackTruncatedCount: 0 };
 
   const maxLength = clampInteger(options.maxReferenceContextLength, 1200, 200, 2000);
   const directLength = references.length > 1 ? Math.max(100, Math.floor(maxLength / 3)) : maxLength;
   const contextParts = references.map((reference, index) => {
     const allowedLength = index === 0 ? directLength : Math.max(100, maxLength - directLength);
-    const truncated = reference.rawText.length > allowedLength;
-    const text = truncated ? reference.rawText.slice(0, allowedLength) : reference.rawText;
+    const sourceText = reference.condensedText || reference.rawText;
+    const truncated = Array.from(sourceText).length > allowedLength;
+    const text = truncated ? truncateText(sourceText, allowedLength) : sourceText;
     return {
-      text: `${reference.label}（仅作语境，非当前作者观点）：${text}`,
-      rawLength: reference.rawText.length,
+      text: `${reference.label}${reference.longTextMode === "condensed" ? "（长文精简，仅作语境，非当前作者观点）" : reference.longTextMode === "truncated" ? "（长文截断，仅作语境，非当前作者观点）" : "（仅作语境，非当前作者观点）"}：${text}`,
+      rawLength: Array.from(reference.rawText).length,
       truncated,
+      condensed: reference.longTextMode === "condensed",
+      fallbackTruncated: reference.longTextMode === "truncated",
     };
   });
   return {
     context: contextParts.map((item) => item.text).join("\n\n"),
     rawLength: contextParts.reduce((total, item) => total + item.rawLength, 0),
     truncated: contextParts.some((item) => item.truncated),
+    condensedCount: contextParts.filter((item) => item.condensed).length,
+    fallbackTruncatedCount: contextParts.filter((item) => item.fallbackTruncated).length,
   };
 }
 
@@ -84,6 +113,93 @@ async function loadReferenceRowsById(posts = []) {
   if (!tweetIds.length) return new Map();
   const rows = await fetchTweetRowsByIds(tweetIds, tweetIds.length);
   return new Map(rows.map((row) => [String(row.id), row]));
+}
+
+function collectLongTextCandidates(posts, referenceRowsById, threshold) {
+  const candidatesByTweetId = new Map();
+  const addCandidate = (tweetId, text) => {
+    const normalizedText = normalizeTweetText(text || "");
+    const normalizedTweetId = String(tweetId || "").trim();
+    if (!normalizedTweetId || Array.from(normalizedText).length <= threshold) return;
+    candidatesByTweetId.set(normalizedTweetId, {
+      tweetId: normalizedTweetId,
+      text: normalizedText,
+      sourceTextHash: textHash(normalizedText),
+      sourceTextLength: Array.from(normalizedText).length,
+    });
+  };
+  posts.forEach((post) => addCandidate(post.tweetId, post.text || post.normalizedText));
+  referenceRowsById.forEach((row, tweetId) => addCandidate(tweetId, row?.text));
+  return Array.from(candidatesByTweetId.values());
+}
+
+async function prepareLongTextCondensations(posts, referenceRowsById, aiConfig, options = {}) {
+  const threshold = clampInteger(options.threshold || aiConfig.longTextCondensationThreshold, 1200, 500, 10000);
+  const maxLength = clampInteger(options.maxLength || aiConfig.longTextCondensationMaxLength, 900, 200, 900);
+  const concurrency = clampInteger(options.concurrency || aiConfig.longTextCondensationConcurrency, 2, 1, 4);
+  const candidates = collectLongTextCandidates(posts, referenceRowsById, threshold);
+  const condensedTextsByTweetId = new Map();
+  const longTextModesByTweetId = new Map();
+  const setFallbackTruncation = (candidate) => {
+    condensedTextsByTweetId.set(candidate.tweetId, truncateText(candidate.text, maxLength));
+    longTextModesByTweetId.set(candidate.tweetId, "truncated");
+  };
+  if (!candidates.length) return { condensedTextsByTweetId, longTextModesByTweetId, candidates: 0, cacheHits: 0, generated: 0, failed: 0, threshold, maxLength };
+
+  let cachedRows;
+  try {
+    cachedRows = await EchohuntSocialListeningTextCondensation.findAll({
+      where: { tweetId: { [Op.in]: candidates.map((item) => item.tweetId) } },
+      raw: true,
+    });
+  } catch (error) {
+    console.warn(`[SocialListeningAI] load long-text condensations failed: ${summarizeError(error)}`);
+    candidates.forEach(setFallbackTruncation);
+    return { condensedTextsByTweetId, longTextModesByTweetId, candidates: candidates.length, cacheHits: 0, generated: 0, failed: candidates.length, threshold, maxLength };
+  }
+  const cachedByTweetId = new Map(cachedRows.map((row) => [String(row.tweetId), row]));
+  const missing = candidates.filter((candidate) => {
+    const cached = cachedByTweetId.get(candidate.tweetId);
+    const condensedText = normalizeTweetText(cached?.condensedText || "");
+    if (!cached || cached.sourceTextHash !== candidate.sourceTextHash || !condensedText) return true;
+    condensedTextsByTweetId.set(candidate.tweetId, truncateText(condensedText, maxLength));
+    longTextModesByTweetId.set(candidate.tweetId, "condensed");
+    return false;
+  });
+
+  let generated = 0;
+  let failed = 0;
+  await runWithConcurrency(missing, concurrency, async (candidate) => {
+    try {
+      const result = await generateTweetTextCondensation({ text: candidate.text, maxLength, aiConfig });
+      const condensedText = truncateText(normalizeTweetText(result.condensedText), maxLength);
+      if (!condensedText) throw new Error("SOCIAL_LISTENING_TEXT_CONDENSATION_EMPTY_RESULT");
+      await EchohuntSocialListeningTextCondensation.upsert({
+        tweetId: candidate.tweetId,
+        sourceTextHash: candidate.sourceTextHash,
+        sourceTextLength: candidate.sourceTextLength,
+        condensedText,
+        model: result.model || null,
+        condensedAt: new Date(),
+      });
+      condensedTextsByTweetId.set(candidate.tweetId, condensedText);
+      longTextModesByTweetId.set(candidate.tweetId, "condensed");
+      generated += 1;
+    } catch (error) {
+      failed += 1;
+      setFallbackTruncation(candidate);
+      console.warn(`[SocialListeningAI] condense long text failed tweet=${candidate.tweetId} length=${candidate.sourceTextLength}: ${summarizeError(error)}`);
+    }
+  });
+  return {
+    condensedTextsByTweetId,
+    candidates: candidates.length,
+    cacheHits: candidates.length - missing.length,
+    generated,
+    failed,
+    threshold,
+    maxLength,
+  };
 }
 
 async function runWithConcurrency(items, concurrency, worker) {
@@ -241,6 +357,13 @@ function appendKeywordExclusionRule(prompt, field, variables = {}) {
   return `${prompt}\n\n关键词输出限制（必须遵守）：以下是词云排除词：${exclusions}。即使它们出现在原文中，也不得输出到 hot_tags（后端会将 hot_tags 写入 keywords）。`;
 }
 
+function removeEmptyMediaLine(prompt, media) {
+  if (String(media || "").trim()) return prompt;
+  // 默认模板及常见自定义模板均以独占一行的“媒体：{media}”表示媒体。
+  // 没有媒体时移除整行，避免向模型传递没有内容的字段标签。
+  return String(prompt || "").replace(/^[\t ]*(?:媒体|media)\s*[:：][\t ]*(?:\r?\n|$)/gim, "");
+}
+
 function buildPromptInfo(board, aiConfig, field, variables = {}) {
   const boardTemplate = getBoardPrompt(board, field, aiConfig?.promptMaxLength);
   const runtimeTemplate = getRuntimePrompt(aiConfig, field);
@@ -260,7 +383,9 @@ function buildPromptInfo(board, aiConfig, field, variables = {}) {
     configured = true;
   }
 
-  let prompt = appendKeywordExclusionRule(renderPromptTemplate(template, variables), field, variables);
+  let prompt = renderPromptTemplate(template, variables);
+  prompt = removeEmptyMediaLine(prompt, variables.media);
+  prompt = appendKeywordExclusionRule(prompt, field, variables);
   if (variables.text && !prompt.includes(String(variables.text))) {
     prompt = `${prompt}\n\n输入文本：\n${variables.text}`;
   }
@@ -558,10 +683,17 @@ async function callTweetAnalysisAi(board, post, options = {}) {
   const media = pickFirstMedia(post);
   const reference = options.reference || getPostReference(post, options.referenceRowsById || new Map(), {
     maxReferenceContextLength: options.maxReferenceContextLength,
+    condensedTextsByTweetId: options.condensedTextsByTweetId,
+    longTextModesByTweetId: options.longTextModesByTweetId,
   });
   const createdAt = post.postCreatedAt ? new Date(post.postCreatedAt).toISOString() : "";
+  const promptText = aiText.condensed
+    ? `长文精简版（基于当前原帖，仅保留核心内容）：${aiText.text}`
+    : aiText.fallbackTruncated
+      ? `长文截断版（精简调用失败，仅提供原文前段）：${aiText.text}`
+      : aiText.text;
   const variables = {
-    text: aiText.text,
+    text: promptText,
     referenceContext: reference.context,
     project,
     projectAliases,
@@ -689,6 +821,7 @@ async function analyzePendingPostAi(board, options = {}) {
     console.warn(`[SocialListeningAI] load reference context failed board=${board.id}:`, summarizeError(error));
     return new Map();
   });
+  const longTextCondensation = await prepareLongTextCondensations(posts, referenceRowsById, aiConfig);
 
   const content = { enabled: contentEnabled, selected: 0, analyzed: 0, failed: 0, skipped: 0 };
   const attitude = { enabled: attitudeEnabled, selected: 0, analyzed: 0, failed: 0 };
@@ -696,8 +829,16 @@ async function analyzePendingPostAi(board, options = {}) {
   const promptOverrides = hasPromptOverride(board, PROMPT_FIELDS.TWEET_ANALYSIS) ? 1 : 0;
   await runWithConcurrency(posts, concurrency, async (post) => {
     const itemStartedAt = Date.now();
-    const aiText = getPostAiText(post, { maxTextLength });
-    const reference = getPostReference(post, referenceRowsById, { maxReferenceContextLength });
+    const aiText = getPostAiText(post, {
+      maxTextLength,
+      condensedTextsByTweetId: longTextCondensation.condensedTextsByTweetId,
+      longTextModesByTweetId: longTextCondensation.longTextModesByTweetId,
+    });
+    const reference = getPostReference(post, referenceRowsById, {
+      maxReferenceContextLength,
+      condensedTextsByTweetId: longTextCondensation.condensedTextsByTweetId,
+      longTextModesByTweetId: longTextCondensation.longTextModesByTweetId,
+    });
     const shouldGenerateContent = contentEnabled && (force || isPendingContentPost(post));
     const shouldGenerateAttitude = attitudeEnabled && (force || isPendingAttitudePost(post));
     if (!shouldGenerateContent && !shouldGenerateAttitude) return;
@@ -716,9 +857,23 @@ async function analyzePendingPostAi(board, options = {}) {
     }
 
     try {
-      const result = await callTweetAnalysisAi(board, post, { maxTextLength, maxReferenceContextLength, referenceRowsById, reference });
+      const result = await callTweetAnalysisAi(board, post, {
+        maxTextLength,
+        maxReferenceContextLength,
+        referenceRowsById,
+        reference,
+        condensedTextsByTweetId: longTextCondensation.condensedTextsByTweetId,
+        longTextModesByTweetId: longTextCondensation.longTextModesByTweetId,
+      });
       const patch = {};
       const rawAi = { ...(post.rawTweet?.socialListeningAi || {}) };
+      rawAi.longTextCondensation = {
+        currentPost: aiText.condensed ? "condensed" : aiText.fallbackTruncated ? "truncated" : null,
+        referenceCondensedCount: reference.condensedCount,
+        referenceTruncatedCount: reference.fallbackTruncatedCount,
+        threshold: longTextCondensation.threshold,
+        maxLength: longTextCondensation.maxLength,
+      };
       const shouldReplaceOldAiFields = force || post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
 
       if (shouldGenerateContent) {
@@ -780,7 +935,7 @@ async function analyzePendingPostAi(board, options = {}) {
       });
       if (shouldGenerateContent) content.analyzed += 1;
       if (shouldGenerateAttitude) attitude.analyzed += 1;
-      console.log(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} reference=${Boolean(reference.context)} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude}`);
+      console.log(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} condensed=${aiText.condensed} fallbackTruncated=${aiText.fallbackTruncated} truncated=${aiText.truncated} reference=${Boolean(reference.context)} referenceCondensed=${reference.condensedCount} referenceFallbackTruncated=${reference.fallbackTruncatedCount} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude}`);
     } catch (error) {
       if (shouldGenerateContent) content.failed += 1;
       if (shouldGenerateAttitude) attitude.failed += 1;
@@ -797,8 +952,27 @@ async function analyzePendingPostAi(board, options = {}) {
   });
 
   const durationMs = Date.now() - startedAt;
-  console.log(`[SocialListeningAI] combined batch board=${board.id} posts=${posts.length} references=${referenceRowsById.size} content=${content.analyzed}/${content.selected} contentFailed=${content.failed} attitude=${attitude.analyzed}/${attitude.selected} attitudeFailed=${attitude.failed} concurrency=${concurrency} maxTextLength=${maxTextLength} maxReferenceContextLength=${maxReferenceContextLength} ms=${durationMs}`);
-  return { enabled: true, content, attitude, promptOverrides, selected: posts.length, referenceCount: referenceRowsById.size, concurrency, maxTextLength, maxReferenceContextLength, durationMs };
+  console.log(`[SocialListeningAI] combined batch board=${board.id} posts=${posts.length} references=${referenceRowsById.size} longText=${longTextCondensation.generated}/${longTextCondensation.candidates} cached=${longTextCondensation.cacheHits} longTextFailed=${longTextCondensation.failed} content=${content.analyzed}/${content.selected} contentFailed=${content.failed} attitude=${attitude.analyzed}/${attitude.selected} attitudeFailed=${attitude.failed} concurrency=${concurrency} maxTextLength=${maxTextLength} maxReferenceContextLength=${maxReferenceContextLength} ms=${durationMs}`);
+  return {
+    enabled: true,
+    content,
+    attitude,
+    promptOverrides,
+    selected: posts.length,
+    referenceCount: referenceRowsById.size,
+    longTextCondensation: {
+      candidates: longTextCondensation.candidates,
+      cacheHits: longTextCondensation.cacheHits,
+      generated: longTextCondensation.generated,
+      failed: longTextCondensation.failed,
+      threshold: longTextCondensation.threshold,
+      maxLength: longTextCondensation.maxLength,
+    },
+    concurrency,
+    maxTextLength,
+    maxReferenceContextLength,
+    durationMs,
+  };
 }
 
 async function reanalyzeSocialListeningPostAi(board, postId) {

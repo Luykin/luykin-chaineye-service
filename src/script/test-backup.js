@@ -36,7 +36,7 @@ async function testBackup() {
     console.log("\n提示：");
     console.log("  - 备份服务已集成到 API 服务器中，启动 API 服务器即可自动运行");
     console.log("  - 每 4 小时自动执行一次备份");
-    console.log("  - 自动保留最近 10 个备份文件");
+    console.log("  - 自动保留最近 5 个备份文件");
     console.log("  - 备份文件位置: backups/postgres/\n");
     
     process.exit(0);

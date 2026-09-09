@@ -179,6 +179,10 @@ export interface SocialListeningAiRuntimeConfig {
   contentConcurrency?: number;
   projectAttitudeConcurrency?: number;
   maxTextLength?: number;
+  referenceContextMaxLength?: number;
+  longTextCondensationThreshold?: number;
+  longTextCondensationMaxLength?: number;
+  longTextCondensationConcurrency?: number;
   negativeScoreThreshold: number;
   positiveScoreThreshold: number;
   tweetAnalysisMaxTokens?: number;

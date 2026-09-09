@@ -160,7 +160,11 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   projectAttitudeBatchSize: "AI Worker 每轮每个账号最多选取多少条态度待处理帖子；综合调用会合并同一条推文的任务。",
   contentConcurrency: "综合 AI Worker 并发帖子数；会和态度并发取较大值。",
   projectAttitudeConcurrency: "综合 AI Worker 并发帖子数；会和内容并发取较大值。",
-  maxTextLength: "进入 AI Prompt 前的推文硬截断字符数；超长推文会排在后面且记录 truncated=true。",
+  maxTextLength: "未命中长文精简缓存时，进入 AI Prompt 前的推文硬截断字符数。",
+  referenceContextMaxLength: "引用、回复对象和会话根帖进入 AI Prompt 前的总字符上限。",
+  longTextCondensationThreshold: "超过此字符数的正文先由默认模型精简并缓存；主帖及后续作为引用/回复对象、会话根帖时都复用该结果。默认 1200。",
+  longTextCondensationMaxLength: "缓存的长文精简内容最大字符数，不超过 900。默认 900。",
+  longTextCondensationConcurrency: "首次生成长文精简缓存时的并发，限制为 1–4，避免影响主分析。",
   negativeScoreThreshold: "态度分低于该值判定 negative；默认 4。",
   positiveScoreThreshold: "态度分高于该值判定 positive；中间区间判定 neutral；默认 6。",
   temperature: "模型随机性。分类/打分建议为 0，结果更稳定。",
@@ -1436,6 +1440,9 @@ function AiRuntimeConfigPanel() {
                       <Col xs={24} md={6}><Form.Item name={["ai", "maxRetries"]} label="重试次数" tooltip={aiHelp("maxRetries")}><InputNumber min={0} max={5} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "tweetAnalysisMaxTokens"]} label="综合输出上限" tooltip={aiHelp("tweetAnalysisMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "summaryWords"]} label="摘要词数" tooltip={aiHelp("summaryWords")}><InputNumber min={3} max={80} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "longTextCondensationThreshold"]} label="长文精简阈值" tooltip={aiHelp("longTextCondensationThreshold")}><InputNumber min={500} max={10000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "longTextCondensationMaxLength"]} label="长文精简上限" tooltip={aiHelp("longTextCondensationMaxLength")}><InputNumber min={200} max={900} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "longTextCondensationConcurrency"]} label="长文精简并发" tooltip={aiHelp("longTextCondensationConcurrency")}><InputNumber min={1} max={4} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" tooltip={aiHelp("estimateInputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" tooltip={aiHelp("estimateOutputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "promptMaxLength"]} label="Prompt 最大长度" tooltip={aiHelp("promptMaxLength")}><InputNumber min={200} max={30000} style={{ width: "100%" }} /></Form.Item></Col>
@@ -1676,7 +1683,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                   label: "仅当前看板覆盖提示词（可选）",
                   children: (
                     <Space direction="vertical" size={10} className="social-listening-full">
-                      <Alert type="info" showIcon message="留空时使用全局默认提示词；填写后只影响当前看板" description="这是当前看板的专属覆盖版本，优先级高于全局默认提示词。清空并保存即可恢复使用全局版本。支持 {text}、{project}、{createdAt}、{words}、{media}；若模板未包含 {text}，Worker 会自动追加推文正文。" />
+                      <Alert type="info" showIcon message="留空时使用全局默认提示词；填写后只影响当前看板" description="这是当前看板的专属覆盖版本，优先级高于全局默认提示词。清空并保存即可恢复使用全局版本。支持 {text}、{project}、{projectAliases}、{createdAt}、{words}、{media}、{keywordExclusions}、{referenceContext}；无媒体时，单独一行的“媒体：{media}”会自动移除。若模板未包含 {text}，Worker 会自动追加推文正文。" />
                       <Form.Item name={["ai", "aiProjectName"]} label="AI 项目名" extra="不填时使用看板项目名称；这个值会直接替换最终 Prompt 中的 {project}。">
                         <Input placeholder="默认使用项目名称" maxLength={255} />
                       </Form.Item>
