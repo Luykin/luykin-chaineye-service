@@ -13,6 +13,18 @@ const unlink = promisify(fs.unlink);
 const stat = promisify(fs.stat);
 const mkdir = promisify(fs.mkdir);
 
+const SOCIAL_LISTENING_TABLES = Object.freeze([
+  "EchohuntSocialListeningBoards",
+  "EchohuntSocialListeningBoardAccesses",
+  "EchohuntSocialListeningAccessAuditLogs",
+  "EchohuntSocialListeningPosts",
+  "EchohuntSocialListeningSnapshots",
+  "EchohuntSocialListeningAccountSignals",
+  "EchohuntSocialListeningAlerts",
+  "EchohuntSocialListeningKeyEvents",
+  "EchohuntSocialListeningJobs",
+]);
+
 /**
  * PostgreSQL 数据库自动备份服务
  * - 每 30 分钟自动备份一次
@@ -36,7 +48,7 @@ class PostgresBackupService {
     // 运行 pg_dump 时优先走本机环回地址，避免本地 socket 认证与外网连通差异
     this.dumpHost = process.env.PG_DUMP_HOST || "127.0.0.1";
 
-    // 备份白名单业务表：XHunt 表 + RootData Fundraising 核心表
+    // 备份白名单业务表：XHunt 表 + RootData Fundraising + Social Listening 主库业务表
     this.tablesToBackup = [
       "XHuntUsers",
       "XHuntUserTokens",
@@ -50,6 +62,7 @@ class PostgresBackupService {
       "Projects",
       "InvestmentRelationships",
       "PositionRelationships",
+      ...SOCIAL_LISTENING_TABLES,
       //   "MantleRegistrations",
     ];
 
@@ -61,6 +74,13 @@ class PostgresBackupService {
         description:
           "恢复 Projects、InvestmentRelationships、PositionRelationships 到指定备份时间点。PositionRelationships 也引用 Projects，必须一起处理，避免恢复后外键关系不一致。",
         tables: ["Projects", "InvestmentRelationships", "PositionRelationships"],
+      },
+      {
+        key: "social_listening",
+        label: "Social Listening：看板、帖子、AI 结果、任务与用户数据",
+        description:
+          "恢复 Social Listening 写入主 PostgreSQL 的全部 9 张业务表：看板与授权、帖子和 AI 分析结果、快照、账号信号、预警、关键事件、任务及访问审计。采集源 dev.* 是独立只读数据源，不在此主库恢复组内。",
+        tables: [...SOCIAL_LISTENING_TABLES],
       },
     ];
   }
@@ -228,7 +248,7 @@ class PostgresBackupService {
     const missingTables = tables.filter((table) => !presentTables.has(table));
     if (missingTables.length > 0) {
       throw new Error(
-        `备份文件不包含这些表的数据：${missingTables.join(", ")}。请确认该时间点之后的备份已包含 Fundraising 表。`
+        `备份文件不包含这些表的数据：${missingTables.join(", ")}。请确认所选备份生成于该表组纳入备份之后。`
       );
     }
 
@@ -434,7 +454,7 @@ class PostgresBackupService {
     console.log(`📦 开始备份数据库: ${this.dbConfig.database}`);
     console.log(`📝 备份文件: ${backupFileName}`);
     console.log(
-      `📋 备份表数量: ${this.tablesToBackup.length} 个 (XHunt + RootData Fundraising 白名单表)`
+      `📋 备份表数量: ${this.tablesToBackup.length} 个 (XHunt + RootData Fundraising + Social Listening 白名单表)`
     );
 
     try {

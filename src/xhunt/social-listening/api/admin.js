@@ -77,6 +77,32 @@ function normalizeAccountId(value) {
   return String(value || "").trim();
 }
 
+async function serializePostsWithReferences(posts = [], boardId) {
+  const referenceTweetIds = Array.from(new Set(posts.flatMap((post) => [post.quoteId, post.replyId])
+    .map((tweetId) => String(tweetId || "").trim())
+    .filter(Boolean)));
+  const referenceRows = referenceTweetIds.length
+    ? await EchohuntSocialListeningPost.findAll({
+      where: { boardId, tweetId: { [Op.in]: referenceTweetIds } },
+      attributes: ["id", "tweetId", "authorTwitterId", "authorHandle", "authorName", "authorAvatar", "postCreatedAt", "text"],
+      raw: true,
+    })
+    : [];
+  const referenceByTweetId = new Map(referenceRows.map((row) => [String(row.tweetId), serializePost(row)]));
+
+  return posts.map((post) => {
+    const referencePosts = [
+      post.quoteId ? { type: "quote", tweetId: String(post.quoteId) } : null,
+      post.replyId ? { type: "reply", tweetId: String(post.replyId) } : null,
+    ].filter(Boolean).map((reference) => ({
+      ...reference,
+      recalled: referenceByTweetId.has(reference.tweetId),
+      post: referenceByTweetId.get(reference.tweetId) || null,
+    }));
+    return { ...serializePost(post), referencePosts };
+  });
+}
+
 function normalizeHandle(value) {
   return String(value || "").trim().replace(/^@+/, "").toLowerCase();
 }
@@ -856,7 +882,7 @@ router.get("/boards/:boardId/posts", async (req, res) => {
       offset,
       limit,
     });
-    return res.json({ success: true, data: { rangeKey, items: result.rows.map(serializePost), page, pageSize, total: result.count } });
+    return res.json({ success: true, data: { rangeKey, items: await serializePostsWithReferences(result.rows, board.id), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_POSTS_FAILED");
   }

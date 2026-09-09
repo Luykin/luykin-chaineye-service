@@ -122,6 +122,14 @@ export interface SocialListeningPost {
   postCreatedAt: string;
   text?: string | null;
   source: string;
+  quoteId?: string | null;
+  replyId?: string | null;
+  referencePosts?: Array<{
+    type: "quote" | "reply";
+    tweetId: string;
+    recalled: boolean;
+    post?: Pick<SocialListeningPost, "id" | "tweetId" | "tweetUrl" | "author" | "postCreatedAt" | "text"> | null;
+  }>;
   sentiment: string;
   metrics: { views: number; likes: number; reposts: number; quotes: number; replies: number; engagement: number };
   topics?: string[];

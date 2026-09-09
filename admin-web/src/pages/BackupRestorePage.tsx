@@ -282,7 +282,7 @@ export function BackupRestorePage() {
                 type="warning"
                 showIcon
                 message="恢复会覆盖所选表组"
-                description="点击恢复前，后端会先自动创建一份安全备份。当前仅允许恢复白名单表组，避免误操作到其它业务表。旧备份如果没有包含 Projects / InvestmentRelationships 等表，会直接失败，不会改数据库。"
+                description="点击恢复前，后端会先自动创建一份安全备份。当前仅允许恢复白名单表组，避免误操作到其它业务表。Social Listening 恢复组覆盖主库全部 9 张业务表；旧备份若缺少所选表组中的任一表会直接失败，不会改数据库。"
               />
 
               <Row gutter={[16, 16]}>

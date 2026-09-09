@@ -1010,6 +1010,29 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
                           <Paragraph copyable ellipsis={{ rows: 5, expandable: true, symbol: "展开" }} style={{ marginBottom: 0 }}>{post.text || "-"}</Paragraph>
                           <Descriptions size="small" column={1}>
                             <Descriptions.Item label="tweetId"><Text code>{post.tweetId}</Text></Descriptions.Item>
+                            <Descriptions.Item label="引用 / 回复对象">
+                              {post.referencePosts?.length ? (
+                                <Space direction="vertical" size={4}>
+                                  {post.referencePosts.map((reference) => (
+                                    <Space key={`${reference.type}:${reference.tweetId}`} direction="vertical" size={2}>
+                                      <Space size={6} wrap>
+                                        <Tag color={reference.type === "quote" ? "blue" : "purple"}>{reference.type === "quote" ? "引用" : "回复"}</Tag>
+                                        <Text code copyable>{reference.tweetId}</Text>
+                                        {reference.post ? (
+                                          <>
+                                            <Text type="secondary">@{reference.post.author.handle || "-"}</Text>
+                                            <a href={reference.post.tweetUrl} target="_blank" rel="noreferrer">查看原文</a>
+                                          </>
+                                        ) : <Text type="secondary">未在当前看板召回</Text>}
+                                      </Space>
+                                      {reference.post ? (
+                                        <Paragraph ellipsis={{ rows: 2, expandable: true, symbol: "展开" }} style={{ marginBottom: 0 }}>{reference.post.text || "-"}</Paragraph>
+                                      ) : null}
+                                    </Space>
+                                  ))}
+                                </Space>
+                              ) : <Text type="secondary">无</Text>}
+                            </Descriptions.Item>
                             <Descriptions.Item label="发布时间">{formatDate(post.postCreatedAt)}</Descriptions.Item>
                             <Descriptions.Item label="曝光 / 互动">{formatNumber(post.metrics.views)} / {formatNumber(post.metrics.engagement)}</Descriptions.Item>
                           </Descriptions>
@@ -2236,8 +2259,13 @@ export function SocialListeningPage() {
                         <Paragraph type="secondary" style={{ margin: "6px 0 0" }}>每批最多 1,000 条；跨账号时优先较新的高优先级帖子。同一批源库未命中的帖子也会记录本次尝试时间，避免每轮重复查询。</Paragraph>
                       </div>
                       <div>
-                        <Text strong>补数与异常</Text>
-                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>恢复账号后先补最近 7 天，完成后再低优先级补齐 7–30 天。心跳超过 5 分钟的 running 任务可在任务列表点击“恢复”：原任务标记失败并按原范围重新入队；自动超时阈值由 Nacos 配置决定。</Paragraph>
+                        <Text strong>召回、补数与异常</Text>
+                        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>首次恢复监控会先创建最近 7 天的 history_backfill，完成后自动补齐 7–30 天；修改项目名、关键词、别名或 Token 会创建最近 30 天的 recall_backfill；“最近 7 天查漏补缺”仅创建最近 7 天的 recall_backfill。</Paragraph>
+                        <ul style={{ margin: "6px 0 0", paddingLeft: 20, color: "#667085" }}>
+                          <li>history_backfill 按 30 分钟窗口扫描；recall_backfill 按 120 分钟窗口扫描。</li>
+                          <li>每个窗口按命中结果 keyset 分页，默认每页 200 条；没有单次召回结果总数上限，会处理至该窗口没有更多命中。</li>
+                          <li>源库查询超时或任务失败时会停止并标记失败，不会跳过后续数据；可在任务列表点击“恢复”，按原时间范围重新入队。</li>
+                        </ul>
                       </div>
                       <Text type="secondary" style={{ fontSize: 12 }}>频率、批大小和扫描窗口均可由 Nacos 运行配置调整；这里展示的是当前代码默认值。</Text>
                     </Space>
