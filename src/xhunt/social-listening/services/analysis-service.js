@@ -15,6 +15,7 @@ const {
   DEFAULT_LOCAL_AI_PROMPTS,
 } = require("./ai-prompt-templates");
 const { generateTweetAnalysis } = require("./local-ai-service");
+const { fetchTweetRowsByIds } = require("./data-source");
 
 
 function clampInteger(value, fallback, min, max) {
@@ -33,6 +34,41 @@ function getPostAiText(post, options = {}) {
     truncated,
     maxLength,
   };
+}
+
+function getPostReference(post, referenceRowsById, options = {}) {
+  const reference = post.quoteId
+    ? { tweetId: String(post.quoteId), label: "引用原文" }
+    : post.replyId
+      ? { tweetId: String(post.replyId), label: "回复对象原文" }
+      : null;
+  if (!reference) return { context: "", rawLength: 0, truncated: false };
+
+  const row = referenceRowsById.get(reference.tweetId);
+  const rawText = normalizeTweetText(row?.text || "");
+  if (!rawText) return { context: "", rawLength: 0, truncated: false };
+
+  const maxLength = clampInteger(options.maxReferenceContextLength, 1200, 200, 2000);
+  const truncated = rawText.length > maxLength;
+  const text = truncated ? rawText.slice(0, maxLength) : rawText;
+  return {
+    context: `${reference.label}（仅作语境，非当前作者观点）：${text}`,
+    rawLength: rawText.length,
+    truncated,
+  };
+}
+
+function getReferenceTweetIds(posts = []) {
+  return Array.from(new Set(posts.flatMap((post) => [post.quoteId, post.replyId])
+    .map((tweetId) => String(tweetId || "").trim())
+    .filter(Boolean)));
+}
+
+async function loadReferenceRowsById(posts = []) {
+  const tweetIds = getReferenceTweetIds(posts);
+  if (!tweetIds.length) return new Map();
+  const rows = await fetchTweetRowsByIds(tweetIds, tweetIds.length);
+  return new Map(rows.map((row) => [String(row.id), row]));
 }
 
 async function runWithConcurrency(items, concurrency, worker) {
@@ -209,6 +245,9 @@ function buildPromptInfo(board, aiConfig, field, variables = {}) {
   let prompt = appendKeywordExclusionRule(renderPromptTemplate(template, variables), field, variables);
   if (variables.text && !prompt.includes(String(variables.text))) {
     prompt = `${prompt}\n\n输入文本：\n${variables.text}`;
+  }
+  if (variables.referenceContext && !prompt.includes(String(variables.referenceContext))) {
+    prompt = `${prompt}\n\n${variables.referenceContext}`;
   }
   return {
     prompt,
@@ -475,6 +514,7 @@ async function buildTweetAnalysisPromptPreview(board) {
     words: aiConfig.summaryWords || 5,
     media: "{{media}}",
     createdAt: "{{tweet_created_at}}",
+    referenceContext: "{{reference_context}}",
   };
   const { prompt, promptTrace, analysisTemplate } = buildTweetAnalysisPrompt(board, aiConfig, variables);
   return {
@@ -498,9 +538,13 @@ async function callTweetAnalysisAi(board, post, options = {}) {
   const keywordExclusionValues = getKeywordExclusionValues(board);
   const keywordExclusions = keywordExclusionValues.join("、");
   const media = pickFirstMedia(post);
+  const reference = options.reference || getPostReference(post, options.referenceRowsById || new Map(), {
+    maxReferenceContextLength: options.maxReferenceContextLength,
+  });
   const createdAt = post.postCreatedAt ? new Date(post.postCreatedAt).toISOString() : "";
   const variables = {
     text: aiText.text,
+    referenceContext: reference.context,
     project,
     projectAliases,
     keywordExclusions,
@@ -591,6 +635,7 @@ async function analyzePendingPostAi(board, options = {}) {
   const limit = clampInteger(options.limit || Math.max(aiConfig.contentBatchSize || 10, aiConfig.projectAttitudeBatchSize || 20), 20, 1, 1000);
   const concurrency = clampInteger(options.concurrency || Math.max(aiConfig.contentConcurrency || 1, aiConfig.projectAttitudeConcurrency || 1), 4, 1, 20);
   const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
+  const maxReferenceContextLength = clampInteger(options.maxReferenceContextLength || aiConfig.referenceContextMaxLength, 1200, 200, 2000);
   const pendingClauses = [];
   if (contentEnabled) {
     pendingClauses.push(
@@ -622,6 +667,10 @@ async function analyzePendingPostAi(board, options = {}) {
     ],
     limit,
   });
+  const referenceRowsById = await loadReferenceRowsById(posts).catch((error) => {
+    console.warn(`[SocialListeningAI] load reference context failed board=${board.id}:`, summarizeError(error));
+    return new Map();
+  });
 
   const content = { enabled: contentEnabled, selected: 0, analyzed: 0, failed: 0, skipped: 0 };
   const attitude = { enabled: attitudeEnabled, selected: 0, analyzed: 0, failed: 0 };
@@ -630,12 +679,13 @@ async function analyzePendingPostAi(board, options = {}) {
   await runWithConcurrency(posts, concurrency, async (post) => {
     const itemStartedAt = Date.now();
     const aiText = getPostAiText(post, { maxTextLength });
+    const reference = getPostReference(post, referenceRowsById, { maxReferenceContextLength });
     const shouldGenerateContent = contentEnabled && (force || isPendingContentPost(post));
     const shouldGenerateAttitude = attitudeEnabled && (force || isPendingAttitudePost(post));
     if (!shouldGenerateContent && !shouldGenerateAttitude) return;
     if (shouldGenerateContent) content.selected += 1;
     if (shouldGenerateAttitude) attitude.selected += 1;
-    if (!aiText.text || aiText.text.length < 8) {
+    if (!aiText.text || (aiText.text.length < 8 && !reference.context)) {
       if (shouldGenerateContent) content.skipped += 1;
       await post.update({
         tagStatus: shouldGenerateContent && (post.tagStatus === "pending" || !post.tagStatus) ? "skipped" : post.tagStatus,
@@ -643,12 +693,12 @@ async function analyzePendingPostAi(board, options = {}) {
         attitudeStatus: shouldGenerateAttitude && (post.attitudeStatus === "pending" || !post.attitudeStatus) ? "skipped" : post.attitudeStatus,
         aiStatus: "skipped",
       }).catch(() => null);
-      console.log(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=skipped ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated}`);
+      console.log(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=skipped ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} reference=${Boolean(reference.context)}`);
       return;
     }
 
     try {
-      const result = await callTweetAnalysisAi(board, post, { maxTextLength });
+      const result = await callTweetAnalysisAi(board, post, { maxTextLength, maxReferenceContextLength, referenceRowsById, reference });
       const patch = {};
       const rawAi = { ...(post.rawTweet?.socialListeningAi || {}) };
       const shouldReplaceOldAiFields = force || post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
@@ -712,7 +762,7 @@ async function analyzePendingPostAi(board, options = {}) {
       });
       if (shouldGenerateContent) content.analyzed += 1;
       if (shouldGenerateAttitude) attitude.analyzed += 1;
-      console.log(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude}`);
+      console.log(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} reference=${Boolean(reference.context)} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude}`);
     } catch (error) {
       if (shouldGenerateContent) content.failed += 1;
       if (shouldGenerateAttitude) attitude.failed += 1;
@@ -724,13 +774,13 @@ async function analyzePendingPostAi(board, options = {}) {
         aiAnalyzedAt: new Date(),
         aiError: summarizeError(error),
       }).catch(() => null);
-      console.warn(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=failed ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude} error=${summarizeError(error)}`);
+      console.warn(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=failed ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} reference=${Boolean(reference.context)} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude} error=${summarizeError(error)}`);
     }
   });
 
   const durationMs = Date.now() - startedAt;
-  console.log(`[SocialListeningAI] combined batch board=${board.id} posts=${posts.length} content=${content.analyzed}/${content.selected} contentFailed=${content.failed} attitude=${attitude.analyzed}/${attitude.selected} attitudeFailed=${attitude.failed} concurrency=${concurrency} maxTextLength=${maxTextLength} ms=${durationMs}`);
-  return { enabled: true, content, attitude, promptOverrides, selected: posts.length, concurrency, maxTextLength, durationMs };
+  console.log(`[SocialListeningAI] combined batch board=${board.id} posts=${posts.length} references=${referenceRowsById.size} content=${content.analyzed}/${content.selected} contentFailed=${content.failed} attitude=${attitude.analyzed}/${attitude.selected} attitudeFailed=${attitude.failed} concurrency=${concurrency} maxTextLength=${maxTextLength} maxReferenceContextLength=${maxReferenceContextLength} ms=${durationMs}`);
+  return { enabled: true, content, attitude, promptOverrides, selected: posts.length, referenceCount: referenceRowsById.size, concurrency, maxTextLength, maxReferenceContextLength, durationMs };
 }
 
 async function reanalyzeSocialListeningPostAi(board, postId) {

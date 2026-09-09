@@ -299,7 +299,7 @@ async function fetchCandidateTweetPage(db, bind, keywordClause, officialInteract
   );
 }
 
-async function fetchTweetRowsByIds(db, tweetIds, limit) {
+async function fetchTweetRowsByIdsFromDb(db, tweetIds, limit) {
   if (!tweetIds.length) return [];
   return queryReadonlyWithStatementTimeout(
     db,
@@ -335,6 +335,14 @@ async function fetchTweetRowsByIds(db, tweetIds, limit) {
   );
 }
 
+async function fetchTweetRowsByIds(tweetIds, limit = 2000) {
+  const ids = Array.from(new Set((tweetIds || []).map((tweetId) => String(tweetId || "").trim()).filter(Boolean))).slice(0, 2000);
+  if (!ids.length) return [];
+  const db = getReadonlyDbOrThrow();
+  const safeLimit = Math.min(Math.max(Number(limit) || ids.length, 1), ids.length, 2000);
+  return fetchTweetRowsByIdsFromDb(db, ids, safeLimit);
+}
+
 async function fetchTweetMetricsByIds(tweetIds, limit = 1000) {
   if (!tweetIds.length) return [];
   const db = getReadonlyDbOrThrow();
@@ -355,8 +363,7 @@ async function fetchTweetMetricsByIds(tweetIds, limit = 1000) {
 
 
 async function fetchTweetRowById(tweetId) {
-  const db = getReadonlyDbOrThrow();
-  const rows = await fetchTweetRowsByIds(db, [String(tweetId)], 1);
+  const rows = await fetchTweetRowsByIds([String(tweetId)], 1);
   return rows[0] || null;
 }
 
@@ -637,7 +644,7 @@ async function scanCandidateTweetsForBoard(board, startAt, endAt, options = {}) 
       }
 
       const ids = pageRows.map((item) => String(item.id || "")).filter(Boolean);
-      const rows = await fetchTweetRowsByIds(db, ids, ids.length);
+      const rows = await fetchTweetRowsByIdsFromDb(db, ids, ids.length);
       scanMeta.rowsFetched += rows.length;
       await onRows(rows, scanMeta);
 
@@ -874,6 +881,7 @@ module.exports = {
   mapTweetRowToPostPayload,
   mapTweetMetricRow,
   fetchTweetRowById,
+  fetchTweetRowsByIds,
   fetchTweetMetricsByIds,
   fetchTweetSnapshotFromCrawler,
   scanCandidateTweetsForBoard,
