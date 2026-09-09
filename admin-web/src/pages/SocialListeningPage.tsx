@@ -54,6 +54,7 @@ import {
   fetchSocialListeningBoards,
   fetchSocialListeningJobs,
   fetchSocialListeningPosts,
+  fetchSocialListeningTextCondensations,
   fetchSocialListeningRuntimeConfig,
   fetchSocialListeningAiWorkerStatus,
   fetchSocialListeningSignals,
@@ -83,6 +84,7 @@ import {
   type SocialListeningBoard,
   type SocialListeningJob,
   type SocialListeningPost,
+  type SocialListeningTextCondensation,
 } from "@/services/social-listening";
 import type { VipListItem } from "@/types/feature-flags";
 
@@ -162,7 +164,7 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   projectAttitudeConcurrency: "综合 AI Worker 并发帖子数；会和内容并发取较大值。",
   maxTextLength: "未命中长文精简缓存时，进入 AI Prompt 前的推文硬截断字符数。",
   referenceContextMaxLength: "引用、回复对象和会话根帖进入 AI Prompt 前的总字符上限。",
-  longTextCondensationThreshold: "超过此字符数的正文先由默认模型精简并缓存；主帖及后续作为引用/回复对象、会话根帖时都复用该结果。默认 1200。",
+  longTextCondensationThreshold: "超过此字符数的正文先由默认模型精简并缓存；主帖及后续作为引用/回复对象、会话根帖时都复用该结果。默认 1800。",
   longTextCondensationMaxLength: "缓存的长文精简内容最大字符数，不超过 900。默认 900。",
   longTextCondensationConcurrency: "首次生成长文精简缓存时的并发，限制为 1–4，避免影响主分析。",
   negativeScoreThreshold: "态度分低于该值判定 negative；默认 4。",
@@ -622,13 +624,10 @@ function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedT
   };
 }
 
-function BoardMetricCard({ title, value, hint, color }: { title: string; value: string | number; hint: string; color?: string }) {
+function BoardMetricCard({ title, value, color }: { title: string; value: string | number; color?: string }) {
   return (
     <Card size="small" className="social-listening-metric-card">
       <Statistic title={title} value={value} valueStyle={{ color }} />
-      <Tooltip title={hint}>
-        <Text type="secondary" className="social-listening-metric-hint" ellipsis>{hint}</Text>
-      </Tooltip>
     </Card>
   );
 }
@@ -637,12 +636,10 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
   const metadata = board.metadata || {};
   const profileSnapshot = asRecord(metadata.profileSnapshot);
   const profile = asRecord(profileSnapshot.profile);
-  const ai = asRecord(profileSnapshot.ai);
   const banner = getString(profile.profile_banner_url);
   const followingCount = getOptionalNumber(profile.following_count);
   const tweetsCount = getOptionalNumber(profile.tweets_count);
   const listedCount = getOptionalNumber(profile.listed_count);
-  const isCn = ai.is_cn;
   const latestJob = board.latestJob;
 
   return (
@@ -658,28 +655,21 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
             <Space size={8} wrap>
               <Text strong className="social-listening-board-title">{board.projectName}</Text>
               <Text type="secondary">@{board.officialHandle}</Text>
-              {board.verified ? <Tag color="blue">X 认证</Tag> : <Tag>未认证</Tag>}
-              {isCn === true ? <Tag color="geekblue">华语账号</Tag> : isCn === false ? <Tag>非华语账号</Tag> : null}
-              {board.brandColor ? <Tag color={board.brandColor}>品牌色 {board.brandColor}</Tag> : null}
             </Space>
             <Paragraph className="social-listening-board-description">{board.projectDescription || "暂无项目简介；可在「编辑」里补充，方便运营识别和 AI 理解项目背景。"}</Paragraph>
-            <Space size={6} wrap>
-              <Text type="secondary">Twitter ID：</Text><Text code>{board.officialTwitterId || "-"}</Text>
-              <Text type="secondary">资料快照：</Text><Text code>metadata.profileSnapshot</Text>
-            </Space>
           </Space>
         </Space>
       </Card>
 
       <Row gutter={[12, 12]}>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="粉丝数" value={formatNumber(board.followersCount)} hint="Boards.followersCount" /></Col>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="关注数" value={formatNumber(followingCount)} hint="dev.twitter_user.profile.following_count" /></Col>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="推文数" value={formatNumber(tweetsCount)} hint="profile.tweets_count" /></Col>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="Listed" value={formatNumber(listedCount)} hint="profile.listed_count" /></Col>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="全球排名" value={formatRank(board.globalRank)} hint="Boards.globalRank" color={board.globalRank && board.globalRank > 0 ? "#1677ff" : undefined} /></Col>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="华语排名" value={formatRank(board.cnRank)} hint="Boards.cnRank" color={board.cnRank && board.cnRank > 0 ? "#722ed1" : undefined} /></Col>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="帖子入库" value={board.postCount || 0} hint="SocialListeningPosts count" color="#16a34a" /></Col>
-        <Col xs={12} md={6} xl={3}><BoardMetricCard title="授权账号" value={board.accessCount || 0} hint="BoardAccess active count" color="#f97316" /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="粉丝数" value={formatNumber(board.followersCount)} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="关注数" value={formatNumber(followingCount)} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="推文数" value={formatNumber(tweetsCount)} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="Listed" value={formatNumber(listedCount)} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="全球排名" value={formatRank(board.globalRank)} color={board.globalRank && board.globalRank > 0 ? "#1677ff" : undefined} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="华语排名" value={formatRank(board.cnRank)} color={board.cnRank && board.cnRank > 0 ? "#722ed1" : undefined} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="帖子入库" value={board.postCount || 0} color="#16a34a" /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="授权账号" value={board.accessCount || 0} color="#f97316" /></Col>
       </Row>
 
       <Collapse
@@ -692,7 +682,6 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
             children: (
               <Descriptions size="small" bordered column={2}>
                 <Descriptions.Item label="状态">{statusTag(board.status)}</Descriptions.Item>
-                <Descriptions.Item label="认证状态">{board.verified ? <Tag color="blue">已认证</Tag> : <Tag>未认证 / 未知</Tag>}</Descriptions.Item>
                 <Descriptions.Item label="官方 Handle">@{board.officialHandle}</Descriptions.Item>
                 <Descriptions.Item label="官方 Twitter ID"><Text code>{board.officialTwitterId || "-"}</Text></Descriptions.Item>
                 <Descriptions.Item label="全球排名">{formatRank(board.globalRank)}</Descriptions.Item>
@@ -700,7 +689,6 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
                 <Descriptions.Item label="关注数">{formatNumber(followingCount)}</Descriptions.Item>
                 <Descriptions.Item label="推文数">{formatNumber(tweetsCount)}</Descriptions.Item>
                 <Descriptions.Item label="Listed 数">{formatNumber(listedCount)}</Descriptions.Item>
-                <Descriptions.Item label="语言识别">{isCn === true ? "华语" : isCn === false ? "非华语" : "-"}</Descriptions.Item>
                 <Descriptions.Item label="覆盖开始">{formatDate(board.coverageStartAt)}</Descriptions.Item>
                 <Descriptions.Item label="处理游标">{formatDate(board.processedThrough)}</Descriptions.Item>
                 <Descriptions.Item label="最近成功">{formatDate(board.lastSuccessAt)}</Descriptions.Item>
@@ -713,9 +701,6 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
                 <Descriptions.Item label="更新时间">{formatDate(board.updatedAt)}</Descriptions.Item>
                 <Descriptions.Item label="创建管理员">{board.createdByAdminId || "-"}</Descriptions.Item>
                 <Descriptions.Item label="更新管理员">{board.updatedByAdminId || "-"}</Descriptions.Item>
-                <Descriptions.Item label="主表"><Text code>EchohuntSocialListeningBoards</Text></Descriptions.Item>
-                <Descriptions.Item label="帖子表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
-                <Descriptions.Item label="源资料表"><Text code>dev.twitter_user.profile / ai / feature / kol</Text></Descriptions.Item>
                 <Descriptions.Item label="关系源表">{renderTagList(metadata.followSources)}</Descriptions.Item>
                 <Descriptions.Item label="关键词" span={2}>{renderTagList(metadata.keywords)}</Descriptions.Item>
                 <Descriptions.Item label="别名" span={2}>{renderTagList(metadata.aliases)}</Descriptions.Item>
@@ -1089,6 +1074,87 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
       ) : (
         <Empty description={samplesQuery.isFetching ? "正在读取 AI 回填检查数据" : "还没有可展示的 AI 回填数据"} />
       )}
+    </Space>
+  );
+}
+
+function TextCondensationsPanel({ boardId, open }: { boardId: string; open: boolean }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const condensationsQuery = useQuery({
+    queryKey: ["social-listening", "text-condensations", boardId, page, pageSize, searchTerm],
+    queryFn: () => fetchSocialListeningTextCondensations(boardId, { page, pageSize, q: searchTerm }),
+    enabled: open && Boolean(boardId),
+  });
+  const pageData = condensationsQuery.data?.data;
+  const items = pageData?.items || [];
+  const total = pageData?.total || 0;
+  const columns: TableProps<SocialListeningTextCondensation>["columns"] = [
+    { title: "Tweet ID", dataIndex: "tweetId", width: 220, render: (value) => <Text code copyable>{value}</Text> },
+    { title: "原文长度", dataIndex: "sourceTextLength", width: 110, render: (value) => `${formatNumber(value)} 字符` },
+    { title: "精简内容", dataIndex: "condensedText", render: (value) => <Paragraph copyable ellipsis={{ rows: 3, expandable: true, symbol: "展开" }} style={{ marginBottom: 0 }}>{value || "-"}</Paragraph> },
+    { title: "模型", dataIndex: "model", width: 230, render: (value) => value ? <Text code>{value}</Text> : "-" },
+    { title: "精简时间", dataIndex: "condensedAt", width: 175, render: formatDate },
+  ];
+
+  function applySearch(value: string) {
+    setSearchInput(value);
+    setSearchTerm(value.trim());
+    setPage(1);
+  }
+
+  return (
+    <Space direction="vertical" size={12} className="social-listening-full">
+      <Alert
+        type="info"
+        showIcon
+        message="已精简长文"
+        description="展示当前账号主帖及其引用、回复对象、会话根帖中已生成并缓存的长文精简结果。缓存按 Tweet ID 跨看板复用，仅供查看。"
+        action={<Space size={8} wrap><Text type="secondary">共 {formatNumber(total)} 条</Text><Button size="small" icon={<ReloadOutlined />} loading={condensationsQuery.isFetching} onClick={() => condensationsQuery.refetch()}>刷新</Button></Space>}
+      />
+      <Card size="small" bordered={false} style={{ background: "#f8fafc" }}>
+        <Space wrap className="social-listening-full" size={10}>
+          <Input.Search
+            allowClear
+            value={searchInput}
+            onChange={(event) => {
+              setSearchInput(event.target.value);
+              if (!event.target.value) {
+                setSearchTerm("");
+                setPage(1);
+              }
+            }}
+            onSearch={applySearch}
+            placeholder="搜索 Tweet ID、精简内容或模型"
+            enterButton="搜索"
+            style={{ width: "min(440px, 100%)" }}
+          />
+          {searchTerm ? <Tag color="blue">筛选：{searchTerm}</Tag> : <Text type="secondary">按最近精简时间排序</Text>}
+        </Space>
+      </Card>
+      <Table
+        rowKey="id"
+        size="small"
+        columns={columns}
+        dataSource={items}
+        loading={condensationsQuery.isFetching}
+        scroll={{ x: 1100 }}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          showQuickJumper: true,
+          pageSizeOptions: ["10", "20", "50"],
+          showTotal: (count, range) => `${range[0]}-${range[1]} / ${count} 条`,
+          onChange: (nextPage, nextPageSize) => {
+            setPage(nextPage);
+            setPageSize(nextPageSize);
+          },
+        }}
+      />
     </Space>
   );
 }
@@ -1741,15 +1807,23 @@ interface BoardDrawerProps {
   onChanged: () => void;
 }
 
-function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged }: BoardDrawerProps) {
+function BoardDrawer({ board, open, initialTab = "ai-samples", onClose, onChanged }: BoardDrawerProps) {
   const [messageApi, contextHolder] = message.useMessage();
   const [range, setRange] = useState("7D");
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const initialMoreTab = ["workflow", "signals", "alerts"].includes(initialTab) ? initialTab : "workflow";
+  const [activeTab, setActiveTab] = useState(["workflow", "signals", "alerts"].includes(initialTab) ? "more" : initialTab);
+  const [moreTab, setMoreTab] = useState(initialMoreTab);
   const [accessForm] = Form.useForm();
   const boardId = board?.id || "";
 
   useEffect(() => {
-    if (open) setActiveTab(initialTab);
+    if (!open) return;
+    if (["workflow", "signals", "alerts"].includes(initialTab)) {
+      setMoreTab(initialTab);
+      setActiveTab("more");
+    } else {
+      setActiveTab(initialTab);
+    }
   }, [open, initialTab, boardId]);
 
   const accessesQuery = useQuery({
@@ -1899,6 +1973,17 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
     { title: "发生时间", dataIndex: "occurredAt", width: 170, render: formatDate },
   ];
 
+  const moreTabItems: MenuProps["items"] = [
+    { key: "workflow", label: "执行过程" },
+    { key: "signals", label: "关键账号动态" },
+    { key: "alerts", label: "异常/预警" },
+  ];
+  const moreTabContent = moreTab === "signals"
+    ? <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里展示被关注/互动的关键账号画像，不只看华语排名；展开行可查看来源表、关系方向和 rankSnapshot 原始字段。" /><Select value={range} onChange={setRange} options={RANGE_OPTIONS} /><Table rowKey="id" size="small" columns={signalColumns} dataSource={signalsQuery.data?.data.items || []} loading={signalsQuery.isFetching} pagination={false} scroll={{ x: 1500 }} expandable={{ expandedRowRender: (row) => <SignalInspector signal={row} /> }} /></Space>
+    : moreTab === "alerts"
+      ? <Table rowKey="id" size="small" columns={alertColumns} dataSource={alertsQuery.data?.data.items || []} loading={alertsQuery.isFetching} pagination={false} scroll={{ x: 980 }} />
+      : <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里仅展示当前账号的实际任务记录；完整流程说明已放在页面底部「流程总览」。" /><Table rowKey="id" size="small" columns={jobColumns} dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} scroll={{ x: 1280 }} expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }} /></Space>;
+
   return (
     <Drawer open={open} onClose={onClose} width="min(1280px, 96vw)" title={board ? `${board.projectName} / @${board.officialHandle}` : "Social Listening 看板"} destroyOnClose>
       {contextHolder}
@@ -1910,9 +1995,22 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
             onChange={setActiveTab}
             items={[
               {
-                key: "workflow",
-                label: "执行过程",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里仅展示当前账号的实际任务记录；完整流程说明已放在页面底部「流程总览」。" /><Table rowKey="id" size="small" columns={jobColumns} dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} scroll={{ x: 1280 }} expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }} /></Space>,
+                key: "more",
+                label: (
+                  <Dropdown
+                    menu={{
+                      items: moreTabItems,
+                      onClick: ({ key }) => {
+                        setMoreTab(String(key));
+                        setActiveTab("more");
+                      },
+                    }}
+                    trigger={["click"]}
+                  >
+                    <Space size={4} onClick={(event) => event.stopPropagation()}>更多 <MoreOutlined /></Space>
+                  </Dropdown>
+                ),
+                children: moreTabContent,
               },
               {
                 key: "ai-samples",
@@ -1920,19 +2018,14 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
                 children: <LatestAiBackfillSamplesPanel boardId={board.id} open={open} />,
               },
               {
+                key: "text-condensations",
+                label: "已精简长文",
+                children: <TextCondensationsPanel boardId={board.id} open={open} />,
+              },
+              {
                 key: "ai",
                 label: "AI 开关",
                 children: <BoardAiConfigPanel boardId={board.id} open={open} onChanged={onChanged} />,
-              },
-              {
-                key: "signals",
-                label: "关键账号动态",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里展示被关注/互动的关键账号画像，不只看华语排名；展开行可查看来源表、关系方向和 rankSnapshot 原始字段。" /><Select value={range} onChange={setRange} options={RANGE_OPTIONS} /><Table rowKey="id" size="small" columns={signalColumns} dataSource={signalsQuery.data?.data.items || []} loading={signalsQuery.isFetching} pagination={false} scroll={{ x: 1500 }} expandable={{ expandedRowRender: (row) => <SignalInspector signal={row} /> }} /></Space>,
-              },
-              {
-                key: "alerts",
-                label: "异常/预警",
-                children: <Table rowKey="id" size="small" columns={alertColumns} dataSource={alertsQuery.data?.data.items || []} loading={alertsQuery.isFetching} pagination={false} scroll={{ x: 980 }} />,
               },
               {
                 key: "access",

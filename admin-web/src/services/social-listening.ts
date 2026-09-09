@@ -150,6 +150,17 @@ export interface SocialListeningPost {
   };
 }
 
+export interface SocialListeningTextCondensation {
+  id: string;
+  tweetId: string;
+  sourceTextLength: number;
+  condensedText: string;
+  model?: string | null;
+  condensedAt: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface SocialListeningPageData<T> {
   items: T[];
   page: number;
@@ -489,6 +500,10 @@ export function fetchSocialListeningSignals(boardId: string, query?: { page?: nu
 
 export function fetchSocialListeningPosts(boardId: string, query?: { page?: number; pageSize?: number; range?: string; sentiment?: string; source?: string; q?: string; sort?: string; ai?: string }) {
   return apiRequest<{ success: boolean; data: SocialListeningPageData<SocialListeningPost> }>(withQuery(`${BASE_PATH}/boards/${boardId}/posts`, query));
+}
+
+export function fetchSocialListeningTextCondensations(boardId: string, query?: { page?: number; pageSize?: number; q?: string }) {
+  return apiRequest<{ success: boolean; data: SocialListeningPageData<SocialListeningTextCondensation> }>(withQuery(`${BASE_PATH}/boards/${boardId}/text-condensations`, query));
 }
 
 export function reanalyzeSocialListeningPost(boardId: string, postId: string) {

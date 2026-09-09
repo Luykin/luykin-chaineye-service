@@ -6,6 +6,7 @@ const {
   EchohuntSocialListeningBoardAccess,
   EchohuntSocialListeningJob,
   EchohuntSocialListeningPost,
+  EchohuntSocialListeningTextCondensation,
   EchohuntSocialListeningSnapshot,
   EchohuntSocialListeningAccountSignal,
   EchohuntSocialListeningAlert,
@@ -593,7 +594,7 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "projectAttitudeConcurrency", label: "态度并发", desc: "综合 AI Worker 的并发帖子数；会和内容并发取较大值。" },
   { field: "maxTextLength", label: "推文截断长度", desc: "未命中长文精简缓存时，进入 AI Prompt 前的正文硬截断字符数。" },
   { field: "referenceContextMaxLength", label: "关联上下文截断长度", desc: "引用、回复对象和会话根帖原文进入 AI Prompt 前的总截断字符数；每个 AI 批次只批量查询一次关联原文，默认 1200，最大 2000。" },
-  { field: "longTextCondensationThreshold", label: "长文精简阈值", desc: "正文超过该字符数时，先用默认模型精简并写入跨看板缓存；默认 1200。" },
+  { field: "longTextCondensationThreshold", label: "长文精简阈值", desc: "正文超过该字符数时，先用默认模型精简并写入跨看板缓存；默认 1800。" },
   { field: "longTextCondensationMaxLength", label: "长文精简上限", desc: "长文精简内容的最大字符数，不超过 900；主帖、引用/回复对象和会话根帖后续都会复用该缓存；默认 900。" },
   { field: "longTextCondensationConcurrency", label: "长文精简并发", desc: "首次生成长文精简缓存时的最大并发数；限制为 1–4，避免长文请求挤占主分析。" },
   { field: "negativeScoreThreshold", label: "负面阈值", desc: "项目态度分低于该值时判定为 negative。默认 4。" },
@@ -928,6 +929,67 @@ router.get("/boards/:boardId/posts", async (req, res) => {
     return res.json({ success: true, data: { rangeKey, items: await serializePostsWithReferences(result.rows, board.id), page, pageSize, total: result.count } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_POSTS_FAILED");
+  }
+});
+
+router.get("/boards/:boardId/text-condensations", async (req, res) => {
+  try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+    const { page, pageSize, offset, limit } = normalizePage(req.query);
+    const boardId = EchohuntSocialListeningPost.sequelize.escape(board.id);
+    const where = {
+      [Op.and]: [literal(`
+        EXISTS (
+          SELECT 1
+          FROM "EchohuntSocialListeningPosts" AS "BoardPost"
+          WHERE "BoardPost"."boardId" = ${boardId}
+            AND (
+              "BoardPost"."tweetId" = "EchohuntSocialListeningTextCondensation"."tweetId"
+              OR "BoardPost"."quoteId" = "EchohuntSocialListeningTextCondensation"."tweetId"
+              OR "BoardPost"."replyId" = "EchohuntSocialListeningTextCondensation"."tweetId"
+              OR "BoardPost"."conversationId" = "EchohuntSocialListeningTextCondensation"."tweetId"
+            )
+        )
+      `)],
+    };
+    const q = String(req.query.q || "").trim().slice(0, 200);
+    if (q) {
+      where[Op.and].push({
+        [Op.or]: [
+          { tweetId: { [Op.iLike]: `%${q}%` } },
+          { condensedText: { [Op.iLike]: `%${q}%` } },
+          { model: { [Op.iLike]: `%${q}%` } },
+        ],
+      });
+    }
+    const result = await EchohuntSocialListeningTextCondensation.findAndCountAll({
+      where,
+      order: [["condensedAt", "DESC"], ["tweetId", "DESC"]],
+      offset,
+      limit,
+      raw: true,
+    });
+    return res.json({
+      success: true,
+      data: {
+        items: result.rows.map((row) => ({
+          id: row.id,
+          tweetId: row.tweetId,
+          sourceTextLength: row.sourceTextLength,
+          condensedText: row.condensedText,
+          model: row.model,
+          condensedAt: row.condensedAt,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })),
+        page,
+        pageSize,
+        total: result.count,
+      },
+    });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_TEXT_CONDENSATIONS_FAILED");
   }
 });
 

@@ -134,7 +134,7 @@ function collectLongTextCandidates(posts, referenceRowsById, threshold) {
 }
 
 async function prepareLongTextCondensations(posts, referenceRowsById, aiConfig, options = {}) {
-  const threshold = clampInteger(options.threshold || aiConfig.longTextCondensationThreshold, 1200, 500, 10000);
+  const threshold = clampInteger(options.threshold || aiConfig.longTextCondensationThreshold, 1800, 500, 10000);
   const maxLength = clampInteger(options.maxLength || aiConfig.longTextCondensationMaxLength, 900, 200, 900);
   const concurrency = clampInteger(options.concurrency || aiConfig.longTextCondensationConcurrency, 2, 1, 4);
   const candidates = collectLongTextCandidates(posts, referenceRowsById, threshold);
