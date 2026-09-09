@@ -1549,6 +1549,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         enabled: Boolean(detail.config.contentEnabled || detail.config.projectAttitudeEnabled),
         model: detail.config.model || "",
         tweetAnalysisModel: detail.config.tweetAnalysisModel || "",
+        tweetTextCondensationModel: detail.config.tweetTextCondensationModel || "",
         estimatePosts: nextEstimatePosts,
         aiProjectName: detail.config.aiProjectName || "",
         promptOverride: detail.config.promptOverride || detail.config.effectivePromptTemplate || "",
@@ -1659,10 +1660,11 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 bordered={false}
                 items={[{
                   key: "advanced-board-ai",
-                  label: "综合模型覆盖（可选）",
+                  label: "综合与长文精简模型覆盖（可选）",
                   children: (
                     <Row gutter={12}>
                       <Col xs={24} md={8}><Form.Item name={["ai", "tweetAnalysisModel"]} label="综合分析模型" extra="为空使用该账号模型；一次调用生成标签、摘要和态度。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTextCondensationModel"]} label="长文精简模型" extra="仅首次精简超过阈值的长文时调用；为空依次使用该账号默认模型、综合分析模型。"><ModelAutoComplete options={modelOptions} placeholder="可单独选择，也可留空回退" /></Form.Item></Col>
                       <Col span={24}>
                         <Descriptions size="small" bordered column={2}>
                           <Descriptions.Item label="Base URL">{runtime?.baseURL || "未配置"}</Descriptions.Item>

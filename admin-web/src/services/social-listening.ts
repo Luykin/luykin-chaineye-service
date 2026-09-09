@@ -301,6 +301,7 @@ export interface SocialListeningBoardAiRuntimeConfig {
   projectAttitudeEnabled: boolean;
   model: string;
   tweetAnalysisModel?: string;
+  tweetTextCondensationModel?: string;
   estimatePosts: number;
   costAcceptedAt?: string | null;
   costAcceptedByAdminId?: number | null;
@@ -315,6 +316,7 @@ export interface SocialListeningBoardAiRuntimeConfig {
     projectAttitudeEnabled: boolean;
     model: string;
     tweetAnalysisModel?: string;
+    tweetTextCondensationModel?: string;
     baseURL: string;
     apiKeyConfigured: boolean;
     globalContentEnabled: boolean;

@@ -253,6 +253,7 @@ function getBoardAiRuntime(board) {
 function getEffectiveBoardAiConfig(runtimeAi = {}, boardAi = {}) {
   const boardModel = String(boardAi.model || "").trim();
   const tweetAnalysisModel = String(boardAi.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || "").trim();
+  const tweetTextCondensationModel = String(boardAi.tweetTextCondensationModel || boardModel || tweetAnalysisModel || runtimeAi.model || "").trim();
   const modelReady = Boolean(boardModel || tweetAnalysisModel);
   return {
     ...runtimeAi,
@@ -261,6 +262,7 @@ function getEffectiveBoardAiConfig(runtimeAi = {}, boardAi = {}) {
     baseURL: boardAi.baseURL || runtimeAi.baseURL || "",
     model: boardModel,
     tweetAnalysisModel,
+    tweetTextCondensationModel,
     contentEnabled: Boolean(runtimeAi.contentEnabled && boardAi.contentEnabled && modelReady),
     projectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled && boardAi.projectAttitudeEnabled && modelReady),
   };
@@ -273,6 +275,7 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
     projectAttitudeEnabled: Boolean(boardAi.projectAttitudeEnabled),
     model: boardAi.model || "",
     tweetAnalysisModel: boardAi.tweetAnalysisModel || "",
+    tweetTextCondensationModel: boardAi.tweetTextCondensationModel || "",
     estimatePosts: Math.max(0, Math.floor(toFiniteNumber(boardAi.estimatePosts, 10000))),
     costAcceptedAt: boardAi.costAcceptedAt || null,
     costAcceptedByAdminId: boardAi.costAcceptedByAdminId || null,
@@ -284,6 +287,7 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
       projectAttitudeEnabled: effective.projectAttitudeEnabled,
       model: effective.model,
       tweetAnalysisModel: effective.tweetAnalysisModel || effective.model,
+      tweetTextCondensationModel: effective.tweetTextCondensationModel,
       baseURL: effective.baseURL,
       apiKeyConfigured: Boolean(String(runtimeAi.apiKey || "").trim()),
       globalContentEnabled: Boolean(runtimeAi.contentEnabled),
@@ -333,6 +337,7 @@ function normalizeBoardAiRuntimeInput(current = {}, body = {}, runtimeAi = {}, a
       : combinedEnabled,
     model: pickStringField(input, current, "model"),
     tweetAnalysisModel: pickStringField(input, current, "tweetAnalysisModel"),
+    tweetTextCondensationModel: pickStringField(input, current, "tweetTextCondensationModel"),
     estimatePosts: Math.max(0, Math.floor(toFiniteNumber(hasOwnField(input, "estimatePosts") ? input.estimatePosts : current.estimatePosts, 10000))),
   };
   const wantsAi = next.contentEnabled || next.projectAttitudeEnabled;
@@ -860,6 +865,7 @@ router.post("/boards/:boardId/ai-config", async (req, res) => {
         projectAttitudeEnabled: next.projectAttitudeEnabled,
         model: next.model,
         tweetAnalysisModel: next.tweetAnalysisModel,
+        tweetTextCondensationModel: next.tweetTextCondensationModel,
         estimatePosts: next.estimatePosts,
         costAcceptedAt: next.costAcceptedAt,
         acceptedEstimatedUsd: next.acceptedEstimatedUsd,

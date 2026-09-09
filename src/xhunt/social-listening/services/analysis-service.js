@@ -255,6 +255,7 @@ async function getBoardAiConfig(board) {
   const boardAi = getBoardAiRuntime(board);
   const boardModel = String(boardAi.model || "").trim();
   const tweetAnalysisModel = String(boardAi.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || "").trim();
+  const tweetTextCondensationModel = String(boardAi.tweetTextCondensationModel || boardModel || tweetAnalysisModel || runtimeAi.model || "").trim();
   const modelReady = Boolean(boardModel || tweetAnalysisModel);
   return {
     ...runtimeAi,
@@ -263,6 +264,7 @@ async function getBoardAiConfig(board) {
     baseURL: boardAi.baseURL || runtimeAi.baseURL,
     model: boardModel,
     tweetAnalysisModel,
+    tweetTextCondensationModel,
     prompts: {
       ...(runtimeAi.prompts && typeof runtimeAi.prompts === "object" ? runtimeAi.prompts : {}),
       ...(boardAi.prompts && typeof boardAi.prompts === "object" ? boardAi.prompts : {}),
