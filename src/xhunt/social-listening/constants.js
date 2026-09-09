@@ -70,7 +70,7 @@ const ALERT_TYPES = Object.freeze({
 
 const SOCIAL_LISTENING_PERMISSION = "social-listening";
 
-const MAX_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 500;
 const DEFAULT_PAGE_SIZE = 20;
 const EXPORT_MAX_ROWS = 10000;
 
