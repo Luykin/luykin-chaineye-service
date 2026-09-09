@@ -65,8 +65,33 @@ const {
   clearSocialListeningRuntimeConfigCache,
 } = require("../services/runtime-config");
 const { sendJsonError, publicError } = require("../services/errors");
+const { createAdminWriteAudit } = require("../../../admin/services/admin-audit");
 
 const router = express.Router();
+router.use(createAdminWriteAudit((req) => {
+  const key = `${req.method} ${req.path}`;
+  const staticActions = {
+    "POST /runtime-config": "social-listening-runtime-config-update",
+    "POST /ai-worker/pause": "social-listening-ai-worker-pause",
+    "POST /ai-worker/resume": "social-listening-ai-worker-resume",
+    "POST /monitored-accounts": "social-listening-board-create",
+  };
+  if (staticActions[key]) return staticActions[key];
+  if (req.method === "GET" && /^\/boards\/[^/]+\/posts\/export$/.test(req.path)) return "social-listening-post-export";
+  if (req.method === "PATCH" && /^\/monitored-accounts\/[^/]+$/.test(req.path)) return "social-listening-board-update";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/pause$/.test(req.path)) return "social-listening-board-pause";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/resume$/.test(req.path)) return "social-listening-board-resume";
+  if (req.method === "DELETE" && /^\/boards\/[^/]+$/.test(req.path)) return "social-listening-board-delete";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/refresh$/.test(req.path)) return "social-listening-board-refresh";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/reconcile-recent$/.test(req.path)) return "social-listening-board-reconcile-recent";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/ai-config$/.test(req.path)) return "social-listening-board-ai-config-update";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/posts\/[^/]+\/reanalyze$/.test(req.path)) return "social-listening-post-ai-reanalyze";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/accesses$/.test(req.path)) return "social-listening-access-grant";
+  if (req.method === "DELETE" && /^\/boards\/[^/]+\/accesses\/[^/]+$/.test(req.path)) return "social-listening-access-revoke";
+  if (req.method === "POST" && /^\/jobs\/[^/]+\/retry$/.test(req.path)) return "social-listening-job-retry";
+  if (req.method === "POST" && /^\/jobs\/[^/]+\/recover$/.test(req.path)) return "social-listening-job-recover";
+  return null;
+}));
 router.use(requirePermission(SOCIAL_LISTENING_PERMISSION));
 
 function getAdminId(req) {

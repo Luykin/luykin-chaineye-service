@@ -12,8 +12,12 @@ const express = require('express');
 const { adminAuth } = require('../middleware/adminAuth');
 const { chat, structuredChat } = require('../../lib/llm');
 const { z } = require('zod');
+const { createAdminWriteAudit } = require('../services/admin-audit');
 
 const router = express.Router();
+router.use(createAdminWriteAudit((req) => (
+  req.method === 'POST' && req.path === '/' ? 'llm-test-execute' : null
+)));
 
 // 可用模型列表
 const AVAILABLE_MODELS = [

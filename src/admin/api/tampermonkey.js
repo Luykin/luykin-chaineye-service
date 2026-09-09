@@ -7,8 +7,15 @@ const { Fundraising } = require("../../models/postgres-fundraising");
 const { CollectorClientToken } = require("../../models/postgres-start");
 const { requirePermission } = require("../middleware/adminAuth");
 const { recordGenericStat } = require("../../xhunt/services/generic-stats-service");
+const { createAdminWriteAudit } = require("../services/admin-audit");
 
 const router = express.Router();
+router.use(createAdminWriteAudit((req) => {
+  if (req.method === "POST" && req.path === "/tokens") return "tampermonkey-token-create";
+  if (req.method === "PATCH" && /^\/tokens\/[^/]+\/revoke$/.test(req.path)) return "tampermonkey-token-revoke";
+  if (req.method === "POST" && req.path === "/rootdata/force-recrawl/prepare") return "rootdata-force-recrawl-prepare";
+  return null;
+}));
 const TAMPERMONKEY_DIR = path.resolve(__dirname, "../../../tampermonkey");
 const TOKEN_TTL_MONTHS = 12;
 

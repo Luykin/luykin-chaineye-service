@@ -25,6 +25,7 @@ const nacosAdminRouter = require("./stats-routes/nacos-admin");
 const kolMatchConfigRouter = require("./stats-routes/kol-match-config");
 const externalLoginStatusRouter = require("./stats-routes/external-login-status");
 const { logAdminAction } = require("./stats-routes/shared");
+const { createAdminWriteAudit } = require("../../admin/services/admin-audit");
 const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const {
   getWebAuthnRequestConfig,
@@ -38,6 +39,12 @@ const {
 const { isDeadFingerprint } = require("../utils/request-identity");
 
 const router = express.Router();
+router.use(createAdminWriteAudit((req) => {
+  if (req.method === "POST" && req.path === "/feature-flags") return "feature-flags-publish";
+  if (req.method === "POST" && req.path === "/rootdata-daily/set-initial") return "rootdata-daily-set-initial";
+  if (req.method === "POST" && req.path === "/echohunt/kol-match/config/refresh-cache") return "kol-match-config-refresh-cache";
+  return null;
+}));
 const ADMIN_MESSAGE_SENDER_ID = "6666666d-cc11-8888-8888-034d3e9a8888";
 
 function sanitizeMessageCampaignId(value) {

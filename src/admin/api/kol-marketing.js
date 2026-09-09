@@ -18,6 +18,7 @@ const {
   isPostgresWriteConfigured,
 } = require("../../infra/k8s/postgres-write");
 const { requirePermission } = require("../middleware/adminAuth");
+const { createAdminWriteAudit } = require("../services/admin-audit");
 const {
   getKolMarketingFilterLlmModel,
   getKolMarketingEmbeddingModel,
@@ -26,6 +27,11 @@ const {
 } = require("../../xhunt/api/kol-marketing/search-service");
 
 const router = express.Router();
+router.use(createAdminWriteAudit((req) => (
+  req.method === "DELETE" && req.path === "/profile-debug/collaboration"
+    ? "kol-marketing-profile-debug-collaboration-delete"
+    : null
+)));
 const profileDebugGuard = requirePermission(["kol-match-config:read", "kol-match-config:write", "nacos-admin"]);
 
 function getServiceStatus() {

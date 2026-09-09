@@ -224,7 +224,10 @@ function isDefaultEquivalentPrompt(field, prompt) {
 }
 
 function renderPromptTemplate(prompt, variables = {}) {
-  return String(prompt || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+  // 支持配置中常见的 {name} 和 {{name}} 两种写法。后者曾导致
+  // {{referenceContext}} 只替换了内层变量，向模型遗留花括号。
+  return String(prompt || "").replace(/\{\{([a-zA-Z0-9_]+)\}\}|\{([a-zA-Z0-9_]+)\}/g, (match, doubleBraceKey, singleBraceKey) => {
+    const key = doubleBraceKey || singleBraceKey;
     if (!Object.prototype.hasOwnProperty.call(variables, key)) return match;
     const value = variables[key];
     return value === null || value === undefined ? "" : String(value);
