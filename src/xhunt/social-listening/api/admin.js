@@ -77,10 +77,22 @@ function normalizeAccountId(value) {
   return String(value || "").trim();
 }
 
+function getPostReferenceEntries(post = {}) {
+  const currentTweetId = String(post.tweetId || "").trim();
+  const directReference = post.quoteId
+    ? { type: "quote", tweetId: String(post.quoteId) }
+    : post.replyId
+      ? { type: "reply", tweetId: String(post.replyId) }
+      : null;
+  const conversationId = String(post.conversationId || "").trim();
+  const rootReference = conversationId && conversationId !== currentTweetId && conversationId !== directReference?.tweetId
+    ? { type: "conversation_root", tweetId: conversationId }
+    : null;
+  return [directReference, rootReference].filter(Boolean);
+}
+
 async function serializePostsWithReferences(posts = [], boardId) {
-  const referenceTweetIds = Array.from(new Set(posts.flatMap((post) => [post.quoteId, post.replyId])
-    .map((tweetId) => String(tweetId || "").trim())
-    .filter(Boolean)));
+  const referenceTweetIds = Array.from(new Set(posts.flatMap((post) => getPostReferenceEntries(post).map((reference) => reference.tweetId))));
   const referenceRows = referenceTweetIds.length
     ? await EchohuntSocialListeningPost.findAll({
       where: { boardId, tweetId: { [Op.in]: referenceTweetIds } },
@@ -91,10 +103,7 @@ async function serializePostsWithReferences(posts = [], boardId) {
   const referenceByTweetId = new Map(referenceRows.map((row) => [String(row.tweetId), serializePost(row)]));
 
   return posts.map((post) => {
-    const referencePosts = [
-      post.quoteId ? { type: "quote", tweetId: String(post.quoteId) } : null,
-      post.replyId ? { type: "reply", tweetId: String(post.replyId) } : null,
-    ].filter(Boolean).map((reference) => ({
+    const referencePosts = getPostReferenceEntries(post).map((reference) => ({
       ...reference,
       recalled: referenceByTweetId.has(reference.tweetId),
       post: referenceByTweetId.get(reference.tweetId) || null,
@@ -553,7 +562,7 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "contentConcurrency", label: "内容并发", desc: "综合 AI Worker 的并发帖子数；会和态度并发取较大值。" },
   { field: "projectAttitudeConcurrency", label: "态度并发", desc: "综合 AI Worker 的并发帖子数；会和内容并发取较大值。" },
   { field: "maxTextLength", label: "推文截断长度", desc: "进入 AI Prompt 前的正文硬截断字符数；超长推文会截断并在日志记录 truncated=true。" },
-  { field: "referenceContextMaxLength", label: "引用/回复上下文截断长度", desc: "引用或回复目标原文进入 AI Prompt 前的硬截断字符数；每个 AI 批次只批量查询一次关联原文，默认 1200，最大 2000。" },
+  { field: "referenceContextMaxLength", label: "关联上下文截断长度", desc: "引用、回复对象和会话根帖原文进入 AI Prompt 前的总截断字符数；每个 AI 批次只批量查询一次关联原文，默认 1200，最大 2000。" },
   { field: "negativeScoreThreshold", label: "负面阈值", desc: "项目态度分低于该值时判定为 negative。默认 4。" },
   { field: "positiveScoreThreshold", label: "正面阈值", desc: "项目态度分高于该值时判定为 positive；介于负面和正面阈值之间为 neutral。默认 6。" },
   { field: "temperature", label: "温度", desc: "模型随机性，舆情分类建议保持 0，保证结果稳定可复现。" },

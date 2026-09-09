@@ -122,10 +122,11 @@ export interface SocialListeningPost {
   postCreatedAt: string;
   text?: string | null;
   source: string;
+  conversationId?: string | null;
   quoteId?: string | null;
   replyId?: string | null;
   referencePosts?: Array<{
-    type: "quote" | "reply";
+    type: "quote" | "reply" | "conversation_root";
     tweetId: string;
     recalled: boolean;
     post?: Pick<SocialListeningPost, "id" | "tweetId" | "tweetUrl" | "author" | "postCreatedAt" | "text"> | null;

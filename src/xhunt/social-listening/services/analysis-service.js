@@ -36,32 +36,47 @@ function getPostAiText(post, options = {}) {
   };
 }
 
-function getPostReference(post, referenceRowsById, options = {}) {
-  const reference = post.quoteId
+function getPostReferenceCandidates(post = {}) {
+  const currentTweetId = String(post.tweetId || "").trim();
+  const directReference = post.quoteId
     ? { tweetId: String(post.quoteId), label: "引用原文" }
     : post.replyId
       ? { tweetId: String(post.replyId), label: "回复对象原文" }
       : null;
-  if (!reference) return { context: "", rawLength: 0, truncated: false };
+  const conversationId = String(post.conversationId || "").trim();
+  const rootReference = conversationId && conversationId !== currentTweetId && conversationId !== directReference?.tweetId
+    ? { tweetId: conversationId, label: "会话根推文" }
+    : null;
+  return [directReference, rootReference].filter(Boolean);
+}
 
-  const row = referenceRowsById.get(reference.tweetId);
-  const rawText = normalizeTweetText(row?.text || "");
-  if (!rawText) return { context: "", rawLength: 0, truncated: false };
+function getPostReference(post, referenceRowsById, options = {}) {
+  const references = getPostReferenceCandidates(post)
+    .map((reference) => ({ ...reference, rawText: normalizeTweetText(referenceRowsById.get(reference.tweetId)?.text || "") }))
+    .filter((reference) => reference.rawText);
+  if (!references.length) return { context: "", rawLength: 0, truncated: false };
 
   const maxLength = clampInteger(options.maxReferenceContextLength, 1200, 200, 2000);
-  const truncated = rawText.length > maxLength;
-  const text = truncated ? rawText.slice(0, maxLength) : rawText;
+  const directLength = references.length > 1 ? Math.max(100, Math.floor(maxLength / 3)) : maxLength;
+  const contextParts = references.map((reference, index) => {
+    const allowedLength = index === 0 ? directLength : Math.max(100, maxLength - directLength);
+    const truncated = reference.rawText.length > allowedLength;
+    const text = truncated ? reference.rawText.slice(0, allowedLength) : reference.rawText;
+    return {
+      text: `${reference.label}（仅作语境，非当前作者观点）：${text}`,
+      rawLength: reference.rawText.length,
+      truncated,
+    };
+  });
   return {
-    context: `${reference.label}（仅作语境，非当前作者观点）：${text}`,
-    rawLength: rawText.length,
-    truncated,
+    context: contextParts.map((item) => item.text).join("\n\n"),
+    rawLength: contextParts.reduce((total, item) => total + item.rawLength, 0),
+    truncated: contextParts.some((item) => item.truncated),
   };
 }
 
 function getReferenceTweetIds(posts = []) {
-  return Array.from(new Set(posts.flatMap((post) => [post.quoteId, post.replyId])
-    .map((tweetId) => String(tweetId || "").trim())
-    .filter(Boolean)));
+  return Array.from(new Set(posts.flatMap((post) => getPostReferenceCandidates(post).map((reference) => reference.tweetId))));
 }
 
 async function loadReferenceRowsById(posts = []) {

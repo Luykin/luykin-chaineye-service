@@ -1010,13 +1010,13 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
                           <Paragraph copyable ellipsis={{ rows: 5, expandable: true, symbol: "展开" }} style={{ marginBottom: 0 }}>{post.text || "-"}</Paragraph>
                           <Descriptions size="small" column={1}>
                             <Descriptions.Item label="tweetId"><Text code>{post.tweetId}</Text></Descriptions.Item>
-                            <Descriptions.Item label="引用 / 回复对象">
+                            <Descriptions.Item label="关联上下文">
                               {post.referencePosts?.length ? (
                                 <Space direction="vertical" size={4}>
                                   {post.referencePosts.map((reference) => (
                                     <Space key={`${reference.type}:${reference.tweetId}`} direction="vertical" size={2}>
                                       <Space size={6} wrap>
-                                        <Tag color={reference.type === "quote" ? "blue" : "purple"}>{reference.type === "quote" ? "引用" : "回复"}</Tag>
+                                        <Tag color={reference.type === "quote" ? "blue" : reference.type === "reply" ? "purple" : "gold"}>{reference.type === "quote" ? "引用" : reference.type === "reply" ? "回复" : "会话根帖"}</Tag>
                                         <Text code copyable>{reference.tweetId}</Text>
                                         {reference.post ? (
                                           <>
