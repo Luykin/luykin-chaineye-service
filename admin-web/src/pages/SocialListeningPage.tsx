@@ -1097,6 +1097,7 @@ function TextCondensationsPanel({ boardId, open }: { boardId: string; open: bool
     { title: "精简内容", dataIndex: "condensedText", render: (value) => <Paragraph copyable ellipsis={{ rows: 3, expandable: true, symbol: "展开" }} style={{ marginBottom: 0 }}>{value || "-"}</Paragraph> },
     { title: "模型", dataIndex: "model", width: 230, render: (value) => value ? <Text code>{value}</Text> : "-" },
     { title: "精简时间", dataIndex: "condensedAt", width: 175, render: formatDate },
+    { title: "操作", width: 100, render: (_, row) => <a href={`https://x.com/i/status/${row.tweetId}`} target="_blank" rel="noreferrer">查看推文</a> },
   ];
 
   function applySearch(value: string) {
