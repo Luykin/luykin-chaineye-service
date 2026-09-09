@@ -144,7 +144,7 @@ const DEFAULT_AI_PROMPTS = {
 
 const EXTRA_LLM_MODEL_OPTIONS: LlmModelOption[] = [
   { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+  { value: "vertex_ai/gemini-3.8-flash", label: "vertex_ai/gemini-3.8-flash" },
   { value: "chatgpt/gpt-5.4-mini", label: "ChatGPT GPT-5.4 Mini" },
   { value: "chatgpt/gpt-5.6-luna", label: "ChatGPT GPT-5.6 Luna" },
 ];
