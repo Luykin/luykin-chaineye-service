@@ -433,6 +433,10 @@ export function refreshSocialListeningBoard(boardId: string) {
   return apiRequest<{ success: boolean; data: { job: SocialListeningJob; reused: boolean } }>(`${BASE_PATH}/boards/${boardId}/refresh`, { method: "POST" });
 }
 
+export function reconcileRecentSocialListeningBoard(boardId: string) {
+  return apiRequest<{ success: boolean; data: { job: SocialListeningJob; reused: boolean } }>(`${BASE_PATH}/boards/${boardId}/reconcile-recent`, { method: "POST" });
+}
+
 export function fetchSocialListeningAccesses(boardId: string, query?: { page?: number; pageSize?: number; status?: string }) {
   return apiRequest<{ success: boolean; data: SocialListeningPageData<SocialListeningAccess> }>(withQuery(`${BASE_PATH}/boards/${boardId}/accesses`, query));
 }

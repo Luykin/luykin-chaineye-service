@@ -89,7 +89,7 @@ function normalizeReadonlyQueryError(error, db) {
   error.publicMessage = [
     "Social Listening 获取只读 PostgreSQL 连接超时，不是前端 URL 或接口地址配置问题。",
     `只读连接池 scope=${SOCIAL_LISTENING_READONLY_SCOPE} max=${pool.max || "-"} acquire=${pool.acquire || "-"}ms。`,
-    "通常是只读池被慢查询/并发查询占满，可调大 K8S_PG_READ_SOCIAL_LISTENING_POOL_MAX，或降低 social-listening 的 scan.pageSize / scan.maxPages / scheduler.maxJobsPerTick 后重试。",
+    "通常是只读池被慢查询/并发查询占满，可调大 K8S_PG_READ_SOCIAL_LISTENING_POOL_MAX，或降低 social-listening 的 scan.pageSize / scheduler.maxJobsPerTick 后重试。",
   ].join(" ");
   error.details = {
     scope: SOCIAL_LISTENING_READONLY_SCOPE,
@@ -251,56 +251,33 @@ function buildBoardRecallExcludeAuthorHandles(board) {
   return Array.from(new Set(values.map(normalizeTwitterHandle).filter(Boolean))).slice(0, 50);
 }
 
-async function fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, limit) {
-  if (!isNumericId(board?.officialTwitterId)) return [];
-  const rows = await queryReadonlyWithStatementTimeout(
-    db,
-    `
-      SELECT ot.id::text AS id
-      FROM dev.tweet ot
-      WHERE ot.twitter_user_id::text = $officialTwitterId
-        AND ot.create_time >= ($startAt::timestamptz - interval '30 days')
-        AND ot.create_time < $endAt
-      ORDER BY ot.create_time DESC
-      LIMIT $limit
-    `,
-    {
-      bind: {
-        officialTwitterId: String(board.officialTwitterId),
-        startAt,
-        endAt,
-        limit,
-      },
-      type: QueryTypes.SELECT,
-    }
-  );
-  return rows.map((row) => String(row.id)).filter(Boolean);
+function buildOfficialInteractionClause(board) {
+  if (!isNumericId(board?.officialTwitterId)) return "FALSE";
+  return `EXISTS (
+    SELECT 1
+    FROM dev.tweet official_tweet
+    WHERE official_tweet.twitter_user_id::text = $officialTwitterId
+      AND official_tweet.create_time >= (t.create_time - interval '30 days')
+      AND (
+        official_tweet.id::text = t.quote_id::text
+        OR official_tweet.id::text = t.reply_id::text
+      )
+  )`;
 }
 
-async function fetchCandidateTweetPage(db, bind, keywordClause, excludeClause) {
+async function fetchCandidateTweetPage(db, bind, keywordClause, officialInteractionClause, excludeClause) {
   return queryReadonlyWithStatementTimeout(
     db,
     `
       SELECT
         t.id::text AS id,
-        t.create_time,
-        (
-          (
-            ${keywordClause}
-            OR (
-              cardinality($officialTweetIds::text[]) > 0
-              AND (
-                t.quote_id::text = ANY($officialTweetIds::text[])
-                OR t.reply_id::text = ANY($officialTweetIds::text[])
-              )
-            )
-          )
-          AND NOT (${excludeClause})
-        ) AS is_match
+        t.create_time
       FROM dev.tweet t
       WHERE t.create_time >= $startAt
         AND t.create_time < $endAt
         AND t.retweet_id IS NULL
+        AND (${keywordClause} OR ${officialInteractionClause})
+        AND NOT (${excludeClause})
         AND (
           cardinality($recallExcludeAuthorHandles::text[]) = 0
           OR NOT EXISTS (
@@ -311,9 +288,9 @@ async function fetchCandidateTweetPage(db, bind, keywordClause, excludeClause) {
           )
         )
         AND (
-          $cursorCreateTime::timestamptz IS NULL
-          OR t.create_time < $cursorCreateTime::timestamptz
-          OR (t.create_time = $cursorCreateTime::timestamptz AND t.id::text < $cursorTweetId)
+          $cursorTimestamp::timestamptz IS NULL
+          OR t.create_time < $cursorTimestamp::timestamptz
+          OR (t.create_time = $cursorTimestamp::timestamptz AND t.id::text < $cursorTweetId)
         )
       ORDER BY t.create_time DESC, t.id::text DESC
       LIMIT $pageSize
@@ -349,7 +326,7 @@ async function fetchTweetRowsByIds(db, tweetIds, limit) {
         u.feature AS author_feature,
         u.kol AS author_kol
       FROM dev.tweet t
-      JOIN dev.twitter_user u ON u.id::text = t.twitter_user_id::text
+      LEFT JOIN dev.twitter_user u ON u.id::text = t.twitter_user_id::text
       WHERE t.id::text = ANY($tweetIds::text[])
       ORDER BY t.create_time DESC, t.id::text DESC
       LIMIT $limit
@@ -586,23 +563,21 @@ function mapTweetRowToPostPayload(board, row) {
   };
 }
 
-async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {}) {
+async function scanCandidateTweetsForBoard(board, startAt, endAt, options = {}) {
   const db = getReadonlyDbOrThrow();
   const runtimeConfig = await getSocialListeningRuntimeConfig();
   const scanConfig = runtimeConfig.scan || {};
-  const limit = Math.min(Math.max(Number(options.limit || scanConfig.matchLimit || 500), 1), 2000);
   const pageSize = clampInteger(options.pageSize || scanConfig.pageSize, scanConfig.pageSize || 200, 50, 1000);
-  const maxPages = clampInteger(options.maxPages || scanConfig.maxPages, scanConfig.maxPages || 3, 1, 20);
-  const scanLimit = pageSize * maxPages;
-  const officialPostLimit = clampInteger(options.officialPostScanLimit || scanConfig.officialPostScanLimit, scanConfig.officialPostScanLimit || 1000, 50, 5000);
-  const keywords = buildBoardKeywords(board).slice(0, 10);
-  const recallExcludeKeywords = buildBoardRecallExcludeKeywords(board).slice(0, 20);
+  const onRows = typeof options.onRows === "function" ? options.onRows : async () => {};
+  const keywords = buildBoardKeywords(board);
+  const recallExcludeKeywords = buildBoardRecallExcludeKeywords(board);
   const recallExcludeAuthorHandles = buildBoardRecallExcludeAuthorHandles(board);
   const patterns = keywords.map(buildKeywordScanPattern);
   const excludePatterns = recallExcludeKeywords.map((keyword, index) => ({
     ...buildKeywordScanPattern(keyword, index),
     key: `excludeKw${index}`,
   }));
+  const officialInteractionClause = buildOfficialInteractionClause(board);
 
   const keywordClause = patterns.length
     ? patterns.map((item) => (
@@ -621,72 +596,59 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
     : "FALSE";
 
   const scanMeta = {
-    strategy: "keyset_candidate_pages",
+    strategy: "keyset_matched_pages",
     pageSize,
-    maxPages,
-    scanLimit,
-    matchLimit: limit,
     recallExcludeCount: recallExcludeKeywords.length,
     recallExcludeAuthorCount: recallExcludeAuthorHandles.length,
-    officialPostLimit,
-    officialPostCount: 0,
     pagesScanned: 0,
-    candidatesScanned: 0,
-    matchedBeforeLimit: 0,
-    stoppedReason: "max_pages",
+    matchedRowsScanned: 0,
+    rowsFetched: 0,
+    stoppedReason: "no_more_matches",
   };
 
-  let rows = [];
   try {
-    const officialTweetIds = await fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, officialPostLimit);
-    scanMeta.officialPostCount = officialTweetIds.length;
-
-    const matchedIds = [];
-    const seenIds = new Set();
-    let cursorCreateTime = null;
+    let cursorTimestamp = null;
     let cursorTweetId = null;
-    for (let page = 0; page < maxPages && matchedIds.length < limit; page += 1) {
+    while (true) {
       const bind = {
         startAt,
         endAt,
         pageSize,
-        cursorCreateTime,
+        cursorTimestamp,
         cursorTweetId: cursorTweetId || "0",
-        officialTweetIds,
         recallExcludeAuthorHandles,
+        officialTwitterId: String(board?.officialTwitterId || ""),
       };
       patterns.forEach((item) => { bind[item.key] = item.value; });
       excludePatterns.forEach((item) => { bind[item.key] = item.value; });
 
-      const pageRows = await fetchCandidateTweetPage(db, bind, keywordClause, excludeClause);
+      const pageRows = await fetchCandidateTweetPage(
+        db,
+        bind,
+        keywordClause,
+        officialInteractionClause,
+        excludeClause
+      );
       scanMeta.pagesScanned += 1;
-      scanMeta.candidatesScanned += pageRows.length;
+      scanMeta.matchedRowsScanned += pageRows.length;
       if (!pageRows.length) {
         scanMeta.stoppedReason = "no_more_candidates";
         break;
       }
 
-      for (const item of pageRows) {
-        const id = String(item.id || "");
-        if (!id || seenIds.has(id)) continue;
-        seenIds.add(id);
-        if (item.is_match === true || item.is_match === "true" || item.is_match === "t") matchedIds.push(id);
-        if (matchedIds.length >= limit) {
-          scanMeta.stoppedReason = "match_limit";
-          break;
-        }
-      }
+      const ids = pageRows.map((item) => String(item.id || "")).filter(Boolean);
+      const rows = await fetchTweetRowsByIds(db, ids, ids.length);
+      scanMeta.rowsFetched += rows.length;
+      await onRows(rows, scanMeta);
 
       const last = pageRows[pageRows.length - 1];
-      cursorCreateTime = last.create_time;
+      cursorTimestamp = last.create_time;
       cursorTweetId = String(last.id || "0");
       if (pageRows.length < pageSize) {
         scanMeta.stoppedReason = "no_more_candidates";
         break;
       }
     }
-    scanMeta.matchedBeforeLimit = matchedIds.length;
-    rows = await fetchTweetRowsByIds(db, matchedIds.slice(0, limit), limit);
   } catch (error) {
     if (isReadonlyPoolAcquireTimeoutError(error)) {
       scanMeta.stoppedReason = "readonly_pool_acquire_timeout";
@@ -696,17 +658,13 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
     error.publicMessage = [
       "只读库扫描推文超时，不是前端 URL 或接口地址配置问题。",
       `当前窗口：${new Date(startAt).toISOString()} → ${new Date(endAt).toISOString()}。`,
-      `当前已按 keyset 分页扫描，已扫 ${scanMeta.pagesScanned} 页 / ${maxPages} 页，每页 ${pageSize} 条。`,
-      "可在 Nacos 配置 echohunt_social_listening_config 中调小 scan.windowMinutes / scan.pageSize / scan.maxPages，或调大 scan.statementTimeoutMs 后重试。",
+      `当前已按命中结果 keyset 分页扫描 ${scanMeta.pagesScanned} 页，每页 ${pageSize} 条。`,
+      "可在 Nacos 配置 echohunt_social_listening_config 中调小 scan.windowMinutes / scan.pageSize，或调大 scan.statementTimeoutMs 后重试。",
     ].join(" ");
     throw error;
   }
 
-  Object.defineProperty(rows, "scanMeta", {
-    enumerable: false,
-    value: scanMeta,
-  });
-  return rows;
+  return scanMeta;
 }
 
 function shouldIncludeProjectFollow(board) {
@@ -918,6 +876,6 @@ module.exports = {
   fetchTweetRowById,
   fetchTweetMetricsByIds,
   fetchTweetSnapshotFromCrawler,
-  fetchCandidateTweetsForBoard,
+  scanCandidateTweetsForBoard,
   fetchFollowSignalsForBoard,
 };

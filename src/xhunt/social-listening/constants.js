@@ -14,6 +14,7 @@ const ACCESS_STATUSES = Object.freeze({
 
 const JOB_TYPES = Object.freeze({
   HISTORY_BACKFILL: "history_backfill",
+  RECALL_BACKFILL: "recall_backfill",
   INCREMENTAL: "incremental",
   MANUAL_REFRESH: "manual_refresh",
   METRIC_REFRESH: "metric_refresh",

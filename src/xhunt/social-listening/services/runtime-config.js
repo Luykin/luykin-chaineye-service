@@ -12,10 +12,8 @@ const DEFAULT_SOCIAL_LISTENING_RUNTIME_CONFIG = Object.freeze({
     historyDays: 30,
     recentDays: 7,
     incrementalOverlapHours: 2,
+    recallBackfillWindowMinutes: 120,
     pageSize: 200,
-    maxPages: 3,
-    matchLimit: 500,
-    officialPostScanLimit: 1000,
     followLatestMin: 150,
   },
   ai: {
@@ -93,6 +91,7 @@ const DEFAULT_SOCIAL_LISTENING_RUNTIME_CONFIG = Object.freeze({
     userCooldownSeconds: 300,
     adminBoardCooldownSeconds: 60,
     userBoardCooldownSeconds: 120,
+    adminRecentRecallBackfillCooldownSeconds: 21600,
   },
   export: {
     maxRows: 10000,
@@ -189,10 +188,8 @@ function normalizeConfig(document = {}) {
       historyDays: toInteger(getValue(merged, "scan.historyDays", merged.scan.historyDays), 30, 1, 90),
       recentDays: toInteger(getValue(merged, "scan.recentDays", merged.scan.recentDays), 7, 1, 30),
       incrementalOverlapHours: toInteger(getValue(merged, "scan.incrementalOverlapHours", merged.scan.incrementalOverlapHours), 2, 1, 24),
+      recallBackfillWindowMinutes: toInteger(getValue(merged, "scan.recallBackfillWindowMinutes", merged.scan.recallBackfillWindowMinutes), 120, 5, 240),
       pageSize: toInteger(getValue(merged, "scan.pageSize", merged.scan.pageSize), 200, 50, 1000),
-      maxPages: toInteger(getValue(merged, "scan.maxPages", merged.scan.maxPages), 3, 1, 20),
-      matchLimit: toInteger(getValue(merged, "scan.matchLimit", merged.scan.matchLimit), 500, 1, 2000),
-      officialPostScanLimit: toInteger(getValue(merged, "scan.officialPostScanLimit", merged.scan.officialPostScanLimit), 1000, 50, 5000),
       followLatestMin: toInteger(getValue(merged, "scan.followLatestMin", merged.scan.followLatestMin), 150, 1, 200),
     },
     ai: {
@@ -268,6 +265,7 @@ function normalizeConfig(document = {}) {
       userCooldownSeconds: toInteger(merged.refresh?.userCooldownSeconds, 300, 0, 3600),
       adminBoardCooldownSeconds: toInteger(merged.refresh?.adminBoardCooldownSeconds, 60, 0, 3600),
       userBoardCooldownSeconds: toInteger(merged.refresh?.userBoardCooldownSeconds, 120, 0, 3600),
+      adminRecentRecallBackfillCooldownSeconds: toInteger(merged.refresh?.adminRecentRecallBackfillCooldownSeconds, 21600, 300, 86400),
     },
     export: {
       maxRows: toInteger(merged.export?.maxRows, 10000, 1, 50000),

@@ -700,6 +700,20 @@ function shouldRunInitialBackfill(board) {
   return !board.coverageStartAt && !board.processedThrough && !board.lastSuccessAt;
 }
 
+function getRecallConfigSignature(board = {}) {
+  const metadata = board.metadata && typeof board.metadata === "object" ? board.metadata : {};
+  return JSON.stringify(normalizeKeywords([
+    board.projectName,
+    ...(Array.isArray(metadata.keywords) ? metadata.keywords : []),
+    ...(Array.isArray(metadata.aliases) ? metadata.aliases : []),
+    ...(metadata.token ? [metadata.token] : []),
+  ]).map((value) => String(value).toLowerCase()));
+}
+
+function hasPendingRecallBackfill(board) {
+  return Boolean(board?.metadata?.recallBackfillRequiredAt);
+}
+
 const MANUAL_JOB_RECOVERY_MINUTES = 5;
 
 function getJobHeartbeatAt(job) {
@@ -792,6 +806,77 @@ async function createInitialBackfillJob(board, adminId = null) {
   });
 }
 
+async function createRecallBackfillJob(board, adminId = null) {
+  const existing = await EchohuntSocialListeningJob.findOne({
+    where: {
+      boardId: board.id,
+      jobType: JOB_TYPES.RECALL_BACKFILL,
+      status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] },
+    },
+    order: [["createdAt", "DESC"]],
+  });
+  if (existing) return { job: existing, reused: true };
+
+  const [olderRange, recentRange] = await Promise.all([
+    getHistoryRange("older_to_30d"),
+    getHistoryRange("recent_7d"),
+  ]);
+  const job = await EchohuntSocialListeningJob.create({
+    boardId: board.id,
+    jobType: JOB_TYPES.RECALL_BACKFILL,
+    status: JOB_STATUSES.PENDING,
+    rangeStartAt: olderRange.startAt,
+    rangeEndAt: recentRange.endAt,
+    triggeredBy: "admin",
+    triggeredByAdminId: adminId,
+    metadata: { stage: "recall_config_changed", source: "board_update" },
+  });
+  return { job, reused: false };
+}
+
+async function createRecentRecallBackfillJob(boardId, adminId = null, redisClient = null) {
+  const board = await EchohuntSocialListeningBoard.findByPk(boardId);
+  if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) {
+    throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+  }
+  if (board.status === BOARD_STATUSES.PAUSED) {
+    throw publicError("BOARD_PAUSED", 409, "看板已暂停，请先在管理后台恢复监控。");
+  }
+
+  const existing = await EchohuntSocialListeningJob.findOne({
+    where: {
+      boardId,
+      jobType: JOB_TYPES.RECALL_BACKFILL,
+      status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] },
+    },
+    order: [["createdAt", "DESC"]],
+  });
+  if (existing) return { job: existing, reused: true };
+
+  const runtimeConfig = await getSocialListeningRuntimeConfig();
+  const cooldownSeconds = runtimeConfig.refresh?.adminRecentRecallBackfillCooldownSeconds || 21600;
+  const cooldownKey = `echohunt:social-listening:recent-recall-backfill:admin:${adminId || "unknown"}:${boardId}`;
+  if (redisClient?.set && cooldownSeconds > 0) {
+    const ok = await redisClient.set(cooldownKey, "1", { NX: true, EX: cooldownSeconds }).catch(() => "OK");
+    if (ok === null) {
+      throw publicError("RECENT_RECALL_BACKFILL_RATE_LIMITED", 429, "最近 7 天查漏补缺已执行过，请稍后再试。", { retryAfter: cooldownSeconds });
+    }
+  }
+
+  const range = await getHistoryRange("recent_7d");
+  const job = await EchohuntSocialListeningJob.create({
+    boardId,
+    jobType: JOB_TYPES.RECALL_BACKFILL,
+    status: JOB_STATUSES.PENDING,
+    rangeStartAt: range.startAt,
+    rangeEndAt: range.endAt,
+    triggeredBy: "admin",
+    triggeredByAdminId: adminId,
+    metadata: { stage: "manual_recent_7d", source: "admin_recent_recall_backfill" },
+  });
+  return { job, reused: false };
+}
+
 async function resumeBoard(boardId, adminId = null, redisClient = null) {
   const board = await EchohuntSocialListeningBoard.findByPk(boardId);
   if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) {
@@ -804,6 +889,7 @@ async function resumeBoard(boardId, adminId = null, redisClient = null) {
   });
 
   const firstActivation = shouldRunInitialBackfill(board);
+  const recallBackfillPending = hasPendingRecallBackfill(board);
   await board.update({
     status: firstActivation ? BOARD_STATUSES.INITIALIZING : BOARD_STATUSES.MONITORING,
     updatedByAdminId: adminId,
@@ -814,6 +900,13 @@ async function resumeBoard(boardId, adminId = null, redisClient = null) {
   if (!job) {
     if (firstActivation) {
       job = await createInitialBackfillJob(board, adminId);
+    } else if (recallBackfillPending) {
+      const recallBackfill = await createRecallBackfillJob(board, adminId);
+      job = recallBackfill.job;
+      reused = recallBackfill.reused;
+      const metadata = { ...(board.metadata || {}) };
+      delete metadata.recallBackfillRequiredAt;
+      await board.update({ metadata });
     } else {
       const refresh = await createManualRefreshJob(board.id, { type: "admin", adminId }, redisClient);
       job = refresh.job;
@@ -867,6 +960,7 @@ async function listMonitoredAccounts(query = {}) {
 async function updateBoard(boardId, input = {}, adminId = null) {
   const board = await EchohuntSocialListeningBoard.findByPk(boardId);
   if (!board || board.status === BOARD_STATUSES.DELETED) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+  const currentRecallConfigSignature = getRecallConfigSignature(board);
   const metadata = board.metadata && typeof board.metadata === "object" ? board.metadata : {};
   const patch = {
     updatedByAdminId: adminId,
@@ -881,6 +975,9 @@ async function updateBoard(boardId, input = {}, adminId = null) {
   if (Array.isArray(input.keywords)) patch.metadata.keywords = normalizeKeywords(input.keywords);
   if (Array.isArray(input.aliases)) patch.metadata.aliases = normalizeKeywords(input.aliases);
   const inputMetadata = input.metadata && typeof input.metadata === "object" ? input.metadata : {};
+  if (inputMetadata.token !== undefined || input.token !== undefined) {
+    patch.metadata.token = String(inputMetadata.token ?? input.token ?? "").trim() || null;
+  }
   if (Array.isArray(inputMetadata.wordCloudExcludeKeywords) || Array.isArray(input.wordCloudExcludeKeywords)) {
     patch.metadata.wordCloudExcludeKeywords = normalizeKeywords(inputMetadata.wordCloudExcludeKeywords || input.wordCloudExcludeKeywords || []);
   }
@@ -893,8 +990,28 @@ async function updateBoard(boardId, input = {}, adminId = null) {
     );
   }
   if (input.status && Object.values(BOARD_STATUSES).includes(input.status)) patch.status = input.status;
+  const nextRecallConfigSignature = getRecallConfigSignature({
+    projectName: patch.projectName === undefined ? board.projectName : patch.projectName,
+    metadata: patch.metadata,
+  });
+  const recallConfigChanged = currentRecallConfigSignature !== nextRecallConfigSignature;
   await board.update(patch);
-  await writeAudit({ boardId: board.id, adminId, action: "board_update", payload: patch });
+  let recallBackfill = null;
+  if (recallConfigChanged) {
+    if (board.status === BOARD_STATUSES.PAUSED) {
+      await board.update({
+        metadata: { ...(board.metadata || {}), recallBackfillRequiredAt: new Date().toISOString() },
+      });
+    } else {
+      recallBackfill = await createRecallBackfillJob(board, adminId);
+    }
+  }
+  await writeAudit({
+    boardId: board.id,
+    adminId,
+    action: "board_update",
+    payload: { ...patch, recallConfigChanged, recallBackfillJobId: recallBackfill?.job?.id || null },
+  });
   return board;
 }
 
@@ -1104,5 +1221,6 @@ module.exports = {
   assertBoardAccess,
   getBoardDetail,
   createManualRefreshJob,
+  createRecentRecallBackfillJob,
   parseTweetUrl,
 };

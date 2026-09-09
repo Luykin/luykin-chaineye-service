@@ -60,6 +60,7 @@ import {
   grantSocialListeningAccess,
   pauseSocialListeningAiWorker,
   pauseSocialListeningBoard,
+  reconcileRecentSocialListeningBoard,
   refreshSocialListeningBoard,
   reanalyzeSocialListeningPost,
   recoverSocialListeningJob,
@@ -363,6 +364,20 @@ const JOB_PHASE_LABELS: Record<string, string> = {
   succeeded: "任务已完成",
   failed: "任务执行失败",
 };
+
+function formatJobType(job?: SocialListeningJob | null) {
+  if (!job) return "-";
+  if (job.jobType === "recall_backfill") {
+    return getString(asRecord(job.metadata).stage) === "manual_recent_7d" ? "查漏补缺（最近7天）" : "召回回补（30天）";
+  }
+  return ({
+    history_backfill: "历史补数",
+    incremental: "增量采集",
+    manual_refresh: "刷新数据",
+    metric_refresh: "互动指标回刷",
+    reanalyze: "重新 AI 分析",
+  } as Record<string, string>)[job.jobType] || job.jobType;
+}
 
 function parseTimestamp(value?: string | null) {
   if (!value) return null;
@@ -684,7 +699,7 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
                 <Descriptions.Item label="处理游标">{formatDate(board.processedThrough)}</Descriptions.Item>
                 <Descriptions.Item label="最近成功">{formatDate(board.lastSuccessAt)}</Descriptions.Item>
                 <Descriptions.Item label="最近失败">{formatDate(board.lastFailureAt)}</Descriptions.Item>
-                <Descriptions.Item label="最新任务">{latestJob ? <Space size={4} wrap>{statusTag(latestJob.status)}<Tag>{latestJob.jobType}</Tag><Text type="secondary">{formatDate(latestJob.createdAt)}</Text></Space> : "-"}</Descriptions.Item>
+                <Descriptions.Item label="最新任务">{latestJob ? <Space size={4} wrap>{statusTag(latestJob.status)}<Tag>{formatJobType(latestJob)}</Tag><Text type="secondary">{formatDate(latestJob.createdAt)}</Text></Space> : "-"}</Descriptions.Item>
                 <Descriptions.Item label="排名来源">{getString(metadata.rankSource) || "-"}</Descriptions.Item>
                 <Descriptions.Item label="Token">{getString(metadata.token) || "-"}</Descriptions.Item>
                 <Descriptions.Item label="品牌色">{board.brandColor ? <Space size={6}><span className="social-listening-color-dot" style={{ background: board.brandColor }} /><Text code>{board.brandColor}</Text></Space> : "-"}</Descriptions.Item>
@@ -1798,7 +1813,7 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
   ];
 
   const jobColumns: TableProps<SocialListeningJob>["columns"] = [
-    { title: "类型", dataIndex: "jobType", width: 150 },
+    { title: "类型", width: 150, render: (_, row) => formatJobType(row) },
     { title: "状态", dataIndex: "status", width: 100, render: statusTag },
     { title: "处理进度", width: 240, render: (_, row) => renderJobProgressCell(row) },
     { title: "写入结果", width: 280, render: (_, row) => {
@@ -2037,6 +2052,15 @@ export function SocialListeningPage() {
     onSuccess: (response) => { messageApi.success(response.data.reused ? "已有任务运行中，已复用" : "刷新任务已创建"); void boardsQuery.refetch(); void jobsQuery.refetch(); },
     onError: (error: Error) => messageApi.error(error.message || "刷新失败"),
   });
+  const reconcileRecentMutation = useMutation({
+    mutationFn: reconcileRecentSocialListeningBoard,
+    onSuccess: (response) => {
+      messageApi.success(response.data.reused ? "已有查漏补缺任务运行中，已复用" : "最近 7 天查漏补缺任务已创建");
+      void boardsQuery.refetch();
+      void jobsQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "查漏补缺失败"),
+  });
   const recoverJobMutation = useMutation({
     mutationFn: recoverSocialListeningJob,
     onSuccess: () => { messageApi.success("异常任务已恢复并重新入队"); void boardsQuery.refetch(); void jobsQuery.refetch(); },
@@ -2087,7 +2111,7 @@ export function SocialListeningPage() {
     { title: "数据", width: 150, render: (_, row) => <Space direction="vertical" size={0}><Text>{row.postCount || 0} posts</Text><Text type="secondary">已分配 {row.accessCount || 0} 个账号</Text></Space> },
     { title: "AI", width: 170, render: (_, row) => renderBoardAiStatus(row) },
     { title: "处理进度", width: 250, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatDate(row.processedThrough)}</Text><Text type={row.lastFailureReason ? "danger" : "secondary"}>{row.lastFailureReason || `最近成功 ${formatDate(row.lastSuccessAt)}`}</Text></Space> },
-    { title: "最新任务", width: 210, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text><Text type="secondary">{formatJobProgressSummary(row.latestJob)}</Text></Space> : "-" },
+    { title: "最新任务", width: 210, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{formatJobType(row.latestJob)}</Text><Text type="secondary">{formatJobProgressSummary(row.latestJob)}</Text></Space> : "-" },
     {
       title: "操作",
       fixed: "right",
@@ -2095,11 +2119,22 @@ export function SocialListeningPage() {
       render: (_, row) => {
         const moreItems: MenuProps["items"] = [
           { key: "refresh", icon: <ThunderboltOutlined />, label: "刷新数据" },
+          { key: "reconcile-recent", icon: <ReloadOutlined />, label: "查漏补缺（最近7天）" },
           { key: "delete", icon: <DeleteOutlined />, label: <Text type="danger">删除看板</Text>, danger: true },
         ];
         const handleMoreClick: MenuProps["onClick"] = ({ key }) => {
           if (key === "refresh") {
             refreshMutation.mutate(row.id);
+            return;
+          }
+          if (key === "reconcile-recent") {
+            Modal.confirm({
+              title: "查漏补缺最近 7 天？",
+              content: "将按当前召回配置重新扫描最近 7 天的命中推文；已入库数据会幂等更新，新帖子会进入后续 AI Worker 队列。同一看板每 6 小时最多执行一次。",
+              okText: "开始查漏",
+              cancelText: "取消",
+              onOk: () => reconcileRecentMutation.mutate(row.id),
+            });
             return;
           }
           if (key === "delete") {
@@ -2140,7 +2175,7 @@ export function SocialListeningPage() {
         );
       },
     },
-  ], [deleteMutation, pauseMutation, refreshMutation, resumeMutation]);
+  ], [deleteMutation, pauseMutation, reconcileRecentMutation, refreshMutation, resumeMutation]);
 
   return (
     <PermissionGuard permission="social-listening">
@@ -2218,7 +2253,7 @@ export function SocialListeningPage() {
                 pagination={false}
                 expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }}
                 columns={[
-                  { title: "类型", dataIndex: "jobType" },
+                  { title: "类型", render: (_, row) => formatJobType(row) },
                   { title: "状态", dataIndex: "status", render: statusTag },
                   { title: "进度", render: (_, row) => renderJobProgressCell(row) },
                   { title: "创建", dataIndex: "createdAt", render: formatDate },
@@ -2320,7 +2355,7 @@ export function SocialListeningPage() {
                 <ColorPicker showText format="hex" presets={[{ label: "常用", colors: ["#1677ff", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0f172a"] }]} />
               </Form.Item>
               <Row gutter={12}>
-                <Col span={12}><Form.Item name="keywords" label="关键词（每行一个）" extra="召回推文用；会匹配 dev.tweet.text，适合品牌名、协议名、产品名。"><TextArea rows={4} placeholder="Ethereum\nETH\nEVM" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="keywords" label="关键词（每行一个）" extra="召回推文用；匹配不区分大小写，英文按完整词匹配（不命中词内片段）、中文按包含匹配，大小写不同的重复词仅保留第一条。"><TextArea rows={4} placeholder="Ethereum\nETH\nEVM" /></Form.Item></Col>
                 <Col span={12}><Form.Item name="aliases" label="别名（每行一个）" extra="项目简称、旧名、ticker；会与关键词一起参与召回。"><TextArea rows={4} placeholder="Ether\n$ETH" /></Form.Item></Col>
               </Row>
               <Row gutter={12}>

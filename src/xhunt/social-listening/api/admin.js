@@ -23,6 +23,7 @@ const {
   revokeBoardAccess,
   getBoardDetail,
   createManualRefreshJob,
+  createRecentRecallBackfillJob,
   serializeAccess,
   serializeJob,
   serializePost,
@@ -734,6 +735,16 @@ router.post("/boards/:boardId/refresh", async (req, res) => {
     return res.json({ success: true, data: { job: serializeJob(result.job), reused: result.reused } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_REFRESH_FAILED");
+  }
+});
+
+router.post("/boards/:boardId/reconcile-recent", async (req, res) => {
+  try {
+    const result = await createRecentRecallBackfillJob(req.params.boardId, getAdminId(req), req.redisClient);
+    await enableSocialListeningScheduler(req.redisClient, { type: "admin", adminId: getAdminId(req) });
+    return res.json({ success: true, data: { job: serializeJob(result.job), reused: result.reused } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_RECONCILE_RECENT_FAILED");
   }
 });
 

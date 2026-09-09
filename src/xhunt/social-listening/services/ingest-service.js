@@ -6,7 +6,7 @@ const {
 } = require("../../../models/postgres-start");
 const { BOARD_STATUSES, JOB_STATUSES, JOB_TYPES } = require("../constants");
 const {
-  fetchCandidateTweetsForBoard,
+  scanCandidateTweetsForBoard,
   mapTweetRowToPostPayload,
 } = require("./data-source");
 const {
@@ -128,11 +128,14 @@ async function upsertPostPayloads(payloads) {
 }
 
 async function processWindow(board, window) {
-  const rows = await fetchCandidateTweetsForBoard(board, window.startAt, window.endAt);
-  const scanMeta = rows.scanMeta || null;
-  const payloads = rows.map((row) => mapTweetRowToPostPayload(board, row));
-  const upserted = await upsertPostPayloads(payloads);
-  return { scanned: rows.length, upserted, scanMeta };
+  let upserted = 0;
+  const scanMeta = await scanCandidateTweetsForBoard(board, window.startAt, window.endAt, {
+    onRows: async (rows) => {
+      const payloads = rows.map((row) => mapTweetRowToPostPayload(board, row));
+      upserted += await upsertPostPayloads(payloads);
+    },
+  });
+  return { scanned: scanMeta.rowsFetched, upserted, scanMeta };
 }
 
 async function markJobRunning(job) {
@@ -234,7 +237,10 @@ async function processSocialListeningJob(jobId) {
   try {
     const runtimeConfig = await getSocialListeningRuntimeConfig();
     const range = await getJobRange(board, job);
-    const windows = splitWindows(range.startAt, range.endAt, runtimeConfig.scan?.windowMinutes);
+    const windowMinutes = job.jobType === JOB_TYPES.RECALL_BACKFILL
+      ? runtimeConfig.scan?.recallBackfillWindowMinutes
+      : runtimeConfig.scan?.windowMinutes;
+    const windows = splitWindows(range.startAt, range.endAt, windowMinutes);
     const stage = getJobStage(job);
     await updateJobProgress(job, {
       stage,
@@ -268,10 +274,8 @@ async function processSocialListeningJob(jobId) {
       counters.windows += 1;
       if (result.scanMeta) {
         counters.scanPageSize = result.scanMeta.pageSize;
-        counters.maxScanPages = result.scanMeta.maxPages;
-        counters.candidatePagesScanned = (counters.candidatePagesScanned || 0) + result.scanMeta.pagesScanned;
-        counters.candidateRowsScanned = (counters.candidateRowsScanned || 0) + result.scanMeta.candidatesScanned;
-        counters.candidateScanBudget = (counters.candidateScanBudget || 0) + result.scanMeta.scanLimit;
+        counters.matchedPagesScanned = (counters.matchedPagesScanned || 0) + result.scanMeta.pagesScanned;
+        counters.matchedRowsScanned = (counters.matchedRowsScanned || 0) + result.scanMeta.matchedRowsScanned;
       }
       await updateJobProgress(job, {
         stage,
