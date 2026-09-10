@@ -9,7 +9,11 @@ const { RANGE_CONFIG, RANGE_KEYS, SENTIMENTS, ALERT_TYPES, ACCOUNT_SIGNAL_TYPES 
 const { fetchFollowSignalsForBoard, pickRank } = require("./data-source");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 const { buildTweetUrl } = require("../utils/twitter");
-const { applyRecallExcludeAuthorFilter, applyRecallExcludeAuthorAlertFilter } = require("./post-filter");
+const {
+  applyRecallExcludeAuthorFilter,
+  applyRecallExcludeAuthorAlertFilter,
+  isRecallExcludedAuthor,
+} = require("./post-filter");
 
 const INFLUENTIAL_GLOBAL_RANK_LIMIT = 3000;
 
@@ -775,30 +779,9 @@ async function generateInfluentialSignals(board, options = {}) {
   });
 
   for (const post of posts) {
-    if (isBoardOfficialAccount(board, post)) continue;
     const rank = getPostDisplayRank(post);
-    if (!isInfluentialRank(rank.globalRank, rank.cnRank)) continue;
-    await EchohuntSocialListeningAccountSignal.upsert({
-      boardId: board.id,
-      twitterId: post.authorTwitterId,
-      handle: post.authorHandle,
-      name: post.authorName,
-      avatar: post.authorAvatar,
-      followersCount: post.authorFollowersCount,
-      globalRank: rank.globalRank,
-      cnRank: rank.cnRank,
-      signalType: ACCOUNT_SIGNAL_TYPES.INFLUENTIAL_MENTION,
-      occurredAt: post.postCreatedAt,
-      mentionCount: 1,
-      viewsCount: post.viewsCount,
-      engagementCount: getEngagement(post),
-      sentiment: post.sentiment,
-      topics: post.topics,
-      postIds: [post.tweetId],
-      summaryZh: post.summaryZh || post.text,
-      summaryEn: post.summaryEn || `${post.authorName || post.authorHandle || post.authorTwitterId} mentioned ${board.projectName}.`,
-      rankSnapshot: { globalRank: rank.globalRank, cnRank: rank.cnRank, source: post.source, postType: post.source === "reply" || post.replyId ? "reply" : "post" },
-    }, { conflictFields: ["boardId", "signalType", "twitterId", "occurredAt"] }).catch(() => null);
+    const signalSync = await syncInfluentialSignalForPost(board, post).catch(() => null);
+    if (!signalSync?.synced) continue;
 
     await EchohuntSocialListeningAlert.upsert({
       boardId: board.id,
@@ -829,6 +812,64 @@ async function generateInfluentialSignals(board, options = {}) {
   }
 
   return posts.length;
+}
+
+function getInfluentialSignalWhere(board, post) {
+  const twitterId = normalizeId(post?.authorTwitterId);
+  if (!board?.id || !twitterId || !post?.postCreatedAt) return null;
+  return {
+    boardId: board.id,
+    twitterId,
+    signalType: ACCOUNT_SIGNAL_TYPES.INFLUENTIAL_MENTION,
+    occurredAt: post.postCreatedAt,
+  };
+}
+
+function shouldSyncInfluentialSignal(board, post) {
+  return Boolean(
+    post &&
+    String(post.boardId || "") === String(board?.id || "") &&
+    isEffectiveSentiment(post.sentiment) &&
+    !isRecallExcludedAuthor(post, board) &&
+    !isBoardOfficialAccount(board, post) &&
+    isInfluentialPost(post)
+  );
+}
+
+async function syncInfluentialSignalForPost(board, post) {
+  const where = getInfluentialSignalWhere(board, post);
+  if (!where) return { synced: false, removed: false };
+
+  if (!shouldSyncInfluentialSignal(board, post)) {
+    const removed = await EchohuntSocialListeningAccountSignal.destroy({ where });
+    return { synced: false, removed: removed > 0 };
+  }
+
+  const rank = getPostDisplayRank(post);
+  await EchohuntSocialListeningAccountSignal.upsert({
+    ...where,
+    handle: post.authorHandle,
+    name: post.authorName,
+    avatar: post.authorAvatar,
+    followersCount: post.authorFollowersCount,
+    globalRank: rank.globalRank,
+    cnRank: rank.cnRank,
+    mentionCount: 1,
+    viewsCount: post.viewsCount,
+    engagementCount: getEngagement(post),
+    sentiment: post.sentiment,
+    topics: post.topics,
+    postIds: [post.tweetId],
+    summaryZh: post.summaryZh || post.text,
+    summaryEn: post.summaryEn || `${post.authorName || post.authorHandle || post.authorTwitterId} mentioned ${board.projectName}.`,
+    rankSnapshot: {
+      globalRank: rank.globalRank,
+      cnRank: rank.cnRank,
+      source: post.source,
+      postType: post.source === "reply" || post.replyId ? "reply" : "post",
+    },
+  }, { conflictFields: ["boardId", "signalType", "twitterId", "occurredAt"] });
+  return { synced: true, removed: false };
 }
 
 function describeFollowSignal(signalType, accountName, boardName) {
@@ -1132,6 +1173,7 @@ module.exports = {
   buildSnapshotPayload,
   generateSnapshotsForBoard,
   generateInfluentialSignals,
+  syncInfluentialSignalForPost,
   generateFollowSignals,
   generateAggregateAlerts,
   enrichSnapshotMetricComparisons,

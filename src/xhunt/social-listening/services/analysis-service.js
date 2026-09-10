@@ -20,6 +20,7 @@ const {
 } = require("./ai-prompt-templates");
 const { generateTweetAnalysis, generateTweetTextCondensation } = require("./local-ai-service");
 const { fetchTweetRowsByIds } = require("./data-source");
+const { syncInfluentialSignalForPost } = require("./aggregate-service");
 
 const LONG_TEXT_CONDENSATION_MIN_LENGTH = 900;
 const LONG_TEXT_CONDENSATION_MAX_LENGTH = 1800;
@@ -1002,7 +1003,12 @@ async function analyzePendingPostAi(board, options = {}) {
 }
 
 async function reanalyzeSocialListeningPostAi(board, postId) {
-  return analyzePendingPostAi(board, { postId, force: true, limit: 1, concurrency: 1 });
+  const result = await analyzePendingPostAi(board, { postId, force: true, limit: 1, concurrency: 1 });
+  const post = await EchohuntSocialListeningPost.findByPk(postId);
+  const signalSync = post && result.selected
+    ? await syncInfluentialSignalForPost(board, post)
+    : { synced: false, removed: false };
+  return { ...result, signalSync };
 }
 
 module.exports = {
