@@ -595,7 +595,7 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "maxTextLength", label: "推文截断长度", desc: "未命中长文精简缓存时，进入 AI Prompt 前的正文硬截断字符数。" },
   { field: "referenceContextMaxLength", label: "关联上下文截断长度", desc: "引用、回复对象和会话根帖原文进入 AI Prompt 前的总截断字符数；每个 AI 批次只批量查询一次关联原文，默认 1200，最大 2000。" },
   { field: "longTextCondensationThreshold", label: "长文精简阈值", desc: "正文超过该字符数时，先用默认模型精简并写入跨看板缓存；默认 1800。" },
-  { field: "longTextCondensationMaxLength", label: "长文精简上限", desc: "长文精简内容的最大字符数，不超过 900；主帖、引用/回复对象和会话根帖后续都会复用该缓存；默认 900。" },
+  { field: "longTextCondensationMaxLength", label: "长文精简上限", desc: "长文精简目标为原文约 1/3，结果最少 900、最多为此上限（最高 1800）个字符；主帖、引用/回复对象和会话根帖后续都会复用该缓存；默认 1800。" },
   { field: "longTextCondensationConcurrency", label: "长文精简并发", desc: "首次生成长文精简缓存时的最大并发数；限制为 1–4，避免长文请求挤占主分析。" },
   { field: "negativeScoreThreshold", label: "负面阈值", desc: "项目态度分低于该值时判定为 negative。默认 4。" },
   { field: "positiveScoreThreshold", label: "正面阈值", desc: "项目态度分高于该值时判定为 positive；介于负面和正面阈值之间为 neutral。默认 6。" },

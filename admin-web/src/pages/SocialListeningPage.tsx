@@ -165,7 +165,7 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   maxTextLength: "未命中长文精简缓存时，进入 AI Prompt 前的推文硬截断字符数。",
   referenceContextMaxLength: "引用、回复对象和会话根帖进入 AI Prompt 前的总字符上限。",
   longTextCondensationThreshold: "超过此字符数的正文先由默认模型精简并缓存；主帖及后续作为引用/回复对象、会话根帖时都复用该结果。默认 1800。",
-  longTextCondensationMaxLength: "缓存的长文精简内容最大字符数，不超过 900。默认 900。",
+  longTextCondensationMaxLength: "精简目标为原文约 1/3，结果最少 900 字符、最多为此上限（最高 1800）。默认 1800。",
   longTextCondensationConcurrency: "首次生成长文精简缓存时的并发，限制为 1–4，避免影响主分析。",
   negativeScoreThreshold: "态度分低于该值判定 negative；默认 4。",
   positiveScoreThreshold: "态度分高于该值判定 positive；中间区间判定 neutral；默认 6。",
@@ -1508,7 +1508,7 @@ function AiRuntimeConfigPanel() {
                       <Col xs={24} md={6}><Form.Item name={["ai", "tweetAnalysisMaxTokens"]} label="综合输出上限" tooltip={aiHelp("tweetAnalysisMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "summaryWords"]} label="摘要词数" tooltip={aiHelp("summaryWords")}><InputNumber min={3} max={80} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "longTextCondensationThreshold"]} label="长文精简阈值" tooltip={aiHelp("longTextCondensationThreshold")}><InputNumber min={500} max={10000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "longTextCondensationMaxLength"]} label="长文精简上限" tooltip={aiHelp("longTextCondensationMaxLength")}><InputNumber min={200} max={900} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "longTextCondensationMaxLength"]} label="长文精简上限" tooltip={aiHelp("longTextCondensationMaxLength")}><InputNumber min={900} max={1800} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "longTextCondensationConcurrency"]} label="长文精简并发" tooltip={aiHelp("longTextCondensationConcurrency")}><InputNumber min={1} max={4} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" tooltip={aiHelp("estimateInputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" tooltip={aiHelp("estimateOutputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>

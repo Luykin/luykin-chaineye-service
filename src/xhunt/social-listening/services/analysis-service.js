@@ -21,6 +21,9 @@ const {
 const { generateTweetAnalysis, generateTweetTextCondensation } = require("./local-ai-service");
 const { fetchTweetRowsByIds } = require("./data-source");
 
+const LONG_TEXT_CONDENSATION_MIN_LENGTH = 900;
+const LONG_TEXT_CONDENSATION_MAX_LENGTH = 1800;
+const LONG_TEXT_CONDENSATION_RULE_VERSION = "ratio-v1";
 
 function clampInteger(value, fallback, min, max) {
   const num = Number(value);
@@ -34,6 +37,17 @@ function truncateText(value, maxLength) {
 
 function textHash(text) {
   return createHash("sha256").update(String(text || "")).digest("hex");
+}
+
+function getLongTextCondensationTargetLength(sourceLength, maxLength) {
+  const safeMaxLength = clampInteger(
+    maxLength,
+    LONG_TEXT_CONDENSATION_MAX_LENGTH,
+    LONG_TEXT_CONDENSATION_MIN_LENGTH,
+    LONG_TEXT_CONDENSATION_MAX_LENGTH
+  );
+  const preferredLength = Math.round(Number(sourceLength || 0) / 3);
+  return Math.min(safeMaxLength, Math.max(LONG_TEXT_CONDENSATION_MIN_LENGTH, preferredLength));
 }
 
 function getPostAiText(post, options = {}) {
@@ -124,7 +138,9 @@ function collectLongTextCandidates(posts, referenceRowsById, threshold) {
     candidatesByTweetId.set(normalizedTweetId, {
       tweetId: normalizedTweetId,
       text: normalizedText,
-      sourceTextHash: textHash(normalizedText),
+      // Include the rule version so cached results generated under a different
+      // condensation policy are regenerated instead of being reused.
+      sourceTextHash: textHash(`${LONG_TEXT_CONDENSATION_RULE_VERSION}:${normalizedText}`),
       sourceTextLength: Array.from(normalizedText).length,
     });
   };
@@ -135,13 +151,19 @@ function collectLongTextCandidates(posts, referenceRowsById, threshold) {
 
 async function prepareLongTextCondensations(posts, referenceRowsById, aiConfig, options = {}) {
   const threshold = clampInteger(options.threshold || aiConfig.longTextCondensationThreshold, 1800, 500, 10000);
-  const maxLength = clampInteger(options.maxLength || aiConfig.longTextCondensationMaxLength, 900, 200, 900);
+  const maxLength = clampInteger(
+    options.maxLength || aiConfig.longTextCondensationMaxLength,
+    LONG_TEXT_CONDENSATION_MAX_LENGTH,
+    LONG_TEXT_CONDENSATION_MIN_LENGTH,
+    LONG_TEXT_CONDENSATION_MAX_LENGTH
+  );
   const concurrency = clampInteger(options.concurrency || aiConfig.longTextCondensationConcurrency, 2, 1, 4);
   const candidates = collectLongTextCandidates(posts, referenceRowsById, threshold);
   const condensedTextsByTweetId = new Map();
   const longTextModesByTweetId = new Map();
   const setFallbackTruncation = (candidate) => {
-    condensedTextsByTweetId.set(candidate.tweetId, truncateText(candidate.text, maxLength));
+    const targetLength = getLongTextCondensationTargetLength(candidate.sourceTextLength, maxLength);
+    condensedTextsByTweetId.set(candidate.tweetId, truncateText(candidate.text, targetLength));
     longTextModesByTweetId.set(candidate.tweetId, "truncated");
   };
   if (!candidates.length) return { condensedTextsByTweetId, longTextModesByTweetId, candidates: 0, cacheHits: 0, generated: 0, failed: 0, threshold, maxLength };
@@ -171,8 +193,9 @@ async function prepareLongTextCondensations(posts, referenceRowsById, aiConfig, 
   let failed = 0;
   await runWithConcurrency(missing, concurrency, async (candidate) => {
     try {
-      const result = await generateTweetTextCondensation({ text: candidate.text, maxLength, aiConfig });
-      const condensedText = truncateText(normalizeTweetText(result.condensedText), maxLength);
+      const targetLength = getLongTextCondensationTargetLength(candidate.sourceTextLength, maxLength);
+      const result = await generateTweetTextCondensation({ text: candidate.text, maxLength: targetLength, aiConfig });
+      const condensedText = truncateText(normalizeTweetText(result.condensedText), targetLength);
       if (!condensedText) throw new Error("SOCIAL_LISTENING_TEXT_CONDENSATION_EMPTY_RESULT");
       await EchohuntSocialListeningTextCondensation.upsert({
         tweetId: candidate.tweetId,
@@ -193,6 +216,7 @@ async function prepareLongTextCondensations(posts, referenceRowsById, aiConfig, 
   });
   return {
     condensedTextsByTweetId,
+    longTextModesByTweetId,
     candidates: candidates.length,
     cacheHits: candidates.length - missing.length,
     generated,
