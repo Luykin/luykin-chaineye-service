@@ -251,8 +251,9 @@ function getPostDisplayRank(post = {}) {
   };
 }
 
-function serializePost(record) {
+function serializePost(record, { includeRelevantToProject = false } = {}) {
   const row = toJson(record) || {};
+  const relevantToProject = row.rawTweet?.socialListeningAi?.projectAttitude?.relevantToProject;
   const authorAvatar = pickAvatarUrl(row.authorAvatar, pickProfileAvatar(row.rawAuthor?.profile));
   const authorRank = getPostDisplayRank(row);
   const source = row.source || "mention";
@@ -315,6 +316,7 @@ function serializePost(record) {
       aiAnalyzedAt: row.aiAnalyzedAt || null,
       aiSource: row.aiSource || null,
       aiError: row.aiError || null,
+      ...(includeRelevantToProject ? { relevantToProject: typeof relevantToProject === "boolean" ? relevantToProject : null } : {}),
     },
   };
 }

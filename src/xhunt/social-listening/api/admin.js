@@ -134,7 +134,7 @@ async function serializePostsWithReferences(posts = [], boardId) {
       recalled: referenceByTweetId.has(reference.tweetId),
       post: referenceByTweetId.get(reference.tweetId) || null,
     }));
-    return { ...serializePost(post), referencePosts };
+    return { ...serializePost(post, { includeRelevantToProject: true }), referencePosts };
   });
 }
 
@@ -1012,7 +1012,7 @@ router.post("/boards/:boardId/posts/:postId/reanalyze", async (req, res) => {
       action: "post_ai_reanalyze",
       payload: { postId: post.id, tweetId: post.tweetId, result },
     });
-    return res.json({ success: true, data: { post: serializePost(refreshedPost), result } });
+    return res.json({ success: true, data: { post: serializePost(refreshedPost, { includeRelevantToProject: true }), result } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_POST_REANALYZE_FAILED");
   }

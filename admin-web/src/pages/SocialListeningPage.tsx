@@ -135,6 +135,7 @@ const POST_FIELD_GUIDE = [
   { field: "topics / keywords", desc: "内容 AI 生成主题标签与热词，保存到 EchohuntSocialListeningPosts.topics / keywords。" },
   { field: "summaryZh / summaryEn", desc: "AI 生成中英文摘要，保存到 EchohuntSocialListeningPosts.summaryZh / summaryEn；不再生成全文翻译 postZh。" },
   { field: "projectAttitudeScore", desc: "项目态度分，保存到 EchohuntSocialListeningPosts.projectAttitudeScore / sentimentScore。" },
+  { field: "ai.relevantToProject", desc: "AI 返回的 relevant_to_project 映射：true 表示有效项目讨论；false 时项目态度会被置为 unknown。" },
   { field: "sentiment", desc: "positive / neutral / negative / unknown；无关、证据不足、无法可靠判断会写 unknown，不强行并入 neutral。" },
   { field: "sentimentSummaryZh", desc: "态度判断原因，保存到 EchohuntSocialListeningPosts.sentimentSummaryZh。" },
   { field: "ai.*Status", desc: "标签、摘要、态度和总状态，保存到 tagStatus / summaryStatus / attitudeStatus / aiStatus。" },
@@ -546,6 +547,12 @@ function AiTextValue({ value, rows = 2 }: { value: unknown; rows?: number }) {
   const text = getString(value);
   if (!text) return <Text type="secondary">未生成</Text>;
   return <Paragraph copyable style={{ marginBottom: 0 }} ellipsis={{ rows, expandable: true, symbol: "展开" }}>{text}</Paragraph>;
+}
+
+function RelevantToProjectValue({ value }: { value: unknown }) {
+  if (value === true) return <Tag color="green">是（有效讨论）</Tag>;
+  if (value === false) return <Tag>否（非有效讨论）</Tag>;
+  return <Text type="secondary">未返回</Text>;
 }
 
 function AiStatusPill({ label, value }: { label: string; value: unknown }) {
@@ -1043,6 +1050,7 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
                         <Col xs={24} lg={12}>
                           <Card size="small" title="态度字段" bordered={false} style={{ background: "#fffdf8" }}>
                             <Descriptions size="small" column={1}>
+                              <Descriptions.Item label="relevant_to_project"><RelevantToProjectValue value={ai.relevantToProject} /></Descriptions.Item>
                               <Descriptions.Item label="sentiment">{statusTag(post.sentiment)}</Descriptions.Item>
                               <Descriptions.Item label="projectAttitudeScore">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? <Text type="secondary">未生成</Text> : <Text strong>{String(row.projectAttitudeScore)}</Text>}</Descriptions.Item>
                               <Descriptions.Item label="sentimentSummaryZh"><AiTextValue value={row.sentimentSummaryZh} rows={3} /></Descriptions.Item>
