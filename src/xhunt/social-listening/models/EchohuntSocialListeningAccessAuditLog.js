@@ -18,7 +18,7 @@ module.exports = (sequelize) => {
       accessId: {
         type: DataTypes.UUID,
         allowNull: true,
-        comment: "关联授权记录 ID；非授权类操作可为空",
+        comment: "关联 EchohuntFeatureAccesses 授权记录 ID；非授权类操作可为空",
       },
       adminId: {
         type: DataTypes.INTEGER,

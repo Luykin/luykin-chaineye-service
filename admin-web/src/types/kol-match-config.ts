@@ -149,3 +149,16 @@ export interface KolMatchHistoryItem {
   operatorEmail: string;
   createdAt: string;
 }
+
+export interface KolMatchAccess {
+  id: string;
+  twitterId?: string | null;
+  twitterHandle: string;
+  authCenterUserId?: string | null;
+  xhuntUserId?: string | null;
+  status: "active" | "revoked" | string;
+  grantedAt?: string | null;
+  revokedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}

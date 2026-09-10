@@ -14,6 +14,7 @@ import {
   Modal,
   Row,
   Segmented,
+  Select,
   Space,
   Statistic,
   Switch,
@@ -31,8 +32,11 @@ import { useAuth } from "@/app/auth";
 import {
   fetchKolMatchConfig,
   fetchKolMatchConfigHistory,
+  fetchKolMatchAccesses,
+  grantKolMatchAccess,
   publishKolMatchConfig,
   refreshKolMatchConfigCache,
+  revokeKolMatchAccess,
   validateKolMatchConfig,
 } from "@/services/kol-match-config";
 import {
@@ -43,7 +47,9 @@ import {
   type KolMarketingServiceStatus,
 } from "@/services/kol-marketing";
 import { fetchLlmModels, type LlmModelOption } from "@/services/llm";
+import { fetchVipLists } from "@/services/feature-flags";
 import type {
+  KolMatchAccess,
   KolMatchAppEnv,
   KolMatchEffectiveConfig,
   KolMatchHistoryItem,
@@ -51,6 +57,7 @@ import type {
   KolMatchPromptFallbacks,
   KolMatchRuntimeConfigDocument,
 } from "@/types/kol-match-config";
+import type { VipListItem } from "@/types/feature-flags";
 import "@/styles/pages/kol-match-config.css";
 
 const { Paragraph, Text, Title } = Typography;
@@ -762,6 +769,153 @@ function estimateKolMatchCost(
   };
 }
 
+function normalizeAccessHandle(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i, "")
+    .replace(/[/?#].*$/, "")
+    .toLowerCase();
+}
+
+function formatAccessTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function KolMatchAccessPanel({ canWrite }: { canWrite: boolean }) {
+  const [messageApi, contextHolder] = message.useMessage();
+  const [accessForm] = Form.useForm<{ twitterHandles?: string[] }>();
+  const [accesses, setAccesses] = useState<KolMatchAccess[]>([]);
+  const [vipUsers, setVipUsers] = useState<VipListItem[]>([]);
+  const [internalTestUsers, setInternalTestUsers] = useState<VipListItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [accessResponse, vipResponse] = await Promise.all([fetchKolMatchAccesses(), fetchVipLists()]);
+      setAccesses(accessResponse.data || []);
+      setVipUsers(vipResponse.data.vip || []);
+      setInternalTestUsers(vipResponse.data.internalTest || []);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "加载 KOL Match 可见名单失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const userByHandle = useMemo(() => [...internalTestUsers, ...vipUsers].reduce<Record<string, VipListItem>>((result, item) => {
+    const handle = normalizeAccessHandle(item.username);
+    if (handle) result[handle] = item;
+    return result;
+  }, {}), [internalTestUsers, vipUsers]);
+
+  const accessUserOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return [...internalTestUsers, ...vipUsers].reduce<Array<{ value: string; label: string }>>((options, item) => {
+      const handle = normalizeAccessHandle(item.username);
+      if (!handle || seen.has(handle)) return options;
+      seen.add(handle);
+      const source = internalTestUsers.some((candidate) => normalizeAccessHandle(candidate.username) === handle) ? "内测" : "VIP";
+      options.push({ value: handle, label: item.twitterId ? `@${handle} · ${source} · ${item.twitterId}` : `@${handle} · ${source}` });
+      return options;
+    }, []);
+  }, [internalTestUsers, vipUsers]);
+
+  function appendUsers(items: VipListItem[]) {
+    const current = Array.isArray(accessForm.getFieldValue("twitterHandles")) ? accessForm.getFieldValue("twitterHandles") : [];
+    accessForm.setFieldsValue({ twitterHandles: Array.from(new Set([...current, ...items.map((item) => normalizeAccessHandle(item.username))].filter(Boolean))) });
+  }
+
+  async function grant(values: { twitterHandles?: string[] }) {
+    if (!canWrite) return;
+    const handles = Array.from(new Set((values.twitterHandles || []).map(normalizeAccessHandle).filter(Boolean)));
+    if (!handles.length) {
+      messageApi.warning("请选择或输入至少一个 EchoHunt 用户的 X Handle");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await Promise.all(handles.map((twitterHandle) => grantKolMatchAccess({ twitterHandle, twitterId: userByHandle[twitterHandle]?.twitterId || undefined })));
+      messageApi.success(`已配置 ${handles.length} 个可见账号`);
+      accessForm.resetFields();
+      await load();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "保存 KOL Match 可见名单失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function revoke(access: KolMatchAccess) {
+    if (!canWrite) return;
+    Modal.confirm({
+      title: "撤销 KOL Match 可见权限",
+      content: `确认撤销 @${access.twitterHandle} 的 KOL Match 访问权限？撤销后立即不能访问前台接口。`,
+      okText: "撤销",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: async () => {
+        await revokeKolMatchAccess(access.id);
+        messageApi.success("已撤销可见权限");
+        await load();
+      },
+    });
+  }
+
+  return (
+    <Space direction="vertical" size={16} className="full">
+      {contextHolder}
+      <Alert
+        type="info"
+        showIcon
+        message="KOL Match 前台仅对以下名单中的 EchoHunt 用户可见"
+        description="授权按 Auth Center 用户、Twitter ID 或 X Handle 匹配；用户下次访问时会自动补齐已绑定的 Auth Center 用户信息。"
+      />
+      <Card title="新增可见账号" extra={<Button loading={loading} onClick={() => void load()}>刷新名单</Button>}>
+        <Form form={accessForm} layout="vertical" onFinish={grant}>
+          <Form.Item name="twitterHandles" label="EchoHunt 可见账号" extra="可从内测/VIP 名单选择，也可直接输入 @handle、X 用户名或 x.com 链接后回车。">
+            <Select
+              mode="tags"
+              allowClear
+              showSearch
+              maxTagCount="responsive"
+              placeholder="选择内测用户，或输入 handle 后回车"
+              options={accessUserOptions}
+              tokenSeparators={[",", "\n", " "]}
+              disabled={!canWrite}
+              onChange={(values) => accessForm.setFieldsValue({ twitterHandles: values.map(normalizeAccessHandle).filter(Boolean) })}
+              popupRender={(menu) => <>{menu}<div style={{ padding: "8px 12px", borderTop: "1px solid #f0f0f0" }} onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); }}><Space wrap><Button size="small" disabled={!canWrite || !internalTestUsers.length} onClick={() => appendUsers(internalTestUsers)}>一键添加内测用户</Button><Button size="small" disabled={!canWrite || !vipUsers.length} onClick={() => appendUsers(vipUsers)}>一键添加 VIP</Button></Space></div></>}
+            />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={submitting} disabled={!canWrite}>保存可见名单</Button>
+        </Form>
+      </Card>
+      <Table
+        rowKey="id"
+        size="small"
+        loading={loading}
+        dataSource={accesses}
+        pagination={{ pageSize: 20, showSizeChanger: false }}
+        scroll={{ x: 1100 }}
+        columns={[
+          { title: "EchoHunt 账号", dataIndex: "twitterHandle", width: 180, render: (value: string) => <Text strong>@{value}</Text> },
+          { title: "Twitter ID", dataIndex: "twitterId", width: 170, render: (value?: string | null) => value || "-" },
+          { title: "AuthCenter User ID", dataIndex: "authCenterUserId", width: 240, ellipsis: true, render: (value?: string | null) => value || "未绑定" },
+          { title: "状态", dataIndex: "status", width: 90, render: (value: string) => <Tag color={value === "active" ? "green" : "default"}>{value === "active" ? "生效中" : "已撤销"}</Tag> },
+          { title: "授权时间", dataIndex: "grantedAt", width: 175, render: formatAccessTime },
+          { title: "操作", width: 100, render: (_, access: KolMatchAccess) => access.status === "active" ? <Button size="small" danger disabled={!canWrite} onClick={() => revoke(access)}>撤销</Button> : "-" },
+        ]}
+      />
+    </Space>
+  );
+}
+
 export function KolMatchConfigPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const { hasPermission, user } = useAuth();
@@ -1366,6 +1520,11 @@ export function KolMatchConfigPage() {
                 </Row>
               </Form>
             ),
+          },
+          {
+            key: "access",
+            label: "可见账号",
+            children: <KolMatchAccessPanel canWrite={canWrite} />,
           },
           {
             key: "json",

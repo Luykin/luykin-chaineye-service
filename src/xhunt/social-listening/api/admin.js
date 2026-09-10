@@ -3,7 +3,7 @@ const { Op, literal } = require("sequelize");
 const { requireRole, requirePermission } = require("../../../admin/middleware/adminAuth");
 const {
   EchohuntSocialListeningBoard,
-  EchohuntSocialListeningBoardAccess,
+  EchohuntFeatureAccess,
   EchohuntSocialListeningJob,
   EchohuntSocialListeningPost,
   EchohuntSocialListeningTextCondensation,
@@ -1092,9 +1092,9 @@ router.get("/boards/:boardId/alerts", async (req, res) => {
 router.get("/boards/:boardId/accesses", async (req, res) => {
   try {
     const { page, pageSize, offset, limit } = normalizePage(req.query);
-    const where = { boardId: req.params.boardId };
+    const where = { featureKey: SOCIAL_LISTENING_PERMISSION, resourceId: req.params.boardId };
     if (req.query.status) where.status = String(req.query.status);
-    const result = await EchohuntSocialListeningBoardAccess.findAndCountAll({
+    const result = await EchohuntFeatureAccess.findAndCountAll({
       where,
       order: [["updatedAt", "DESC"]],
       offset,

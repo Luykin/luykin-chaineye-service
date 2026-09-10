@@ -20,7 +20,10 @@ const {
 } = require("../../infra/k8s/postgres-readonly");
 const { structuredChat } = require("../../lib/llm");
 const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth");
-const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const {
+  assertKolMatchAccess,
+  getKolMatchAccessSummary,
+} = require("./echohunt-kol-match/access-service");
 const {
   resolveEchohuntAppEnv,
   resolveKolMatchRuntimeConfig,
@@ -468,17 +471,6 @@ function throwIfScopeNotAccepted(scope) {
       reasonCode: scope.reasonCode,
       ignoredInstructions: scope.ignoredInstructions || [],
     },
-  });
-}
-
-function requireKolMatchVip(req, res, next) {
-  if (isRequestXHuntVip(req)) return next();
-
-  return res.status(403).json({
-    success: false,
-    error: "XHUNT_VIP_REQUIRED",
-    message: "KOL Match 当前仅限 XHunt VIP 用户使用。",
-    data: { quotaCharged: false },
   });
 }
 
@@ -2696,7 +2688,22 @@ function normalizeSseProgress(event = {}, lang = "zh") {
 }
 
 router.use(authenticateAuthCenterToken());
-router.use(requireKolMatchVip);
+router.get("/access-summary", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    return res.json({ success: true, data: await getKolMatchAccessSummary(req.authCenter) });
+  } catch (error) {
+    return sendError(res, error, "KOL_MATCH_ACCESS_SUMMARY_FAILED");
+  }
+});
+router.use(async (req, res, next) => {
+  try {
+    req.kolMatchAccess = await assertKolMatchAccess(req.authCenter);
+    return next();
+  } catch (error) {
+    return sendError(res, error, "KOL_MATCH_FORBIDDEN");
+  }
+});
 router.use(resolveEchohuntAppEnv);
 router.use(resolveKolMatchRuntimeConfig);
 

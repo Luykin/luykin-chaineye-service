@@ -40,7 +40,6 @@ const AuthCenterXhuntSessionModel = require("../xhunt/auth-center/models/AuthCen
 const AuthCenterXhuntAuthorizationCodeModel = require("../xhunt/auth-center/models/AuthCenterXhuntAuthorizationCode");
 const AuthCenterXhuntAuditLogModel = require("../xhunt/auth-center/models/AuthCenterXhuntAuditLog");
 const EchohuntSocialListeningBoardModel = require("../xhunt/social-listening/models/EchohuntSocialListeningBoard");
-const EchohuntSocialListeningBoardAccessModel = require("../xhunt/social-listening/models/EchohuntSocialListeningBoardAccess");
 const EchohuntSocialListeningAccessAuditLogModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAccessAuditLog");
 const EchohuntSocialListeningPostModel = require("../xhunt/social-listening/models/EchohuntSocialListeningPost");
 const EchohuntSocialListeningTextCondensationModel = require("../xhunt/social-listening/models/EchohuntSocialListeningTextCondensation");
@@ -49,6 +48,7 @@ const EchohuntSocialListeningAccountSignalModel = require("../xhunt/social-liste
 const EchohuntSocialListeningAlertModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAlert");
 const EchohuntSocialListeningKeyEventModel = require("../xhunt/social-listening/models/EchohuntSocialListeningKeyEvent");
 const EchohuntSocialListeningJobModel = require("../xhunt/social-listening/models/EchohuntSocialListeningJob");
+const EchohuntFeatureAccessModel = require("../xhunt/models/EchohuntFeatureAccess");
 
 const pgDialect = process.env.PG_DIALECT || "postgres";
 const pgHost = process.env.PG_HOST;
@@ -129,7 +129,6 @@ const AuthCenterXhuntSession = AuthCenterXhuntSessionModel(pgInstance);
 const AuthCenterXhuntAuthorizationCode = AuthCenterXhuntAuthorizationCodeModel(pgInstance);
 const AuthCenterXhuntAuditLog = AuthCenterXhuntAuditLogModel(pgInstance);
 const EchohuntSocialListeningBoard = EchohuntSocialListeningBoardModel(pgInstance);
-const EchohuntSocialListeningBoardAccess = EchohuntSocialListeningBoardAccessModel(pgInstance);
 const EchohuntSocialListeningAccessAuditLog = EchohuntSocialListeningAccessAuditLogModel(pgInstance);
 const EchohuntSocialListeningPost = EchohuntSocialListeningPostModel(pgInstance);
 const EchohuntSocialListeningTextCondensation = EchohuntSocialListeningTextCondensationModel(pgInstance);
@@ -138,6 +137,7 @@ const EchohuntSocialListeningAccountSignal = EchohuntSocialListeningAccountSigna
 const EchohuntSocialListeningAlert = EchohuntSocialListeningAlertModel(pgInstance);
 const EchohuntSocialListeningKeyEvent = EchohuntSocialListeningKeyEventModel(pgInstance);
 const EchohuntSocialListeningJob = EchohuntSocialListeningJobModel(pgInstance);
+const EchohuntFeatureAccess = EchohuntFeatureAccessModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -390,15 +390,6 @@ XHuntKolCollaboration.belongsTo(XHuntUser, {
 });
 
 // EchoHunt Social Listening 关系
-EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningBoardAccess, {
-  foreignKey: "boardId",
-  as: "accesses",
-});
-EchohuntSocialListeningBoardAccess.belongsTo(EchohuntSocialListeningBoard, {
-  foreignKey: "boardId",
-  as: "board",
-});
-
 EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningPost, {
   foreignKey: "boardId",
   as: "posts",
@@ -453,11 +444,11 @@ EchohuntSocialListeningJob.belongsTo(EchohuntSocialListeningBoard, {
   as: "board",
 });
 
-AuthCenterXhuntUser.hasMany(EchohuntSocialListeningBoardAccess, {
+AuthCenterXhuntUser.hasMany(EchohuntFeatureAccess, {
   foreignKey: "authCenterUserId",
-  as: "socialListeningAccesses",
+  as: "featureAccesses",
 });
-EchohuntSocialListeningBoardAccess.belongsTo(AuthCenterXhuntUser, {
+EchohuntFeatureAccess.belongsTo(AuthCenterXhuntUser, {
   foreignKey: "authCenterUserId",
   as: "authCenterUser",
 });
@@ -538,7 +529,6 @@ module.exports = {
   AuthCenterXhuntAuthorizationCode,
   AuthCenterXhuntAuditLog,
   EchohuntSocialListeningBoard,
-  EchohuntSocialListeningBoardAccess,
   EchohuntSocialListeningAccessAuditLog,
   EchohuntSocialListeningPost,
   EchohuntSocialListeningTextCondensation,
@@ -547,4 +537,5 @@ module.exports = {
   EchohuntSocialListeningAlert,
   EchohuntSocialListeningKeyEvent,
   EchohuntSocialListeningJob,
+  EchohuntFeatureAccess,
 };

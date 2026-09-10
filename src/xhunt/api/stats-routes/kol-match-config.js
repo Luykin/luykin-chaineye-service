@@ -16,6 +16,12 @@ const {
   validateKolMatchRuntimeConfigDocument,
 } = require("../echohunt-kol-match/config");
 const { getKolMatchPromptFallbacks } = require("../echohunt-kol-match/prompts");
+const {
+  grantKolMatchAccess,
+  listKolMatchAccesses,
+  revokeKolMatchAccess,
+  serializeAccess,
+} = require("../echohunt-kol-match/access-service");
 
 const router = express.Router();
 const CONFIG_TYPE = "json";
@@ -231,6 +237,54 @@ router.get("/echohunt/kol-match/config", adminAuth, requirePermission(KOL_MATCH_
   } catch (error) {
     console.error("[kol-match-config] read failed:", error);
     return res.status(error.status || 500).json({ success: false, error: error.message || "读取 KOL Match 配置失败", data: error.data });
+  }
+});
+
+router.get("/echohunt/kol-match/accesses", adminAuth, requirePermission(KOL_MATCH_CONFIG_READ_PERMISSIONS), async (req, res) => {
+  try {
+    const status = String(req.query.status || "").trim();
+    const accesses = await listKolMatchAccesses({ status: status || undefined });
+    return res.json({ success: true, data: accesses });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, error: error.message || "获取 KOL Match 可见名单失败" });
+  }
+});
+
+router.post("/echohunt/kol-match/accesses", adminAuth, requirePermission(KOL_MATCH_CONFIG_WRITE_PERMISSIONS), async (req, res) => {
+  try {
+    const result = await grantKolMatchAccess(req.body || {}, req.adminUser?.id || null);
+    await logAdminAction(req, {
+      action: "kol-match-access-grant",
+      success: true,
+      message: `handle=@${result.access.twitterHandle} created=${result.created}`,
+    });
+    return res.status(result.created ? 201 : 200).json({ success: true, data: { access: serializeAccess(result.access), created: result.created } });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "kol-match-access-grant",
+      success: false,
+      message: error.message || "failed",
+    }).catch(() => {});
+    return res.status(error.status || 500).json({ success: false, error: error.code || error.message || "新增 KOL Match 可见账号失败", message: error.publicMessage });
+  }
+});
+
+router.delete("/echohunt/kol-match/accesses/:accessId", adminAuth, requirePermission(KOL_MATCH_CONFIG_WRITE_PERMISSIONS), async (req, res) => {
+  try {
+    const access = await revokeKolMatchAccess(req.params.accessId, req.adminUser?.id || null);
+    await logAdminAction(req, {
+      action: "kol-match-access-revoke",
+      success: true,
+      message: `handle=@${access.twitterHandle}`,
+    });
+    return res.json({ success: true, data: serializeAccess(access) });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "kol-match-access-revoke",
+      success: false,
+      message: error.message || "failed",
+    }).catch(() => {});
+    return res.status(error.status || 500).json({ success: false, error: error.code || error.message || "撤销 KOL Match 可见账号失败", message: error.publicMessage });
   }
 });
 

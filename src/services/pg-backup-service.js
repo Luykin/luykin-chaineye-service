@@ -14,6 +14,7 @@ const stat = promisify(fs.stat);
 const mkdir = promisify(fs.mkdir);
 
 const SOCIAL_LISTENING_TABLES = Object.freeze([
+  "EchohuntFeatureAccesses",
   "EchohuntSocialListeningBoards",
   "EchohuntSocialListeningBoardAccesses",
   "EchohuntSocialListeningAccessAuditLogs",

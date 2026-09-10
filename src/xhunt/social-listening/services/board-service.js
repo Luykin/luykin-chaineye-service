@@ -4,7 +4,7 @@ const {
   AuthCenterXhuntIdentity,
   AuthCenterXhuntUser,
   EchohuntSocialListeningBoard,
-  EchohuntSocialListeningBoardAccess,
+  EchohuntFeatureAccess,
   EchohuntSocialListeningAccessAuditLog,
   EchohuntSocialListeningJob,
   EchohuntSocialListeningPost,
@@ -22,6 +22,7 @@ const {
   JOB_TYPES,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  SOCIAL_LISTENING_PERMISSION,
 } = require("../constants");
 const { assertTwitterHandle, normalizeTwitterHandle, parseTweetUrl, buildTweetUrl } = require("../utils/twitter");
 const { normalizeKeywords } = require("../utils/text-normalize");
@@ -67,10 +68,10 @@ async function loadBoardListStats(boards = []) {
     [Op.or]: boardRows.map((board) => applyRecallExcludeAuthorFilter({ boardId: board.id }, board)),
   };
   const [accessCountRows, postCountRows, jobs] = await Promise.all([
-    EchohuntSocialListeningBoardAccess.findAll({
-      attributes: ["boardId", [fn("COUNT", col("id")), "count"]],
-      where: { ...boardWhere, status: ACCESS_STATUSES.ACTIVE },
-      group: ["boardId"],
+    EchohuntFeatureAccess.findAll({
+      attributes: [[col("resourceId"), "boardId"], [fn("COUNT", col("id")), "count"]],
+      where: { featureKey: SOCIAL_LISTENING_PERMISSION, resourceId: { [Op.in]: boardIds }, status: ACCESS_STATUSES.ACTIVE },
+      group: ["resourceId"],
       raw: true,
     }),
     EchohuntSocialListeningPost.findAll({
@@ -208,7 +209,7 @@ function serializeAccess(record) {
   const row = toJson(record) || {};
   return {
     id: row.id,
-    boardId: row.boardId,
+    boardId: row.resourceId || row.boardId,
     twitterId: row.twitterId || null,
     twitterHandle: row.twitterHandle,
     authCenterUserId: row.authCenterUserId || null,
@@ -1031,7 +1032,8 @@ async function grantBoardAccess(boardId, input = {}, adminId = null) {
   const twitterHandle = assertTwitterHandle(input.twitterHandle || input.handle);
   const identity = await findAuthIdentityByHandle(twitterHandle);
   const payload = {
-    boardId,
+    featureKey: SOCIAL_LISTENING_PERMISSION,
+    resourceId: boardId,
     twitterHandle,
     twitterId: input.twitterId || identity?.providerSubject || null,
     authCenterUserId: input.authCenterUserId || identity?.userId || null,
@@ -1045,13 +1047,13 @@ async function grantBoardAccess(boardId, input = {}, adminId = null) {
   };
 
   return pgInstance.transaction(async (transaction) => {
-    const existing = await EchohuntSocialListeningBoardAccess.findOne({
-      where: { boardId, twitterHandle, status: ACCESS_STATUSES.ACTIVE },
+    const existing = await EchohuntFeatureAccess.findOne({
+      where: { featureKey: SOCIAL_LISTENING_PERMISSION, resourceId: boardId, twitterHandle, status: ACCESS_STATUSES.ACTIVE },
       transaction,
       lock: true,
     });
     if (existing) return { access: existing, created: false };
-    const access = await EchohuntSocialListeningBoardAccess.create(payload, { transaction });
+    const access = await EchohuntFeatureAccess.create(payload, { transaction });
     await writeAudit({
       boardId,
       accessId: access.id,
@@ -1066,7 +1068,7 @@ async function grantBoardAccess(boardId, input = {}, adminId = null) {
 }
 
 async function revokeBoardAccess(boardId, accessId, adminId = null) {
-  const access = await EchohuntSocialListeningBoardAccess.findOne({ where: { id: accessId, boardId } });
+  const access = await EchohuntFeatureAccess.findOne({ where: { id: accessId, featureKey: SOCIAL_LISTENING_PERMISSION, resourceId: boardId } });
   if (!access) throw publicError("ACCESS_NOT_FOUND", 404, "授权记录不存在。");
   await access.update({ status: ACCESS_STATUSES.REVOKED, revokedAt: new Date(), revokedByAdminId: adminId });
   await writeAudit({
@@ -1088,15 +1090,16 @@ function buildAccessWhere(authCenter) {
   if (twitter?.twitterId) or.push({ twitterId: twitter.twitterId });
   if (twitter?.twitterHandle) or.push({ twitterHandle: twitter.twitterHandle });
   if (!or.length) throw publicError("TWITTER_ID_REQUIRED", 400, "请先使用 X 登录 EchoHunt。");
-  return { status: ACCESS_STATUSES.ACTIVE, [Op.or]: or };
+  return { featureKey: SOCIAL_LISTENING_PERMISSION, status: ACCESS_STATUSES.ACTIVE, [Op.or]: or };
 }
 
 async function listAccessibleBoards(authCenter) {
-  const accesses = await EchohuntSocialListeningBoardAccess.findAll({
+  const accesses = await EchohuntFeatureAccess.findAll({
     where: buildAccessWhere(authCenter),
-    include: [{ model: EchohuntSocialListeningBoard, as: "board", required: true }],
     order: [["updatedAt", "DESC"]],
   });
+  const boardIds = Array.from(new Set(accesses.map((access) => access.resourceId).filter(Boolean)));
+  const boardsById = new Map((await EchohuntSocialListeningBoard.findAll({ where: { id: { [Op.in]: boardIds } } })).map((board) => [board.id, board]));
   const user = authCenter?.user;
   const twitter = getTwitterIdentityFromAuthCenter(authCenter);
   const boards = [];
@@ -1109,7 +1112,7 @@ async function listAccessibleBoards(authCenter) {
         metadata: { ...(access.metadata || {}), autoBoundAt: new Date().toISOString() },
       }).catch(() => null);
     }
-    const board = access.board;
+    const board = boardsById.get(access.resourceId);
     if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) continue;
     boards.push(serializeBoard(await ensureBoardAvatar(board), { accessId: access.id }));
   }
@@ -1131,8 +1134,8 @@ async function assertBoardAccess(authCenter, boardId) {
   if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) {
     throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
   }
-  const access = await EchohuntSocialListeningBoardAccess.findOne({
-    where: { boardId, ...buildAccessWhere(authCenter) },
+  const access = await EchohuntFeatureAccess.findOne({
+    where: { resourceId: boardId, ...buildAccessWhere(authCenter) },
   });
   if (!access) throw publicError("SOCIAL_LISTENING_FORBIDDEN", 403, "你没有访问该 Social Listening 看板的权限。");
   return { board, access };
@@ -1144,7 +1147,7 @@ async function getBoardDetail(boardId, authCenter = null) {
   board = await ensureBoardAvatar(board);
   const [latestJob, accessCount, postCount] = await Promise.all([
     EchohuntSocialListeningJob.findOne({ where: { boardId }, order: [["createdAt", "DESC"]] }),
-    EchohuntSocialListeningBoardAccess.count({ where: { boardId, status: ACCESS_STATUSES.ACTIVE } }),
+    EchohuntFeatureAccess.count({ where: { featureKey: SOCIAL_LISTENING_PERMISSION, resourceId: boardId, status: ACCESS_STATUSES.ACTIVE } }),
     EchohuntSocialListeningPost.count({ where: applyRecallExcludeAuthorFilter({ boardId }, board) }),
   ]);
   return serializeBoard(board, { latestJob: serializeJob(latestJob), accessCount, postCount });
