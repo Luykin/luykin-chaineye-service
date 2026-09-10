@@ -1110,6 +1110,15 @@ export function KolMatchConfigPage() {
     messageApi.success("已复制正式配置到测试环境，保存后生效");
   }
 
+  function copyTestToProduction() {
+    const next = clone(document);
+    next.envs.production = clone(next.envs.test || {});
+    setDocument(next);
+    setJsonText(JSON.stringify(next, null, 2));
+    if (activeEnv === "production") form.setFieldsValue(valuesFromConfig(next, "production", modelFallbacks));
+    messageApi.success("已复制测试配置到正式环境，请填写原因并保存后生效");
+  }
+
   const profileStats = kolMarketingStatus?.profileStats || null;
   const profileDebugRow = profileDebugResult?.profile || null;
   const profileDebugCollaboration = profileDebugResult?.collaboration || null;
@@ -1223,6 +1232,7 @@ export function KolMatchConfigPage() {
           />
           <Input className="kol-match-reason" placeholder="保存原因，生产环境必填建议写清楚" value={reason} onChange={(event) => setReason(event.target.value)} />
           <Button onClick={copyProductionToTest}>复制正式到测试</Button>
+          <Button danger onClick={copyTestToProduction} disabled={!canWrite}>复制测试到正式</Button>
           <Button onClick={validateCurrent}>校验配置</Button>
           <Button onClick={refreshCache} loading={saving} disabled={!canWrite}>刷新后端缓存</Button>
           <Button type="primary" danger={activeEnv === "production"} onClick={saveConfig} loading={saving} disabled={!canWrite}>保存到 Nacos</Button>
