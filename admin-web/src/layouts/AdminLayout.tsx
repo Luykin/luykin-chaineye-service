@@ -58,6 +58,7 @@ type SidebarGroupKey = NonNullable<AdminNavItem["sidebarGroup"]>;
 const navGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon: ReactNode }> = [
   { key: "data", label: "数据查看", icon: <BarChartOutlined /> },
   { key: "operation", label: "运营配置", icon: <AppstoreOutlined /> },
+  { key: "echohunt", label: "EchoHunt运营", icon: <AppstoreOutlined /> },
   { key: "monitor", label: "状态监控", icon: <MonitorOutlined /> },
   { key: "dev", label: "调试工具", icon: <CodeOutlined /> },
   { key: "system", label: "系统管理", icon: <TeamOutlined /> },
