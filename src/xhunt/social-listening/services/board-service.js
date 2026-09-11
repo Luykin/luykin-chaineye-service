@@ -940,7 +940,7 @@ async function listMonitoredAccounts(query = {}) {
   }
   const result = await EchohuntSocialListeningBoard.findAndCountAll({
     where,
-    order: [["updatedAt", "DESC"]],
+    order: [["createdAt", "ASC"], ["id", "ASC"]],
     offset,
     limit,
   });

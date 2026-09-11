@@ -7,7 +7,7 @@ function normalizeTwitterHandle(value) {
   if (!raw) return "";
 
   let handle = raw;
-  const urlMatch = raw.match(/(?:https?:\/\/)?(?:www\.)?(?:x|twitter)\.com\/([a-zA-Z0-9_]{1,30})(?:\b|\/)/i);
+  const urlMatch = raw.match(/(?:https?:\/\/)?(?:(?:www|mobile)\.)?(?:x|twitter)\.com\/([a-zA-Z0-9_]{1,30})(?:\b|\/)/i);
   if (urlMatch?.[1]) {
     handle = urlMatch[1];
   }
@@ -37,11 +37,20 @@ function parseTweetUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
 
-  const statusMatch = raw.match(/(?:https?:\/\/)?(?:www\.)?(?:x|twitter)\.com\/([a-zA-Z0-9_]{1,30})\/status(?:es)?\/(\d{5,32})/i);
+  const statusMatch = raw.match(/(?:https?:\/\/)?(?:(?:www|mobile)\.)?(?:x|twitter)\.com\/([a-zA-Z0-9_]{1,30})\/status(?:es)?\/(\d{5,32})/i);
   if (statusMatch) {
     return {
       handle: normalizeTwitterHandle(statusMatch[1]),
       tweetId: statusMatch[2],
+      url: raw,
+    };
+  }
+
+  const webStatusMatch = raw.match(/(?:https?:\/\/)?(?:(?:www|mobile)\.)?(?:x|twitter)\.com\/i\/web\/status\/(\d{5,32})/i);
+  if (webStatusMatch) {
+    return {
+      handle: null,
+      tweetId: webStatusMatch[1],
       url: raw,
     };
   }

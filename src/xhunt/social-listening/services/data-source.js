@@ -367,6 +367,46 @@ async function fetchTweetRowById(tweetId) {
   return rows[0] || null;
 }
 
+async function searchTweetRowsByText(text, limit = 20) {
+  const normalizedText = String(text || "").trim();
+  if (!normalizedText) return [];
+  const db = getReadonlyDbOrThrow();
+  const safeLimit = clampInteger(limit, 20, 1, 20);
+  const pattern = `%${normalizedText
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(escapeLikePattern)
+    .join("%")}%`;
+
+  return queryReadonlyWithStatementTimeout(
+    db,
+    `
+      SELECT
+        t.id::text,
+        t.text,
+        t.create_time,
+        t.twitter_user_id::text,
+        t.conversation_id::text,
+        t.quote_id::text,
+        t.reply_id::text,
+        t.retweet_id::text,
+        t.statistic,
+        u.id::text AS author_id,
+        u.username AS author_username,
+        u.username_raw AS author_username_raw,
+        u.name AS author_name
+      FROM dev.tweet t
+      LEFT JOIN dev.twitter_user u ON u.id::text = t.twitter_user_id::text
+      WHERE t.create_time >= NOW() - INTERVAL '31 days'
+        AND COALESCE(t.text, '') ILIKE $pattern ESCAPE '\\'
+      ORDER BY t.create_time DESC, t.id::text DESC
+      LIMIT $limit
+    `,
+    { bind: { pattern, limit: safeLimit }, type: QueryTypes.SELECT },
+    3000
+  );
+}
+
 function getSocialListeningCrawlerUrl() {
   const fullUrl = String(process.env.SOCIAL_LISTENING_CRAWLER_URL || "").trim();
   if (fullUrl) return fullUrl;
@@ -882,6 +922,7 @@ module.exports = {
   mapTweetMetricRow,
   fetchTweetRowById,
   fetchTweetRowsByIds,
+  searchTweetRowsByText,
   fetchTweetMetricsByIds,
   fetchTweetSnapshotFromCrawler,
   scanCandidateTweetsForBoard,

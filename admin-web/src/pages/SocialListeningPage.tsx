@@ -39,7 +39,7 @@ import {
   type MenuProps,
   type TableProps,
 } from "antd";
-import { ClearOutlined, ClockCircleOutlined, DatabaseOutlined, DeleteOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { ClearOutlined, ClockCircleOutlined, DatabaseOutlined, DeleteOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -49,6 +49,7 @@ import { fetchLlmModels, type LlmModelOption } from "@/services/llm";
 import {
   createSocialListeningBoard,
   deleteSocialListeningBoard,
+  diagnoseSocialListeningTweetRecall,
   fetchSocialListeningAccesses,
   fetchSocialListeningAlerts,
   fetchSocialListeningBoardAiConfig,
@@ -86,6 +87,7 @@ import {
   type SocialListeningAlert,
   type SocialListeningBoard,
   type SocialListeningCleanupTableStatus,
+  type SocialListeningRecallDiagnosticItem,
   type SocialListeningJob,
   type SocialListeningPost,
   type SocialListeningTextCondensation,
@@ -2283,8 +2285,153 @@ function SocialListeningDataMaintenancePanel() {
   );
 }
 
+function SocialListeningRecallDiagnosticPanel() {
+  const [messageApi, contextHolder] = message.useMessage();
+  const [input, setInput] = useState("");
+  const diagnosticMutation = useMutation({
+    mutationFn: diagnoseSocialListeningTweetRecall,
+    onError: (error: Error) => messageApi.error(error.message || "召回诊断失败"),
+  });
+  const detail = diagnosticMutation.data?.data;
+
+  function runDiagnostic() {
+    const value = input.trim();
+    if (!value) {
+      messageApi.warning("请输入推文链接、tweet ID 或推文内容");
+      return;
+    }
+    diagnosticMutation.mutate(value);
+  }
+
+  const columns: TableProps<SocialListeningRecallDiagnosticItem>["columns"] = [
+    {
+      title: "判断",
+      width: 170,
+      render: (_, row) => (
+        <Space direction="vertical" size={4}>
+          {detail?.source.available ? (
+            row.source ? <Tag color="green">dev.tweet 存在</Tag> : <Tag>dev.tweet 未找到</Tag>
+          ) : <Tag>源库查询不可用</Tag>}
+          {row.localMatches.length ? <Tag color="blue">已召回 · {row.localMatches.length} 个看板</Tag> : <Tag color="orange">本地未找到</Tag>}
+          {row.source?.retweetId ? <Tag color="purple">转推，扫描会排除</Tag> : null}
+        </Space>
+      ),
+    },
+    {
+      title: "推文",
+      width: 230,
+      render: (_, row) => {
+        const tweetUrl = row.source?.tweetUrl || row.localMatches[0]?.tweetUrl;
+        const authorHandle = row.source?.authorHandle || row.localMatches[0]?.authorHandle;
+        return (
+          <Space direction="vertical" size={2}>
+            {tweetUrl ? <a href={tweetUrl} target="_blank" rel="noreferrer">{authorHandle ? `@${authorHandle}` : "打开 X 推文"}</a> : null}
+            <Text code copyable>{row.tweetId}</Text>
+            <Text type="secondary">{formatDate(row.source?.postCreatedAt || row.localMatches[0]?.postCreatedAt)}</Text>
+          </Space>
+        );
+      },
+    },
+    {
+      title: "内容",
+      width: 420,
+      render: (_, row) => (
+        <Paragraph ellipsis={{ rows: 3, expandable: true, symbol: "展开" }} className="social-listening-recall-text">
+          {row.source?.text || row.localMatches[0]?.text || "-"}
+        </Paragraph>
+      ),
+    },
+    {
+      title: "本地召回记录",
+      width: 360,
+      render: (_, row) => row.localMatches.length ? (
+        <Space direction="vertical" size={6}>
+          {row.localMatches.map((match) => (
+            <div key={match.id}>
+              <Space size={4} wrap>
+                <Tag color="blue">{match.boardName || (match.boardHandle ? `@${match.boardHandle}` : match.boardId)}</Tag>
+                {match.recallSource ? <Tag>{match.recallSource}</Tag> : null}
+                {match.matchedKeywords.map((keyword) => <Tag color="geekblue" key={`${match.id}-${keyword}`}>{keyword}</Tag>)}
+              </Space>
+              <div><Text type="secondary">入库：{formatDate(match.recalledAt)}</Text></div>
+            </div>
+          ))}
+        </Space>
+      ) : <Text type="secondary">当前保留数据中没有记录</Text>,
+    },
+  ];
+
+  const exactItem = detail?.query.mode === "tweet_id" ? detail.items[0] : null;
+  const exactMessage = detail?.query.mode === "tweet_id"
+    ? !detail.source.available
+      ? `dev.tweet 暂不可查询；本地库${exactItem?.localMatches.length ? "已找到记录" : "未找到记录"}`
+      : exactItem?.source && exactItem.localMatches.length
+        ? "已召回：源库与本地库均存在"
+        : exactItem?.source
+          ? "dev.tweet 存在，但本地库当前未找到"
+          : exactItem?.localMatches.length
+            ? "本地库存在，但 dev.tweet 当前未找到"
+            : "源库和本地库均未找到"
+    : null;
+  const summaryMessage = exactMessage || (detail
+    ? detail.source.available
+      ? `源库命中 ${detail.summary.sourceTweets} 条，其中 ${detail.summary.recalledSourceTweets} 条已召回`
+      : `dev.tweet 暂不可查询；本地命中 ${detail.summary.localTweets} 条推文`
+    : null);
+
+  return (
+    <PageSection
+      title="推文召回诊断"
+      description="仅超级管理员可见。按链接 / tweet ID 精确查询，或按正文搜索两边最近 31 天数据，并将 dev.tweet 与 Social Listening 本地入库记录对照。"
+    >
+      {contextHolder}
+      <Space direction="vertical" size={14} className="social-listening-full social-listening-recall-diagnostic">
+        <Space.Compact block>
+          <TextArea
+            value={input}
+            onChange={(event) => {
+              setInput(event.target.value);
+              if (diagnosticMutation.data) diagnosticMutation.reset();
+            }}
+            placeholder="粘贴 https://x.com/.../status/...、tweet ID，或输入至少 4 个字符的推文内容"
+            autoSize={{ minRows: 2, maxRows: 5 }}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") runDiagnostic();
+            }}
+          />
+          <Button type="primary" icon={<SearchOutlined />} loading={diagnosticMutation.isPending} onClick={runDiagnostic}>
+            查询召回情况
+          </Button>
+        </Space.Compact>
+
+        {detail ? (
+          <>
+            <Alert
+              showIcon
+              type={!detail.source.available ? "warning" : detail.summary.unrecalledSourceTweets ? "warning" : detail.items.length ? "success" : "info"}
+              message={summaryMessage}
+              description={detail.source.error || `本地命中 ${detail.summary.localTweets} 条推文、${detail.summary.localRecords} 条看板记录。未在本地找到只代表当前保留数据中不存在；超过 31 天的数据可能已经清理。`}
+            />
+            <Table<SocialListeningRecallDiagnosticItem>
+              rowKey="tweetId"
+              size="small"
+              columns={columns}
+              dataSource={detail.items}
+              pagination={false}
+              locale={{ emptyText: "没有找到匹配推文" }}
+              scroll={{ x: 1180 }}
+            />
+            <Text type="secondary">正文搜索每侧最多取 20 条后按 tweet ID 合并；按链接或 tweet ID 查询不受 31 天搜索窗口限制。按 ⌘/Ctrl + Enter 可快速查询。</Text>
+          </>
+        ) : null}
+      </Space>
+    </PageSection>
+  );
+}
+
 export function SocialListeningPage() {
   const [messageApi, contextHolder] = message.useMessage();
+  const { user } = useAuth();
   const [filters, setFilters] = useState({ q: "", status: "" });
   const [editingBoard, setEditingBoard] = useState<SocialListeningBoard | null>(null);
   const [drawerBoard, setDrawerBoard] = useState<SocialListeningBoard | null>(null);
@@ -2517,6 +2664,8 @@ export function SocialListeningPage() {
         >
           <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1470 }} />
         </PageSection>
+
+        {user?.role === "super" ? <SocialListeningRecallDiagnosticPanel /> : null}
 
         <PageSection
               title="最近任务"

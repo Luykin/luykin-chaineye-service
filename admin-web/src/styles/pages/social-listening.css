@@ -192,10 +192,36 @@
   line-height: 1.6;
 }
 
+.social-listening-recall-diagnostic .ant-space-compact {
+  align-items: stretch;
+}
+
+.social-listening-recall-diagnostic .ant-space-compact > .ant-btn {
+  height: auto;
+  min-width: 148px;
+}
+
+.social-listening-recall-text {
+  margin-bottom: 0 !important;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 960px) {
   .social-listening-hero {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .social-listening-recall-diagnostic .ant-space-compact {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .social-listening-recall-diagnostic .ant-space-compact > * {
+    width: 100%;
+    border-radius: 6px !important;
   }
 }
 

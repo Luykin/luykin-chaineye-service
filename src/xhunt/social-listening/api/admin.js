@@ -70,6 +70,7 @@ const { createAdminWriteAudit } = require("../../../admin/services/admin-audit")
 const {
   createSocialListeningDataMaintenance,
 } = require("../../../services/singleton/social-listening-data-maintenance");
+const { diagnoseTweetRecall } = require("../services/recall-diagnostics");
 
 const router = express.Router();
 router.use(createAdminWriteAudit((req) => {
@@ -661,6 +662,20 @@ router.get("/maintenance/status", async (req, res) => {
     return res.json({ success: true, data: await socialListeningDataMaintenance.getCleanupStatus() });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_MAINTENANCE_STATUS_FAILED");
+  }
+});
+
+router.post("/recall-diagnostics/search", requireRole("super"), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await diagnoseTweetRecall({
+      input: req.body?.input,
+      EchohuntSocialListeningPost,
+      EchohuntSocialListeningBoard,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_RECALL_DIAGNOSTIC_FAILED");
   }
 });
 

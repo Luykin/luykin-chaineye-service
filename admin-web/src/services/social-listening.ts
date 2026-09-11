@@ -328,6 +328,59 @@ export interface SocialListeningCleanupResult {
   deleted: Record<string, number>;
 }
 
+export interface SocialListeningRecallDiagnosticLocalMatch {
+  id: string;
+  boardId: string;
+  boardName?: string | null;
+  boardHandle?: string | null;
+  tweetId: string;
+  tweetUrl: string;
+  authorHandle?: string | null;
+  postCreatedAt?: string | null;
+  recalledAt?: string | null;
+  text?: string | null;
+  recallSource?: string | null;
+  matchedKeywords: string[];
+}
+
+export interface SocialListeningRecallDiagnosticItem {
+  tweetId: string;
+  source: {
+    tweetId: string;
+    tweetUrl: string;
+    authorTwitterId?: string | null;
+    authorHandle?: string | null;
+    authorName?: string | null;
+    postCreatedAt?: string | null;
+    text?: string | null;
+    retweetId?: string | null;
+  } | null;
+  localMatches: SocialListeningRecallDiagnosticLocalMatch[];
+}
+
+export interface SocialListeningRecallDiagnosticResult {
+  query: {
+    mode: "tweet_id" | "text";
+    input: string;
+    tweetId?: string | null;
+    contentWindowDays?: number | null;
+    resultLimit: number;
+  };
+  source: {
+    available: boolean;
+    error?: string | null;
+  };
+  summary: {
+    sourceTweets: number;
+    localTweets: number;
+    localRecords: number;
+    recalledSourceTweets: number;
+    unrecalledSourceTweets: number;
+  };
+  items: SocialListeningRecallDiagnosticItem[];
+  checkedAt: string;
+}
+
 export interface SocialListeningRuntimeConfigResponse {
   dataId: string;
   group: string;
@@ -443,6 +496,13 @@ export function fetchSocialListeningCleanupStatus() {
 
 export function runSocialListeningCleanup() {
   return apiRequest<{ success: boolean; data: SocialListeningCleanupResult }>(`${BASE_PATH}/maintenance/cleanup`, { method: "POST" });
+}
+
+export function diagnoseSocialListeningTweetRecall(input: string) {
+  return apiRequest<{ success: boolean; data: SocialListeningRecallDiagnosticResult }>(`${BASE_PATH}/recall-diagnostics/search`, {
+    method: "POST",
+    body: { input },
+  });
 }
 
 export function pauseSocialListeningAiWorker() {
