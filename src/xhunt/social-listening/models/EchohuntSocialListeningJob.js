@@ -26,6 +26,7 @@ module.exports = (sequelize) => {
       indexes: [
         { name: "idx_echohunt_sl_jobs_board_status_created", fields: ["boardId", "status", "createdAt"] },
         { name: "idx_echohunt_sl_jobs_type_status", fields: ["jobType", "status"] },
+        { name: "idx_echohunt_sl_jobs_retention_status_finished", fields: ["status", "finishedAt"] },
       ],
     }
   );

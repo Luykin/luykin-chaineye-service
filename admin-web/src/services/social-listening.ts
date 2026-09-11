@@ -295,6 +295,39 @@ export interface SocialListeningAiWorkerStatus {
   lastRun?: Record<string, unknown> | null;
 }
 
+export interface SocialListeningCleanupTableStatus {
+  key: string;
+  label: string;
+  retentionField: string;
+  totalRows: number;
+  expiredRows: number;
+  expiredPercent: number;
+}
+
+export interface SocialListeningCleanupStatus {
+  retentionDays: number;
+  cutoff: string;
+  measuredAt: string;
+  schedule: {
+    cron: string;
+    timeZone: string;
+    nextRunAt: string;
+  };
+  summary: {
+    totalRows: number;
+    expiredRows: number;
+    expiredPercent: number;
+  };
+  tables: SocialListeningCleanupTableStatus[];
+}
+
+export interface SocialListeningCleanupResult {
+  cutoff: string;
+  completedAt: string;
+  totalDeleted: number;
+  deleted: Record<string, number>;
+}
+
 export interface SocialListeningRuntimeConfigResponse {
   dataId: string;
   group: string;
@@ -402,6 +435,14 @@ export function updateSocialListeningRuntimeConfig(payload: {
 
 export function fetchSocialListeningAiWorkerStatus() {
   return apiRequest<{ success: boolean; data: SocialListeningAiWorkerStatus }>(`${BASE_PATH}/ai-worker/status`);
+}
+
+export function fetchSocialListeningCleanupStatus() {
+  return apiRequest<{ success: boolean; data: SocialListeningCleanupStatus }>(`${BASE_PATH}/maintenance/status`);
+}
+
+export function runSocialListeningCleanup() {
+  return apiRequest<{ success: boolean; data: SocialListeningCleanupResult }>(`${BASE_PATH}/maintenance/cleanup`, { method: "POST" });
 }
 
 export function pauseSocialListeningAiWorker() {

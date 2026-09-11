@@ -16,6 +16,7 @@ module.exports = (sequelize) => sequelize.define(
     timestamps: true,
     indexes: [
       { name: "ux_echohunt_sl_text_condensations_tweet", fields: ["tweetId"], unique: true },
+      { name: "idx_echohunt_sl_text_condensations_retention_condensed", fields: ["condensedAt"] },
     ],
   }
 );

@@ -61,6 +61,7 @@ module.exports = (sequelize) => {
         { name: "idx_echohunt_sl_posts_board_sentiment_created", fields: ["boardId", "sentiment", "postCreatedAt"] },
         { name: "idx_echohunt_sl_posts_board_author", fields: ["boardId", "authorTwitterId"] },
         { name: "idx_echohunt_sl_posts_board_global_rank", fields: ["boardId", "authorGlobalRank"] },
+        { name: "idx_echohunt_sl_posts_retention_created", fields: ["postCreatedAt"] },
       ],
     }
   );

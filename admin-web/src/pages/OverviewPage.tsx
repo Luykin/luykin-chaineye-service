@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, DatePicker, Segmented, Spin } from "antd";
+import { Alert, DatePicker, Segmented, Spin, Tooltip } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useQuery } from "@tanstack/react-query";
@@ -37,10 +37,13 @@ function getActivePreset(startDate: string, endDate: string) {
 }
 
 function getChartLabelStep(length: number) {
-  if (length > 90) return Math.ceil(length / 12);
-  if (length > 45) return Math.ceil(length / 10);
-  if (length > 24) return Math.ceil(length / 8);
-  return 1;
+  return Math.max(1, Math.ceil((length - 1) / 7));
+}
+
+function shouldShowChartLabel(index: number, length: number, step: number) {
+  if (index === 0 || index === length - 1) return true;
+  if (index % step !== 0) return false;
+  return length - 1 - index >= Math.max(2, Math.ceil(step * 0.75));
 }
 
 type ActivityChartItem = {
@@ -59,14 +62,18 @@ function ActivityLineChart({
   items: ActivityChartItem[];
 }) {
   const maxValue = Math.max(...items.map((item) => item.value), 0);
+  const peakItem = items.reduce<ActivityChartItem | null>(
+    (peak, item) => (!peak || item.value > peak.value ? item : peak),
+    null
+  );
   const chartMaxValue = Math.max(maxValue, 1);
   const labelStep = getChartLabelStep(items.length);
   const width = 1000;
-  const height = 240;
-  const top = 22;
-  const bottom = 198;
-  const left = 28;
-  const right = 24;
+  const height = 226;
+  const top = 18;
+  const bottom = 184;
+  const left = 64;
+  const right = 52;
   const chartWidth = width - left - right;
   const chartHeight = bottom - top;
   const points = items.map((item, index) => {
@@ -82,8 +89,15 @@ function ActivityLineChart({
   return (
     <div className="overview-activity-panel overview-activity-panel--daily-line">
       <div className="overview-activity-panel-head">
-        <span>{title}</span>
-        <strong>{formatNumber(maxValue)}</strong>
+        <div className="overview-activity-panel-title">
+          <span>{title}</span>
+          <small>每日去重活跃身份</small>
+        </div>
+        <div className="overview-activity-panel-peak">
+          <span>峰值</span>
+          <strong>{formatNumber(maxValue)}</strong>
+          <small>{peakItem?.subLabel ?? "--"}</small>
+        </div>
       </div>
 
       {items.length ? (
@@ -104,15 +118,20 @@ function ActivityLineChart({
 
             {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
               const y = top + ratio * chartHeight;
+              const value = Math.round(chartMaxValue * (1 - ratio));
               return (
-                <line
-                  className="overview-line-chart-grid"
-                  key={ratio}
-                  x1={left}
-                  x2={width - right}
-                  y1={y}
-                  y2={y}
-                />
+                <g key={ratio}>
+                  <line
+                    className="overview-line-chart-grid"
+                    x1={left}
+                    x2={width - right}
+                    y1={y}
+                    y2={y}
+                  />
+                  <text className="overview-line-chart-y-label" x={left - 12} y={y + 4}>
+                    {formatNumber(value)}
+                  </text>
+                </g>
               );
             })}
 
@@ -120,8 +139,7 @@ function ActivityLineChart({
             <polyline className="overview-line-chart-line" points={polylinePoints} />
 
             {points.map((point, index) => {
-              const showLabel =
-                index === 0 || index === points.length - 1 || index % labelStep === 0;
+              const showLabel = shouldShowChartLabel(index, points.length, labelStep);
               return (
                 <g className={point.isCurrent ? "is-current" : ""} key={point.key}>
                   <circle
@@ -139,8 +157,22 @@ function ActivityLineChart({
                     r={point.isCurrent ? 5.5 : 4}
                   />
                   {showLabel ? (
-                    <text className="overview-line-chart-label" x={point.x} y={height - 12}>
+                    <text
+                      className="overview-line-chart-label"
+                      x={point.x}
+                      y={height - 10}
+                      textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+                    >
                       {point.subLabel}
+                    </text>
+                  ) : null}
+                  {point.isCurrent ? (
+                    <text
+                      className="overview-line-chart-current-value"
+                      x={point.x - 9}
+                      y={point.y > top + 32 ? point.y - 11 : point.y + 24}
+                    >
+                      {formatNumber(point.value)}
                     </text>
                   ) : null}
                 </g>
@@ -168,48 +200,63 @@ function ActivityBarChart({
   variant: "daily" | "weekly";
 }) {
   const maxValue = Math.max(...items.map((item) => item.value), 0);
+  const peakItem = items.reduce<ActivityChartItem | null>(
+    (peak, item) => (!peak || item.value > peak.value ? item : peak),
+    null
+  );
   const chartMaxValue = Math.max(maxValue, 1);
   const labelStep = getChartLabelStep(items.length);
 
   return (
     <div className={`overview-activity-panel overview-activity-panel--${variant}`}>
       <div className="overview-activity-panel-head">
-        <span>{title}</span>
-        <strong>{formatNumber(maxValue)}</strong>
+        <div className="overview-activity-panel-title">
+          <span>{title}</span>
+          <small>按自然周去重汇总</small>
+        </div>
+        <div className="overview-activity-panel-peak">
+          <span>峰值</span>
+          <strong>{formatNumber(maxValue)}</strong>
+          <small>{peakItem?.subLabel ?? "--"}</small>
+        </div>
       </div>
 
       {items.length ? (
         <div className="overview-activity-chart" role="list" aria-label={title}>
           {items.map((item, index) => {
-            const height = item.value ? Math.max(8, (item.value / chartMaxValue) * 100) : 2;
-            const showLabel =
-              index === 0 || index === items.length - 1 || index % labelStep === 0;
+            const height = item.value ? Math.max(6, (item.value / chartMaxValue) * 100) : 2;
+            const showLabel = shouldShowChartLabel(index, items.length, labelStep);
 
             return (
-              <div
-                className={[
-                  "overview-activity-bar-cell",
-                  item.isCurrent ? "is-current" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+              <Tooltip
                 key={item.key}
-                role="listitem"
-                title={`${item.label}：${formatNumber(item.value)}`}
+                title={`${item.label}：${formatNumber(item.value)} 位活跃用户`}
+                placement="top"
               >
-                <span className="overview-activity-bar-value">
-                  {formatNumber(item.value)}
-                </span>
-                <div className="overview-activity-bar-track">
-                  <div
-                    className="overview-activity-bar"
-                    style={{ height: `${height}%` }}
-                  />
+                <div
+                  className={[
+                    "overview-activity-bar-cell",
+                    item.isCurrent ? "is-current" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  role="listitem"
+                  aria-label={`${item.label}：${formatNumber(item.value)} 位活跃用户`}
+                >
+                  <span className="overview-activity-bar-value">
+                    {formatNumber(item.value)}
+                  </span>
+                  <div className="overview-activity-bar-track">
+                    <div
+                      className="overview-activity-bar"
+                      style={{ height: `${height}%` }}
+                    />
+                  </div>
+                  <span className="overview-activity-bar-label">
+                    {showLabel ? item.subLabel : ""}
+                  </span>
                 </div>
-                <span className="overview-activity-bar-label">
-                  {showLabel ? item.subLabel : ""}
-                </span>
-              </div>
+              </Tooltip>
             );
           })}
         </div>

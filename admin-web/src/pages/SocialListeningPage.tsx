@@ -25,6 +25,7 @@ import {
   Row,
   Select,
   Space,
+  Spin,
   Statistic,
   Switch,
   Table,
@@ -38,7 +39,7 @@ import {
   type MenuProps,
   type TableProps,
 } from "antd";
-import { DeleteOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { ClearOutlined, ClockCircleOutlined, DatabaseOutlined, DeleteOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -52,6 +53,7 @@ import {
   fetchSocialListeningAlerts,
   fetchSocialListeningBoardAiConfig,
   fetchSocialListeningBoards,
+  fetchSocialListeningCleanupStatus,
   fetchSocialListeningJobs,
   fetchSocialListeningPosts,
   fetchSocialListeningTextCondensations,
@@ -70,6 +72,7 @@ import {
   resumeSocialListeningBoard,
   retrySocialListeningJob,
   revokeSocialListeningAccess,
+  runSocialListeningCleanup,
   updateSocialListeningBoard,
   updateSocialListeningBoardAiConfig,
   updateSocialListeningRuntimeConfig,
@@ -82,6 +85,7 @@ import {
   type SocialListeningAccountSignal,
   type SocialListeningAlert,
   type SocialListeningBoard,
+  type SocialListeningCleanupTableStatus,
   type SocialListeningJob,
   type SocialListeningPost,
   type SocialListeningTextCondensation,
@@ -2105,6 +2109,180 @@ function BoardDrawer({ board, open, initialTab = "ai-samples", onClose, onChange
   );
 }
 
+function SocialListeningDataMaintenancePanel() {
+  const [messageApi, contextHolder] = message.useMessage();
+  const { user } = useAuth();
+  const canCleanup = user?.role === "super";
+  const statusQuery = useQuery({
+    queryKey: ["social-listening", "maintenance-status"],
+    queryFn: fetchSocialListeningCleanupStatus,
+  });
+  const cleanupMutation = useMutation({
+    mutationFn: runSocialListeningCleanup,
+    onSuccess: (response) => {
+      messageApi.success(`清理完成，共删除 ${formatNumber(response.data.totalDeleted)} 条过期数据`);
+      void statusQuery.refetch();
+    },
+    onError: (error: Error) => {
+      messageApi.error(error.message || "清理失败");
+      void statusQuery.refetch();
+    },
+  });
+  const detail = statusQuery.data?.data;
+  const expiredRows = detail?.summary.expiredRows || 0;
+  const tableColumns: TableProps<SocialListeningCleanupTableStatus>["columns"] = [
+    {
+      title: "数据类型",
+      dataIndex: "label",
+      width: 150,
+      render: (value: string) => <Text strong>{value}</Text>,
+    },
+    {
+      title: "保留时间字段",
+      dataIndex: "retentionField",
+      width: 170,
+      render: (value: string) => <Text code>{value}</Text>,
+    },
+    {
+      title: "当前记录",
+      dataIndex: "totalRows",
+      width: 130,
+      align: "right",
+      render: (value: number) => formatNumber(value),
+    },
+    {
+      title: "31 天前可清理",
+      dataIndex: "expiredRows",
+      width: 150,
+      align: "right",
+      render: (value: number) => value ? <Text type="danger" strong>{formatNumber(value)}</Text> : <Text type="secondary">0</Text>,
+    },
+    {
+      title: "过期占比",
+      dataIndex: "expiredPercent",
+      width: 220,
+      render: (value: number, row) => (
+        <Progress
+          percent={Math.min(100, value)}
+          size="small"
+          status={row.expiredRows ? "exception" : "success"}
+          format={() => `${value.toFixed(2)}%`}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <Card
+      className="social-listening-maintenance-card"
+      title={<Space><DatabaseOutlined />数据保留与清理</Space>}
+      extra={
+        <Space wrap>
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            loading={statusQuery.isFetching}
+            onClick={() => statusQuery.refetch()}
+          >
+            刷新统计
+          </Button>
+          <Tooltip title={canCleanup ? "立即执行与定时任务相同的 31 天数据清理" : "仅超级管理员可以手动清理"}>
+            <span>
+              <Popconfirm
+                title="立即清理 31 天前的数据？"
+                description={`当前预计删除 ${formatNumber(expiredRows)} 条记录。该操作不可撤销，但不会删除看板、授权和用户关键事件。`}
+                okText="确认清理"
+                okButtonProps={{ danger: true }}
+                cancelText="取消"
+                disabled={!canCleanup || !expiredRows}
+                onConfirm={() => cleanupMutation.mutate()}
+              >
+                <Button
+                  danger
+                  size="small"
+                  icon={<ClearOutlined />}
+                  loading={cleanupMutation.isPending}
+                  disabled={!canCleanup || !expiredRows}
+                >
+                  立即清理
+                </Button>
+              </Popconfirm>
+            </span>
+          </Tooltip>
+        </Space>
+      }
+    >
+      {contextHolder}
+      {statusQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="加载数据保留统计失败"
+          description={statusQuery.error.message}
+        />
+      ) : null}
+
+      {detail ? (
+        <Space direction="vertical" size={16} className="social-listening-full">
+          <Alert
+            type={expiredRows ? "warning" : "success"}
+            showIcon
+            message={`每天北京时间 10:20 自动清理，仅保留最近 ${detail.retentionDays} 天数据`}
+            description={`当前清理截止线：${formatDate(detail.cutoff)}。统计口径与定时任务、手动清理完全一致。`}
+          />
+
+          <Row gutter={[12, 12]}>
+            <Col xs={24} sm={12} lg={6}>
+              <Card size="small" className="social-listening-maintenance-stat is-schedule">
+                <Statistic.Countdown
+                  title={<Space size={6}><ClockCircleOutlined />距离下次自动清理</Space>}
+                  value={new Date(detail.schedule.nextRunAt).getTime()}
+                  format="D 天 H 时 m 分 s 秒"
+                  onFinish={() => statusQuery.refetch()}
+                />
+                <Text type="secondary">{formatDate(detail.schedule.nextRunAt)}</Text>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card size="small" className="social-listening-maintenance-stat">
+                <Statistic title="当前总记录" value={detail.summary.totalRows} formatter={(value) => formatNumber(Number(value))} suffix="条" />
+                <Text type="secondary">6 类可过期数据</Text>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card size="small" className="social-listening-maintenance-stat is-expired">
+                <Statistic title="31 天前可清理" value={detail.summary.expiredRows} formatter={(value) => formatNumber(Number(value))} suffix="条" />
+                <Text type="secondary">早于当前截止线</Text>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card size="small" className="social-listening-maintenance-stat">
+                <Statistic title="过期数据占比" value={detail.summary.expiredPercent} precision={2} suffix="%" />
+                <Text type="secondary">统计于 {formatDate(detail.measuredAt)}</Text>
+              </Card>
+            </Col>
+          </Row>
+
+          <Table<SocialListeningCleanupTableStatus>
+            rowKey="key"
+            size="small"
+            columns={tableColumns}
+            dataSource={detail.tables}
+            pagination={false}
+            scroll={{ x: 820 }}
+          />
+
+          <Text type="secondary" className="social-listening-maintenance-note">
+            已完成任务仅清理 succeeded / failed / skipped / cancelled 状态；pending 和 running 任务不会删除。看板、授权、审计日志和用户关键事件不在自动清理范围内。
+          </Text>
+        </Space>
+      ) : statusQuery.isLoading ? (
+        <div className="social-listening-maintenance-loading"><Spin tip="正在统计数据量" /></div>
+      ) : null}
+    </Card>
+  );
+}
+
 export function SocialListeningPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [filters, setFilters] = useState({ q: "", status: "" });
@@ -2464,6 +2642,8 @@ export function SocialListeningPage() {
             </Row>
           </Space>
         </Card>
+
+        <SocialListeningDataMaintenancePanel />
 
       </Space>
 

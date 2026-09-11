@@ -145,6 +145,53 @@
   border-top: 1px solid var(--admin-border, #f0f0f0);
 }
 
+.social-listening-maintenance-card {
+  overflow: hidden;
+  border-color: light-dark(rgba(245, 158, 11, 0.3), rgba(251, 191, 36, 0.28));
+}
+
+.social-listening-maintenance-card > .ant-card-head {
+  background: linear-gradient(135deg, light-dark(rgba(255, 251, 235, 0.9), rgba(120, 53, 15, 0.18)), transparent 72%);
+}
+
+.social-listening-maintenance-stat {
+  height: 100%;
+  border-color: var(--admin-border, #e5e7eb);
+  background: light-dark(rgba(248, 250, 252, 0.72), rgba(15, 23, 42, 0.32));
+}
+
+.social-listening-maintenance-stat.is-schedule {
+  border-color: light-dark(rgba(37, 99, 235, 0.24), rgba(96, 165, 250, 0.3));
+  background: light-dark(rgba(239, 246, 255, 0.72), rgba(30, 64, 175, 0.13));
+}
+
+.social-listening-maintenance-stat.is-expired {
+  border-color: light-dark(rgba(245, 158, 11, 0.3), rgba(251, 191, 36, 0.28));
+  background: light-dark(rgba(255, 251, 235, 0.76), rgba(120, 53, 15, 0.16));
+}
+
+.social-listening-maintenance-stat .ant-card-body {
+  display: flex;
+  min-height: 116px;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.social-listening-maintenance-stat .ant-statistic-content {
+  font-size: clamp(20px, 2vw, 26px);
+}
+
+.social-listening-maintenance-loading {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+}
+
+.social-listening-maintenance-note {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 @media (max-width: 960px) {
   .social-listening-hero {
     align-items: flex-start;

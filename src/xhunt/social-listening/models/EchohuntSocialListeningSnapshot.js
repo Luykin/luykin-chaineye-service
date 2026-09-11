@@ -28,6 +28,7 @@ module.exports = (sequelize) => {
       timestamps: true,
       indexes: [
         { name: "idx_echohunt_sl_snapshots_board_range_generated", fields: ["boardId", "rangeKey", "generatedAt"] },
+        { name: "idx_echohunt_sl_snapshots_retention_generated", fields: ["generatedAt"] },
       ],
     }
   );

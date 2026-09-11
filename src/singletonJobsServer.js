@@ -16,6 +16,12 @@ const {
   VersionRequestStats,
   UrlRequestStats,
   XhuntAdminManager,
+  EchohuntSocialListeningPost,
+  EchohuntSocialListeningSnapshot,
+  EchohuntSocialListeningAccountSignal,
+  EchohuntSocialListeningAlert,
+  EchohuntSocialListeningTextCondensation,
+  EchohuntSocialListeningJob,
 } = require("./models/postgres-start");
 const { requestStatsManager } = require("./xhunt/middleware/security");
 const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
@@ -34,6 +40,11 @@ const {
 const {
   createBackendHealthChecker,
 } = require("./services/singleton/backend-health-checker");
+const {
+  SOCIAL_LISTENING_CLEANUP_CRON,
+  SOCIAL_LISTENING_CLEANUP_TIME_ZONE,
+  createSocialListeningDataMaintenance,
+} = require("./services/singleton/social-listening-data-maintenance");
 
 const SOCIAL_LISTENING_READONLY_SCOPE = "social-listening";
 
@@ -113,6 +124,15 @@ const redisClient = redis.createClient({
       recordGenericStat,
     });
 
+    const socialListeningDataMaintenance = createSocialListeningDataMaintenance({
+      EchohuntSocialListeningPost,
+      EchohuntSocialListeningSnapshot,
+      EchohuntSocialListeningAccountSignal,
+      EchohuntSocialListeningAlert,
+      EchohuntSocialListeningTextCondensation,
+      EchohuntSocialListeningJob,
+    });
+
     const socialListeningScheduler = createSocialListeningScheduler({ redisClient });
     const socialListeningSchedulerStatus = socialListeningScheduler.start();
     const socialListeningAiWorker = createSocialListeningAiWorker({ redisClient });
@@ -131,8 +151,14 @@ const redisClient = redis.createClient({
     // 统计数据定时任务：每5分钟执行一次（版本统计 + URL统计）
     schedule.scheduleJob("*/5 * * * *", requestStatsMaintenance.flushStats);
 
-    // 清理旧数据：每天凌晨2点执行（UTC时间，对应北京时间10点）
+    // 清理旧统计数据：每天北京时间凌晨 02:00 执行（进程时区为 Asia/Shanghai）
     schedule.scheduleJob("0 2 * * *", requestStatsMaintenance.cleanupOldStats);
+
+    // Social Listening 数据保留：每天北京时间上午 10:20 执行
+    schedule.scheduleJob(
+      { rule: SOCIAL_LISTENING_CLEANUP_CRON, tz: SOCIAL_LISTENING_CLEANUP_TIME_ZONE },
+      socialListeningDataMaintenance.cleanupExpiredData
+    );
 
     // 后端健康自检测：每 30 分钟执行一次，仅在发现风险时给超级管理员发送邮件
     schedule.scheduleJob("*/30 * * * *", backendHealthChecker.run);
@@ -146,6 +172,7 @@ const redisClient = redis.createClient({
       "✅ 统计数据清理任务已启动（每天执行一次，清理版本统计和URL统计）"
     );
     console.log("✅ 后端健康自检测任务已启动（每30分钟执行一次）");
+    console.log("✅ Social Listening 数据清理任务已启动（每天执行一次，保留最近31天）");
     console.log(
       socialListeningSchedulerStatus.enabled
         ? "✅ Social Listening 采集调度器已加载（只负责采集/聚合，不再内联跑 AI）"

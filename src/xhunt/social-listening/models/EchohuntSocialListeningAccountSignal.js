@@ -32,6 +32,7 @@ module.exports = (sequelize) => {
         { name: "ux_echohunt_sl_signals_board_type_twitter_occurred", fields: ["boardId", "signalType", "twitterId", "occurredAt"], unique: true },
         { name: "idx_echohunt_sl_signals_board_type_occurred", fields: ["boardId", "signalType", "occurredAt"] },
         { name: "idx_echohunt_sl_signals_board_twitter_occurred", fields: ["boardId", "twitterId", "occurredAt"] },
+        { name: "idx_echohunt_sl_signals_retention_occurred", fields: ["occurredAt"] },
       ],
     }
   );

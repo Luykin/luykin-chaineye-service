@@ -67,6 +67,9 @@ const {
 } = require("../services/runtime-config");
 const { sendJsonError, publicError } = require("../services/errors");
 const { createAdminWriteAudit } = require("../../../admin/services/admin-audit");
+const {
+  createSocialListeningDataMaintenance,
+} = require("../../../services/singleton/social-listening-data-maintenance");
 
 const router = express.Router();
 router.use(createAdminWriteAudit((req) => {
@@ -75,6 +78,7 @@ router.use(createAdminWriteAudit((req) => {
     "POST /runtime-config": "social-listening-runtime-config-update",
     "POST /ai-worker/pause": "social-listening-ai-worker-pause",
     "POST /ai-worker/resume": "social-listening-ai-worker-resume",
+    "POST /maintenance/cleanup": "social-listening-data-cleanup",
     "POST /monitored-accounts": "social-listening-board-create",
   };
   if (staticActions[key]) return staticActions[key];
@@ -94,6 +98,15 @@ router.use(createAdminWriteAudit((req) => {
   return null;
 }));
 router.use(requirePermission(SOCIAL_LISTENING_PERMISSION));
+
+const socialListeningDataMaintenance = createSocialListeningDataMaintenance({
+  EchohuntSocialListeningPost,
+  EchohuntSocialListeningSnapshot,
+  EchohuntSocialListeningAccountSignal,
+  EchohuntSocialListeningAlert,
+  EchohuntSocialListeningTextCondensation,
+  EchohuntSocialListeningJob,
+});
 
 function getAdminId(req) {
   return req.adminUser?.id || null;
@@ -639,6 +652,29 @@ router.get("/runtime-config", async (req, res) => {
     });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_RUNTIME_CONFIG_FAILED");
+  }
+});
+
+router.get("/maintenance/status", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    return res.json({ success: true, data: await socialListeningDataMaintenance.getCleanupStatus() });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_MAINTENANCE_STATUS_FAILED");
+  }
+});
+
+router.post("/maintenance/cleanup", requireRole("super"), async (req, res) => {
+  try {
+    const result = await socialListeningDataMaintenance.cleanupExpiredData({ throwOnError: true });
+    await writeAudit({
+      adminId: getAdminId(req),
+      action: "data_cleanup",
+      payload: result,
+    });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_MAINTENANCE_CLEANUP_FAILED");
   }
 });
 

@@ -28,6 +28,7 @@ module.exports = (sequelize) => {
       indexes: [
         { name: "ux_echohunt_sl_alerts_board_dedupe", fields: ["boardId", "dedupeKey"], unique: true },
         { name: "idx_echohunt_sl_alerts_board_type_triggered", fields: ["boardId", "alertType", "triggeredAt"] },
+        { name: "idx_echohunt_sl_alerts_retention_triggered", fields: ["triggeredAt"] },
       ],
     }
   );
