@@ -2342,6 +2342,56 @@ function SocialListeningRecallDiagnosticPanel() {
       ),
     },
     {
+      title: "未召回诊断",
+      width: 520,
+      render: (_, row) => {
+        if (row.localMatches.length) return <Text type="success">已在本地入库，无需诊断</Text>;
+        if (!row.source) return <Text type="secondary">dev.tweet 无记录，无法分析召回规则</Text>;
+        if (!row.diagnostics) return <Text type="secondary">没有可用的看板配置用于分析</Text>;
+        const severityColors = {
+          default: "default",
+          info: "blue",
+          processing: "processing",
+          warning: "orange",
+          error: "red",
+        } as const;
+        return (
+          <Space direction="vertical" size={8} className="social-listening-recall-diagnosis-list">
+            <Text>{row.diagnostics.generalReason}</Text>
+            {row.diagnostics.boards.map((diagnosis) => (
+              <div className="social-listening-recall-diagnosis" key={diagnosis.boardId}>
+                <Space size={5} wrap>
+                  <Tag color="blue">{diagnosis.boardName || (diagnosis.boardHandle ? `@${diagnosis.boardHandle}` : diagnosis.boardId)}</Tag>
+                  <Tag color={severityColors[diagnosis.severity]}>{diagnosis.label}</Tag>
+                  {diagnosis.matchedKeywords.map((keyword) => <Tag color="green" key={`${diagnosis.boardId}-match-${keyword}`}>命中 {keyword}</Tag>)}
+                  {diagnosis.matchedExcludeKeywords.map((keyword) => <Tag color="volcano" key={`${diagnosis.boardId}-exclude-${keyword}`}>排除 {keyword}</Tag>)}
+                  {diagnosis.officialInteraction ? <Tag color="cyan">官方互动</Tag> : null}
+                </Space>
+                <Paragraph type="secondary" className="social-listening-recall-diagnosis-reason">{diagnosis.reason}</Paragraph>
+                {diagnosis.jobs.map((job) => {
+                  const counters = asRecord(job.counters);
+                  return (
+                    <div className="social-listening-recall-job" key={job.id}>
+                      <Space size={5} wrap>
+                        <Text code>{job.jobType}</Text>
+                        {statusTag(job.status)}
+                        <Text type="secondary">{formatDate(job.rangeStartAt)} → {formatDate(job.rangeEndAt)}</Text>
+                        {Object.keys(counters).length ? <Tag>扫 {getNumberFromRecord(counters, "scanned")} / 入库 {getNumberFromRecord(counters, "upserted")}</Tag> : null}
+                      </Space>
+                      {job.errorMessage || job.errorCode ? <div><Text type="danger">{job.errorMessage || job.errorCode}</Text></div> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            {row.diagnostics.omittedUnmatchedBoards ? (
+              <Text type="secondary">另有 {row.diagnostics.omittedUnmatchedBoards} 个看板未命中当前关键词，已省略。</Text>
+            ) : null}
+          </Space>
+        );
+      },
+    },
+    {
       title: "本地召回记录",
       width: 360,
       render: (_, row) => row.localMatches.length ? (
@@ -2386,23 +2436,39 @@ function SocialListeningRecallDiagnosticPanel() {
     >
       {contextHolder}
       <Space direction="vertical" size={14} className="social-listening-full social-listening-recall-diagnostic">
-        <Space.Compact block>
+        <div className="social-listening-recall-search-box">
+          <div className="social-listening-recall-search-head">
+            <span className="social-listening-recall-search-icon"><SearchOutlined /></span>
+            <div>
+              <Text strong>查询一条推文的召回状态</Text>
+              <Text type="secondary">系统会同时检查 dev.tweet 源库和 Social Listening 本地库</Text>
+            </div>
+          </div>
           <TextArea
+            className="social-listening-recall-search-input"
             value={input}
             onChange={(event) => {
               setInput(event.target.value);
               if (diagnosticMutation.data) diagnosticMutation.reset();
             }}
-            placeholder="粘贴 https://x.com/.../status/...、tweet ID，或输入至少 4 个字符的推文内容"
-            autoSize={{ minRows: 2, maxRows: 5 }}
+            placeholder={"粘贴推文链接或 tweet ID，可精确查询\n也可以输入至少 4 个字符的推文正文"}
+            autoSize={{ minRows: 3, maxRows: 6 }}
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === "Enter") runDiagnostic();
             }}
           />
-          <Button type="primary" icon={<SearchOutlined />} loading={diagnosticMutation.isPending} onClick={runDiagnostic}>
-            查询召回情况
-          </Button>
-        </Space.Compact>
+          <div className="social-listening-recall-search-footer">
+            <Space size={6} wrap>
+              <Tag bordered={false}>X 链接</Tag>
+              <Tag bordered={false}>tweet ID</Tag>
+              <Tag bordered={false}>推文正文</Tag>
+              <Text type="secondary">⌘/Ctrl + Enter 快速查询</Text>
+            </Space>
+            <Button type="primary" size="large" icon={<SearchOutlined />} loading={diagnosticMutation.isPending} onClick={runDiagnostic}>
+              查询召回情况
+            </Button>
+          </div>
+        </div>
 
         {detail ? (
           <>
@@ -2419,7 +2485,7 @@ function SocialListeningRecallDiagnosticPanel() {
               dataSource={detail.items}
               pagination={false}
               locale={{ emptyText: "没有找到匹配推文" }}
-              scroll={{ x: 1180 }}
+              scroll={{ x: 1700 }}
             />
             <Text type="secondary">正文搜索每侧最多取 20 条后按 tweet ID 合并；按链接或 tweet ID 查询不受 31 天搜索窗口限制。按 ⌘/Ctrl + Enter 可快速查询。</Text>
           </>
@@ -2665,8 +2731,6 @@ export function SocialListeningPage() {
           <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1470 }} />
         </PageSection>
 
-        {user?.role === "super" ? <SocialListeningRecallDiagnosticPanel /> : null}
-
         <PageSection
               title="最近任务"
               description="自动每 15 秒刷新；展开行可查看窗口、心跳、counters 和写表结果。心跳超过 5 分钟的 running 任务可手动恢复并重新入队。"
@@ -2793,6 +2857,8 @@ export function SocialListeningPage() {
         </Card>
 
         <SocialListeningDataMaintenancePanel />
+
+        {user?.role === "super" ? <SocialListeningRecallDiagnosticPanel /> : null}
 
       </Space>
 

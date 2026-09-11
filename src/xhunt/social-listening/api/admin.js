@@ -672,6 +672,7 @@ router.post("/recall-diagnostics/search", requireRole("super"), async (req, res)
       input: req.body?.input,
       EchohuntSocialListeningPost,
       EchohuntSocialListeningBoard,
+      EchohuntSocialListeningJob,
     });
     return res.json({ success: true, data });
   } catch (error) {

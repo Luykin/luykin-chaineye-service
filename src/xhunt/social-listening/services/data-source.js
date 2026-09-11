@@ -918,6 +918,8 @@ module.exports = {
   serializeTwitterUser,
   pickRank,
   buildBoardKeywords,
+  buildBoardRecallExcludeKeywords,
+  buildBoardRecallExcludeAuthorHandles,
   mapTweetRowToPostPayload,
   mapTweetMetricRow,
   fetchTweetRowById,

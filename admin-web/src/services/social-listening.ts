@@ -343,6 +343,47 @@ export interface SocialListeningRecallDiagnosticLocalMatch {
   matchedKeywords: string[];
 }
 
+export interface SocialListeningRecallDiagnosticJob {
+  id: string;
+  jobType: string;
+  status: string;
+  rangeStartAt?: string | null;
+  rangeEndAt?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  counters?: Record<string, unknown> | null;
+  createdAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface SocialListeningRecallBoardDiagnosis {
+  boardId: string;
+  boardName?: string | null;
+  boardHandle?: string | null;
+  boardStatus: string;
+  code: string;
+  severity: "default" | "info" | "processing" | "warning" | "error";
+  label: string;
+  reason: string;
+  matchedKeywords: string[];
+  matchedExcludeKeywords: string[];
+  authorExcluded: boolean;
+  officialInteraction: boolean;
+  coverageStartAt?: string | null;
+  processedThrough?: string | null;
+  jobs: SocialListeningRecallDiagnosticJob[];
+}
+
+export interface SocialListeningRecallDiagnostics {
+  analyzedBoards: number;
+  matchingBoards: number;
+  eligibleBoards: number;
+  omittedUnmatchedBoards: number;
+  generalReason: string;
+  boards: SocialListeningRecallBoardDiagnosis[];
+}
+
 export interface SocialListeningRecallDiagnosticItem {
   tweetId: string;
   source: {
@@ -356,6 +397,7 @@ export interface SocialListeningRecallDiagnosticItem {
     retweetId?: string | null;
   } | null;
   localMatches: SocialListeningRecallDiagnosticLocalMatch[];
+  diagnostics?: SocialListeningRecallDiagnostics | null;
 }
 
 export interface SocialListeningRecallDiagnosticResult {

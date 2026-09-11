@@ -192,18 +192,94 @@
   line-height: 1.6;
 }
 
-.social-listening-recall-diagnostic .ant-space-compact {
-  align-items: stretch;
+.social-listening-recall-search-box {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid light-dark(rgba(37, 99, 235, 0.2), rgba(96, 165, 250, 0.24));
+  border-radius: 14px;
+  background: linear-gradient(145deg, light-dark(rgba(239, 246, 255, 0.72), rgba(30, 64, 175, 0.12)), transparent 68%);
 }
 
-.social-listening-recall-diagnostic .ant-space-compact > .ant-btn {
-  height: auto;
-  min-width: 148px;
+.social-listening-recall-search-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.social-listening-recall-search-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.social-listening-recall-search-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--admin-primary, #1677ff);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+  color: #fff;
+  font-size: 17px;
+}
+
+.social-listening-recall-search-input {
+  padding: 12px 14px;
+  border-color: light-dark(rgba(148, 163, 184, 0.42), rgba(148, 163, 184, 0.26));
+  border-radius: 10px;
+  background: light-dark(rgba(255, 255, 255, 0.94), rgba(15, 23, 42, 0.72));
+  font-size: 14px;
+  line-height: 1.65;
+  resize: none;
+}
+
+.social-listening-recall-search-input:focus,
+.social-listening-recall-search-input:hover {
+  border-color: var(--admin-primary, #1677ff);
+}
+
+.social-listening-recall-search-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.social-listening-recall-search-footer > .ant-btn {
+  min-width: 156px;
+  border-radius: 9px;
 }
 
 .social-listening-recall-text {
   margin-bottom: 0 !important;
   white-space: pre-wrap;
+}
+
+.social-listening-recall-diagnosis-list {
+  width: 100%;
+}
+
+.social-listening-recall-diagnosis {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--admin-border, #e5e7eb);
+  border-radius: 9px;
+  background: light-dark(rgba(248, 250, 252, 0.72), rgba(15, 23, 42, 0.34));
+}
+
+.social-listening-recall-diagnosis-reason {
+  margin: 5px 0 0 !important;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.social-listening-recall-job {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--admin-border, #e5e7eb);
+  font-size: 12px;
 }
 
 @media (max-width: 960px) {
@@ -214,14 +290,17 @@
 }
 
 @media (max-width: 640px) {
-  .social-listening-recall-diagnostic .ant-space-compact {
-    display: flex;
+  .social-listening-recall-search-box {
+    padding: 14px;
+  }
+
+  .social-listening-recall-search-footer {
+    align-items: stretch;
     flex-direction: column;
   }
 
-  .social-listening-recall-diagnostic .ant-space-compact > * {
+  .social-listening-recall-search-footer > .ant-btn {
     width: 100%;
-    border-radius: 6px !important;
   }
 }
 
