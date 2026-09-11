@@ -29,7 +29,11 @@ const {
   isPostgresReadOnlyConfigured,
   setupK8sPostgresReadOnlyConnection,
 } = require("./infra/k8s/postgres-readonly");
-const { createSocialListeningScheduler } = require("./xhunt/social-listening/services/scheduler");
+const {
+  SOCIAL_LISTENING_RECALL_RECONCILE_CRON,
+  SOCIAL_LISTENING_RECALL_RECONCILE_TIME_ZONE,
+  createSocialListeningScheduler,
+} = require("./xhunt/social-listening/services/scheduler");
 const { createSocialListeningAiWorker } = require("./xhunt/social-listening/services/ai-backfill-scheduler");
 const { recordGenericStat } = require("./xhunt/services/generic-stats-service");
 const emailService = require("./services/emailService");
@@ -160,6 +164,19 @@ const redisClient = redis.createClient({
       socialListeningDataMaintenance.cleanupExpiredData
     );
 
+    // 每天北京时间 04:10、16:10 回看最近 36 小时，补偿 dev.tweet 延迟入库造成的遗漏。
+    schedule.scheduleJob(
+      {
+        rule: SOCIAL_LISTENING_RECALL_RECONCILE_CRON,
+        tz: SOCIAL_LISTENING_RECALL_RECONCILE_TIME_ZONE,
+      },
+      () => {
+        socialListeningScheduler.enqueueScheduledRecallReconcileJobs()
+          .then((result) => console.log(`[SocialListening] 定时查漏补缺完成入队：${JSON.stringify(result)}`))
+          .catch((error) => console.error("[SocialListening] 定时查漏补缺入队失败:", error));
+      }
+    );
+
     // 后端健康自检测：每 30 分钟执行一次，仅在发现风险时给超级管理员发送邮件
     schedule.scheduleJob("*/30 * * * *", backendHealthChecker.run);
 
@@ -173,6 +190,7 @@ const redisClient = redis.createClient({
     );
     console.log("✅ 后端健康自检测任务已启动（每30分钟执行一次）");
     console.log("✅ Social Listening 数据清理任务已启动（每天执行一次，保留最近31天）");
+    console.log("✅ Social Listening 查漏补缺任务已启动（北京时间 04:10、16:10，回看最近36小时）");
     console.log(
       socialListeningSchedulerStatus.enabled
         ? "✅ Social Listening 采集调度器已加载（只负责采集/聚合，不再内联跑 AI）"

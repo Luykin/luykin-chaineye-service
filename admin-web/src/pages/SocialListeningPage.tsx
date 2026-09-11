@@ -383,7 +383,10 @@ const JOB_PHASE_LABELS: Record<string, string> = {
 function formatJobType(job?: SocialListeningJob | null) {
   if (!job) return "-";
   if (job.jobType === "recall_backfill") {
-    return getString(asRecord(job.metadata).stage) === "manual_recent_7d" ? "查漏补缺（最近7天）" : "召回回补（30天）";
+    const stage = getString(asRecord(job.metadata).stage);
+    if (stage === "manual_recent_7d") return "查漏补缺（最近7天）";
+    if (stage === "scheduled_recent_36h") return "自动查漏（最近36小时）";
+    return "召回回补（30天）";
   }
   return ({
     history_backfill: "历史补数",
@@ -2327,7 +2330,8 @@ function SocialListeningRecallDiagnosticPanel() {
           <Space direction="vertical" size={2}>
             {tweetUrl ? <a href={tweetUrl} target="_blank" rel="noreferrer">{authorHandle ? `@${authorHandle}` : "打开 X 推文"}</a> : null}
             <Text code copyable>{row.tweetId}</Text>
-            <Text type="secondary">{formatDate(row.source?.postCreatedAt || row.localMatches[0]?.postCreatedAt)}</Text>
+            <Text type="secondary">发布：{formatDate(row.source?.postCreatedAt || row.localMatches[0]?.postCreatedAt)}</Text>
+            {row.source?.sourceCreatedAt ? <Text type="secondary">源库入库：{formatDate(row.source.sourceCreatedAt)}</Text> : null}
           </Space>
         );
       },
@@ -2378,6 +2382,13 @@ function SocialListeningRecallDiagnosticPanel() {
                         <Text type="secondary">{formatDate(job.rangeStartAt)} → {formatDate(job.rangeEndAt)}</Text>
                         {Object.keys(counters).length ? <Tag>扫 {getNumberFromRecord(counters, "scanned")} / 入库 {getNumberFromRecord(counters, "upserted")}</Tag> : null}
                       </Space>
+                      {job.statusMessage ? <div><Text type="secondary">{job.statusMessage}</Text></div> : null}
+                      {job.heartbeatAt ? (
+                        <div>
+                          <Text type="secondary">最后心跳：{formatDate(job.heartbeatAt)}</Text>
+                          {job.staleDetectedAt ? <Text type="secondary"> · 恢复检测：{formatDate(job.staleDetectedAt)}</Text> : null}
+                        </div>
+                      ) : null}
                       {job.errorMessage || job.errorCode ? <div><Text type="danger">{job.errorMessage || job.errorCode}</Text></div> : null}
                     </div>
                   );

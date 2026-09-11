@@ -17,6 +17,10 @@ const GLOBAL_JOB_LOCK_TTL_SECONDS = 5 * 60;
 const BOARD_JOB_LOCK_TTL_SECONDS = 5 * 60;
 const RENEW_LOCK_LUA = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
 const RELEASE_LOCK_LUA = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
+const SOCIAL_LISTENING_RECALL_RECONCILE_CRON = "10 4,16 * * *";
+const SOCIAL_LISTENING_RECALL_RECONCILE_TIME_ZONE = "Asia/Shanghai";
+const SOCIAL_LISTENING_RECALL_RECONCILE_HOURS = 36;
+const SOCIAL_LISTENING_RECALL_RECONCILE_MIN_INTERVAL_HOURS = 10;
 
 function formatSchedulerError(error) {
   if (!error || typeof error !== "object") return String(error);
@@ -146,6 +150,65 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     return created;
   }
 
+  async function enqueueScheduledRecallReconcileJobs(now = new Date()) {
+    if (!await isSchedulerEnabled()) {
+      return { enabled: false, created: 0, skipped: 0, reason: "scheduler_disabled" };
+    }
+
+    const boards = await EchohuntSocialListeningBoard.findAll({
+      where: { status: BOARD_STATUSES.MONITORING },
+      order: [["createdAt", "ASC"], ["id", "ASC"]],
+    });
+    const rangeStartAt = new Date(now.getTime() - SOCIAL_LISTENING_RECALL_RECONCILE_HOURS * 60 * 60 * 1000);
+    const recentJobCutoff = new Date(now.getTime() - SOCIAL_LISTENING_RECALL_RECONCILE_MIN_INTERVAL_HOURS * 60 * 60 * 1000);
+    let created = 0;
+    let skipped = 0;
+
+    for (const board of boards) {
+      // 手动或自动回补在本时段已经执行/排队时直接复用，避免重复扫描同一看板。
+      const recentJob = await EchohuntSocialListeningJob.findOne({
+        where: {
+          boardId: board.id,
+          jobType: JOB_TYPES.RECALL_BACKFILL,
+          [Op.or]: [
+            { status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] } },
+            { status: JOB_STATUSES.SUCCEEDED, createdAt: { [Op.gte]: recentJobCutoff } },
+          ],
+        },
+        order: [["createdAt", "DESC"]],
+        attributes: ["id"],
+      });
+      if (recentJob) {
+        skipped += 1;
+        continue;
+      }
+
+      await EchohuntSocialListeningJob.create({
+        boardId: board.id,
+        jobType: JOB_TYPES.RECALL_BACKFILL,
+        status: JOB_STATUSES.PENDING,
+        rangeStartAt,
+        rangeEndAt: now,
+        triggeredBy: "system",
+        metadata: {
+          stage: "scheduled_recent_36h",
+          source: "scheduled_recall_reconcile",
+          lookbackHours: SOCIAL_LISTENING_RECALL_RECONCILE_HOURS,
+        },
+      });
+      created += 1;
+    }
+
+    return {
+      enabled: true,
+      created,
+      skipped,
+      boards: boards.length,
+      rangeStartAt: rangeStartAt.toISOString(),
+      rangeEndAt: now.toISOString(),
+    };
+  }
+
   async function enqueueDueMetricRefreshJobs() {
     const now = new Date();
     const runtimeConfig = await getSocialListeningRuntimeConfig();
@@ -273,11 +336,21 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     timer = null;
   }
 
-  return { start, stop, tick, enqueueDueIncrementalJobs, enqueueDueMetricRefreshJobs, processPendingJobs };
+  return {
+    start,
+    stop,
+    tick,
+    enqueueDueIncrementalJobs,
+    enqueueDueMetricRefreshJobs,
+    enqueueScheduledRecallReconcileJobs,
+    processPendingJobs,
+  };
 }
 
 module.exports = {
   SCHEDULER_STATE_KEY,
+  SOCIAL_LISTENING_RECALL_RECONCILE_CRON,
+  SOCIAL_LISTENING_RECALL_RECONCILE_TIME_ZONE,
   createSocialListeningScheduler,
   enableSocialListeningScheduler,
 };

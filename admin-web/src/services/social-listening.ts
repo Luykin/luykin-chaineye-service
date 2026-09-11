@@ -351,6 +351,10 @@ export interface SocialListeningRecallDiagnosticJob {
   rangeEndAt?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  phase?: string | null;
+  statusMessage?: string | null;
+  heartbeatAt?: string | null;
+  staleDetectedAt?: string | null;
   counters?: Record<string, unknown> | null;
   createdAt?: string | null;
   startedAt?: string | null;
@@ -393,6 +397,8 @@ export interface SocialListeningRecallDiagnosticItem {
     authorHandle?: string | null;
     authorName?: string | null;
     postCreatedAt?: string | null;
+    sourceCreatedAt?: string | null;
+    sourceUpdatedAt?: string | null;
     text?: string | null;
     retweetId?: string | null;
   } | null;

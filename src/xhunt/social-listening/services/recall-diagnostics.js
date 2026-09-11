@@ -61,12 +61,22 @@ function serializeSourceTweet(row) {
     authorHandle,
     authorName: row.author_name || authorHandle,
     postCreatedAt: row.create_time || null,
+    sourceCreatedAt: row.created_at || null,
+    sourceUpdatedAt: row.updated_at || null,
     text: row.text || null,
     conversationId: row.conversation_id ? String(row.conversation_id) : null,
     quoteId: row.quote_id ? String(row.quote_id) : null,
     replyId: row.reply_id ? String(row.reply_id) : null,
     retweetId: row.retweet_id ? String(row.retweet_id) : null,
   };
+}
+
+function formatDelay(milliseconds) {
+  const totalMinutes = Math.max(0, Math.round(milliseconds / (60 * 1000)));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (!hours) return `${minutes} 分钟`;
+  return `${hours} 小时${minutes ? ` ${minutes} 分钟` : ""}`;
 }
 
 function getDiagnosticJobRange(job) {
@@ -98,6 +108,10 @@ function serializeDiagnosticJob(job) {
     rangeEndAt: range.endAt,
     errorCode: job.errorCode || null,
     errorMessage: job.errorMessage || null,
+    phase: progress.phase || null,
+    statusMessage: progress.statusMessage || null,
+    heartbeatAt: progress.heartbeatAt || progress.lastHeartbeatAt || null,
+    staleDetectedAt: progress.staleDetectedAt || progress.recoveredAt || null,
     counters: progress.counters && typeof progress.counters === "object" ? progress.counters : null,
     createdAt: job.createdAt || null,
     startedAt: job.startedAt || null,
@@ -139,9 +153,9 @@ function analyzeBoardConfig(sourceRow, board, referenceByTweetId) {
 }
 
 function resolveBoardDiagnosis(sourceRow, board, facts, jobs) {
-  const coveringJobs = jobs
-    .filter((job) => String(job.boardId) === String(board.id) && isDateWithinJobRange(sourceRow.create_time, job))
-    .slice(0, 3);
+  const allCoveringJobs = jobs
+    .filter((job) => String(job.boardId) === String(board.id) && isDateWithinJobRange(sourceRow.create_time, job));
+  const coveringJobs = allCoveringJobs.slice(0, 3);
   const jobRecords = coveringJobs.map(serializeDiagnosticJob);
   const base = {
     boardId: board.id,
@@ -174,12 +188,42 @@ function resolveBoardDiagnosis(sourceRow, board, facts, jobs) {
   if (activeJob) {
     return { ...base, code: "job_in_progress", severity: "processing", label: "等待任务处理", reason: `当前配置满足召回，覆盖该时间的 ${activeJob.jobType} 任务仍在${activeJob.status === "pending" ? "排队" : "运行"}。` };
   }
+  const sourceCreatedAt = new Date(sourceRow.created_at || 0).getTime();
+  const succeededCoveringJobs = allCoveringJobs.filter((job) => job.status === "succeeded");
+  const latestSucceededAt = Math.max(...succeededCoveringJobs
+    .map((job) => new Date(job.finishedAt || job.updatedAt || 0).getTime())
+    .filter(Number.isFinite));
+  if (Number.isFinite(sourceCreatedAt) && Number.isFinite(latestSucceededAt) && sourceCreatedAt > latestSucceededAt) {
+    const tweetAt = new Date(sourceRow.create_time || 0).getTime();
+    const sourceDelay = Number.isFinite(tweetAt) ? formatDelay(sourceCreatedAt - tweetAt) : null;
+    return {
+      ...base,
+      code: "source_arrived_after_scan",
+      severity: "warning",
+      label: "源库延迟入库",
+      reason: `dev.tweet 在推文发布${sourceDelay ? `约 ${sourceDelay}` : "后"}才写入，且晚于所有仍覆盖该推文时间的成功任务。数据到达时增量扫描的回看范围已经前移，因此没有被召回。`,
+    };
+  }
   const latestCompletedJob = coveringJobs.find((job) => !["pending", "running"].includes(job.status));
   if (latestCompletedJob?.status === "succeeded") {
     return { ...base, code: "unexpected_missing", severity: "error", label: "疑似漏召回", reason: "当前配置满足召回，且存在已成功覆盖该时间的任务，但本地仍无记录。配置可能在任务完成后变更；也建议结合下方任务 counters 检查入库阶段。" };
   }
   if (latestCompletedJob?.status === "failed") {
     const errorDetail = latestCompletedJob.errorMessage || latestCompletedJob.errorCode;
+    const progress = latestCompletedJob.progress && typeof latestCompletedJob.progress === "object"
+      ? latestCompletedJob.progress
+      : {};
+    const interrupted = ["STALE_RUNNING_JOB", "MANUALLY_RECOVERED_STALE_JOB"].includes(latestCompletedJob.errorCode)
+      || ["stale_recovered", "manual_recovered"].includes(progress.phase);
+    if (interrupted) {
+      return {
+        ...base,
+        code: "covering_job_interrupted",
+        severity: "error",
+        label: "覆盖任务曾中断",
+        reason: `覆盖该时间的任务发生心跳中断并被恢复${errorDetail ? `：${errorDetail}` : "。"} 这类情况可能由 PM2 重启、进程退出或长时间阻塞造成；仅凭任务记录无法区分具体原因。`,
+      };
+    }
     return { ...base, code: "covering_job_failed", severity: "error", label: "覆盖任务失败", reason: `当前配置满足召回，但最新一次覆盖该时间的任务失败${errorDetail ? `：${errorDetail}` : "。"}` };
   }
   if (latestCompletedJob?.status === "skipped") {
@@ -198,12 +242,12 @@ function resolveBoardDiagnosis(sourceRow, board, facts, jobs) {
   }
   const processedThroughAt = new Date(board.processedThrough || 0).getTime();
   if (board.processedThrough && tweetAt > processedThroughAt) {
-    return { ...base, code: "not_scanned_yet", severity: "processing", label: "尚未扫描到", reason: "当前配置满足召回，但推文时间晚于看板 processedThrough。" };
+    return { ...base, code: "not_scanned_yet", severity: "processing", label: "尚未扫描到", reason: "当前配置满足召回，但推文时间晚于看板 processedThrough；可能仍在排队，或调度进程停机 / PM2 重启后尚未追平。" };
   }
   if (board.status === "paused") {
     return { ...base, code: "board_paused", severity: "warning", label: "看板已暂停", reason: "当前配置满足召回，但看板处于暂停状态，且没有找到覆盖该时间的任务。" };
   }
-  return { ...base, code: "no_covering_job", severity: "warning", label: "无覆盖任务", reason: "当前配置满足召回，但没有找到覆盖该推文时间的任务记录，可能尚未补数或相关任务记录已清理。" };
+  return { ...base, code: "no_covering_job", severity: "warning", label: "无覆盖任务", reason: "当前配置满足召回，但没有找到覆盖该推文时间的任务记录；可能存在调度进程停机 / PM2 重启窗口，也可能尚未补数或相关任务记录已清理。" };
 }
 
 function serializeLocalPost(row, boardById) {
