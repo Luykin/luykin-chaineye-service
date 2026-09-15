@@ -561,7 +561,7 @@ export function NacosCleanerRulesPage() {
   const currentGroup = config.rules[activeTab];
 
   return (
-    <PermissionGuard permission={["cleaner-config", "nacos_config"]}>
+    <PermissionGuard permission="cleaner-config">
       {contextHolder}
       <div style={{ padding: "20px" }}>
         {/* 页眉卡片 */}

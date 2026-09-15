@@ -40,6 +40,7 @@ const PERMISSION_OPTIONS = [
   { label: "活动配置", value: "nacos_config" },
   { label: "翻译配置", value: "nacos-i18n" },
   { label: "标签配置", value: "nacos-tags" },
+  { label: "净化规则配置", value: "cleaner-config" },
   { label: "功能开关", value: "feature_flags_config" },
   { label: "Banner配置", value: "banner-config" },
   { label: "图片上传", value: "assets:upload" },

@@ -75,7 +75,7 @@ const NACOS_CONFIG_CATALOG = [
     group: DEFAULT_GROUP,
     type: "json",
     publicReadable: true,
-    permissions: ["cleaner-config", "nacos_config"],
+    permissions: ["cleaner-config"],
   },
   {
     dataId: "echohunt_social_listening_config",

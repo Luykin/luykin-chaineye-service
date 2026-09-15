@@ -310,7 +310,7 @@ module.exports = (sequelize) => {
 - **路径**：`/cleaner-config`
 - **组件**：`admin-web/src/pages/NacosCleanerRulesPage.tsx`
 - **菜单位置**：侧边栏 `sidebarGroup: "operation"`，名称为 **“净化规则配置”**。
-- **权限控制**：`["cleaner-config", "nacos_config"]`。
+- **权限控制**：`"cleaner-config"`。
 
 #### 2. 界面功能模块布局
 
@@ -399,7 +399,7 @@ if ($arg_dataId !~ ^(xhunt_config|xhunt_i18n|xhunt_campaigns|xhunt_built_in_tag|
   group: DEFAULT_GROUP,
   type: "json",
   publicReadable: true,
-  permissions: ["cleaner-config", "nacos_config"],
+  permissions: ["cleaner-config"],
 }
 ```
 
