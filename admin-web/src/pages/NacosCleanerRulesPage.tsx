@@ -42,6 +42,7 @@ import {
   SearchOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
+import dayjs from "dayjs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -151,7 +152,6 @@ export function NacosCleanerRulesPage() {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [publishReason, setPublishReason] = useState("");
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<NacosAdminConfigSnapshot | null>(null);
 
   // 批量添加弹窗状态
   const [batchModalVisible, setBatchModalVisible] = useState(false);
@@ -233,15 +233,16 @@ export function NacosCleanerRulesPage() {
       try {
         const parsed = JSON.parse(configQuery.data.content);
         if (parsed && typeof parsed === "object" && parsed.rules) {
-          setConfig({
+          const mergedConfig: CleanerRemoteConfig = {
             ...DEFAULT_CLEANER_CONFIG,
             ...parsed,
             rules: {
               ...DEFAULT_CLEANER_CONFIG.rules,
               ...parsed.rules,
             },
-          });
-          setOriginalContent(JSON.stringify(parsed, null, 2));
+          };
+          setConfig(mergedConfig);
+          setOriginalContent(JSON.stringify(mergedConfig, null, 2));
         }
       } catch (e) {
         console.warn("Failed to parse remote cleaner rules, using defaults", e);
@@ -251,9 +252,11 @@ export function NacosCleanerRulesPage() {
 
   // 计算是否有未发布修改
   const isDirty = useMemo(() => {
+    // 若线上尚未初始化配置，则允许直接发布默认初始配置
+    if (!configQuery.data?.content) return true;
     if (!originalContent) return false;
     return JSON.stringify(config, null, 2) !== originalContent;
-  }, [config, originalContent]);
+  }, [config, originalContent, configQuery.data?.content]);
 
   // 统计概览
   const stats = useMemo(() => {
@@ -315,7 +318,7 @@ export function NacosCleanerRulesPage() {
   // 批量添加确认
   const handleBatchSubmit = () => {
     const rawTokens = batchInputText
-      .split(/[\n,，\s]+/)
+      .split(/[\r\n,，]+/)
       .map((item) => item.trim())
       .filter(Boolean);
 
@@ -536,18 +539,22 @@ export function NacosCleanerRulesPage() {
   };
 
   // 恢复快照确认
-  const handleRestoreSnapshot = (snapshot: NacosAdminConfigSnapshot) => {
+  const handleRestoreSnapshot = async (snapshot: NacosAdminConfigSnapshot) => {
     try {
-      const parsed = JSON.parse(snapshot.content || "{}");
+      const resp = await fetchNacosAdminConfigSnapshot(snapshot.id);
+      if (!resp.success || !resp.data?.content) {
+        throw new Error(resp.error || "获取快照详情失败");
+      }
+      const parsed = JSON.parse(resp.data.content);
       if (parsed && parsed.rules) {
         setConfig(parsed);
-        messageApi.success(`已恢复到快照版本: ${snapshot.createdAt}`);
+        messageApi.success(`已恢复到快照版本: ${new Date(snapshot.createdAt).toLocaleString("zh-CN")}`);
         setHistoryDrawerOpen(false);
       } else {
         messageApi.error("快照内容不合法，无法恢复");
       }
     } catch (e: any) {
-      messageApi.error(`快照解析错误: ${e.message}`);
+      messageApi.error(`恢复快照失败: ${e.message}`);
     }
   };
 
@@ -702,7 +709,7 @@ export function NacosCleanerRulesPage() {
                           ...prev,
                           rules: {
                             ...prev.rules,
-                            [activeTab]: { ...currentGroup, enabled: checked },
+                            [activeTab]: { ...(prev.rules[activeTab] || currentGroup), enabled: checked },
                           },
                         }));
                       }}
@@ -717,7 +724,7 @@ export function NacosCleanerRulesPage() {
                           ...prev,
                           rules: {
                             ...prev.rules,
-                            [activeTab]: { ...currentGroup, maxWeakSpamLength: val || 80 },
+                            [activeTab]: { ...(prev.rules[activeTab] || currentGroup), maxWeakSpamLength: val || 80 },
                           },
                         }));
                       }}
@@ -1151,9 +1158,10 @@ export function NacosCleanerRulesPage() {
               messageApi.warning("请输入本次发布的变更说明");
               return;
             }
+            const nextVersion = Number(dayjs().format("YYYYMMDDHHmmss"));
             const updatedConfig: CleanerRemoteConfig = {
               ...config,
-              version: Number(Date.now().toString().slice(0, 10)),
+              version: nextVersion,
               updateTime: new Date().toISOString(),
             };
             publishMutation.mutate({

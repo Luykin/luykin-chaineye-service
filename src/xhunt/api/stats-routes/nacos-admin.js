@@ -365,7 +365,6 @@ router.get(
 router.get(
   "/nacos/admin/config",
   adminAuth,
-  requireRole("super"),
   async (req, res) => {
     try {
       const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
@@ -496,7 +495,6 @@ router.get(
 router.get(
   "/nacos/admin/config/history",
   adminAuth,
-  requireRole("super"),
   async (req, res) => {
     try {
       const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
@@ -529,7 +527,6 @@ router.get(
 router.get(
   "/nacos/admin/config/history/:id",
   adminAuth,
-  requireRole("super"),
   async (req, res) => {
     try {
       const id = Number(req.params.id || 0);
@@ -557,7 +554,6 @@ router.get(
 router.post(
   "/nacos/admin/config",
   adminAuth,
-  requireRole("super"),
   async (req, res) => {
     try {
       const dataId = validateIdentifier(normalizeDataId(req.body?.dataId), "dataId");

@@ -7,6 +7,7 @@ const { XHuntUserSettings } = require("../../models/postgres-start");
 const router = express.Router();
 const SETTINGS_CACHE_TTL_SEC = 600; // 10 分钟缓存
 const MAX_SETTINGS_PAYLOAD_BYTES = 131072; // 最大 128KB 配置体积
+const ALLOWED_CATEGORIES = ["all", "cleaner", "display", "features", "sidebars"];
 
 // 系统默认缺省配置（当用户首次使用或重置时生效）
 const DEFAULT_USER_SETTINGS = {
@@ -67,6 +68,9 @@ function deepMerge(target, source) {
   const output = Object.assign({}, target);
   if (isPlainObject(target) && isPlainObject(source)) {
     Object.keys(source).forEach((key) => {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+        return;
+      }
       if (isPlainObject(source[key])) {
         if (!(key in target)) {
           Object.assign(output, { [key]: source[key] });
@@ -86,16 +90,10 @@ function getRedisKey(userId, category = "all") {
 }
 
 async function invalidateUserSettingsCache(redisClient, userId) {
-  if (!redisClient) return;
+  if (!redisClient?.del) return;
   try {
-    const keys = [
-      getRedisKey(userId, "all"),
-      getRedisKey(userId, "cleaner"),
-      getRedisKey(userId, "display"),
-      getRedisKey(userId, "features"),
-      getRedisKey(userId, "sidebars"),
-    ];
-    await Promise.all(keys.map((k) => redisClient.del(k).catch(() => null)));
+    const keys = ALLOWED_CATEGORIES.map((cat) => getRedisKey(userId, cat));
+    await redisClient.del(keys).catch(() => null);
   } catch (err) {
     console.warn("[UserSettings] Invalidate cache warning:", err.message);
   }
@@ -114,7 +112,9 @@ router.get(
       .trim()
       .isString()
       .isLength({ max: 64 })
-      .withMessage("category 格式不合法"),
+      .toLowerCase()
+      .isIn(ALLOWED_CATEGORIES)
+      .withMessage(`category 仅支持: ${ALLOWED_CATEGORIES.join(", ")}`),
     validateRequest,
   ],
   async (req, res) => {
@@ -202,7 +202,9 @@ router.put(
       .trim()
       .isString()
       .isLength({ max: 64 })
-      .withMessage("category 格式不合法"),
+      .toLowerCase()
+      .isIn(ALLOWED_CATEGORIES)
+      .withMessage(`category 仅支持: ${ALLOWED_CATEGORIES.join(", ")}`),
     body("settings").isObject().withMessage("settings 必须为 JSON 对象"),
     body("clientUpdatedAt").optional().isISO8601().withMessage("clientUpdatedAt 必须为合法的 ISO8601 日期格式"),
     validateRequest,
@@ -246,13 +248,32 @@ router.put(
           clientUpdatedAt,
         });
       } else {
-        record = await XHuntUserSettings.create({
-          userId,
-          category: "all",
-          settings: currentSettings,
-          version: nextVersion,
-          clientUpdatedAt,
-        });
+        try {
+          record = await XHuntUserSettings.create({
+            userId,
+            category: "all",
+            settings: currentSettings,
+            version: nextVersion,
+            clientUpdatedAt,
+          });
+        } catch (createErr) {
+          // 并发首次创建时捕获唯一约束冲突，重试查询并更新
+          if (createErr.name === "SequelizeUniqueConstraintError") {
+            record = await XHuntUserSettings.findOne({ where: { userId, category: "all" } });
+            if (record) {
+              const remerged = deepMerge(record.settings || {}, currentSettings);
+              const retryVersion = Number(record.version || 0) + 1;
+              await record.update({
+                settings: remerged,
+                version: retryVersion,
+                clientUpdatedAt,
+              });
+              currentSettings = remerged;
+            }
+          } else {
+            throw createErr;
+          }
+        }
       }
 
       // 失效 Redis 缓存
@@ -288,7 +309,9 @@ router.post(
       .trim()
       .isString()
       .isLength({ max: 64 })
-      .withMessage("category 格式不合法"),
+      .toLowerCase()
+      .isIn(ALLOWED_CATEGORIES)
+      .withMessage(`category 仅支持: ${ALLOWED_CATEGORIES.join(", ")}`),
     validateRequest,
   ],
   async (req, res) => {
@@ -317,13 +340,29 @@ router.post(
           clientUpdatedAt: new Date(),
         });
       } else {
-        record = await XHuntUserSettings.create({
-          userId,
-          category: "all",
-          settings: nextSettings,
-          version: nextVersion,
-          clientUpdatedAt: new Date(),
-        });
+        try {
+          record = await XHuntUserSettings.create({
+            userId,
+            category: "all",
+            settings: nextSettings,
+            version: nextVersion,
+            clientUpdatedAt: new Date(),
+          });
+        } catch (createErr) {
+          if (createErr.name === "SequelizeUniqueConstraintError") {
+            record = await XHuntUserSettings.findOne({ where: { userId, category: "all" } });
+            if (record) {
+              const retryVersion = Number(record.version || 0) + 1;
+              await record.update({
+                settings: nextSettings,
+                version: retryVersion,
+                clientUpdatedAt: new Date(),
+              });
+            }
+          } else {
+            throw createErr;
+          }
+        }
       }
 
       const redisClient = req.redisClient || global.__xhuntRedis;
