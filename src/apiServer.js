@@ -222,6 +222,7 @@ const { webSignatureMiddleware } = require("./xhunt/web-security/middleware/web-
 const xHuntProxyRoutes = require("./xhunt/api/proxy");
 const xHuntReviewsRoutes = require("./xhunt/api/reviews");
 const xHuntNotesRoutes = require("./xhunt/api/notes");
+const xHuntUserSettingsRoutes = require("./xhunt/api/user-settings");
 const xHuntReportRoutes = require("./xhunt/api/report");
 const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
@@ -583,6 +584,14 @@ async function initializeAndStartServer() {
     browserOnlyMiddleware,
     securityMiddleware,
     xHuntNotesRoutes
+  );
+
+  app.use(
+    "/api/xhunt/user/settings",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntUserSettingsRoutes
   );
 
   app.use(

@@ -40,6 +40,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/nacos-campaigns", icon: <LegacySidebarIcon name="target" />, label: "活动配置", permission: "nacos_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-tags", icon: <LegacySidebarIcon name="tag" />, label: "标签配置", permission: "nacos-tags", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-i18n", icon: <LegacySidebarIcon name="file-text" />, label: "翻译配置", permission: "nacos-i18n", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
+  { key: "/cleaner-config", icon: <LegacySidebarIcon name="shield" />, label: "净化规则配置", permission: ["cleaner-config", "nacos_config"], group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-admin", icon: <LegacySidebarIcon name="database" />, label: "Nacos配置中心", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/feature-flags", icon: <LegacySidebarIcon name="toggle" />, label: "功能开关", permission: "feature_flags_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/banner-config", icon: <LegacySidebarIcon name="square" />, label: "Banner配置", permission: "banner-config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },

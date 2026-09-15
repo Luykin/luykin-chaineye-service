@@ -70,6 +70,14 @@ const NACOS_CONFIG_CATALOG = [
     permissions: ["nacos-messages"],
   },
   {
+    dataId: "xhunt_cleaner_rules",
+    label: "信息流净化规则 (X-Cleaner)",
+    group: DEFAULT_GROUP,
+    type: "json",
+    publicReadable: true,
+    permissions: ["cleaner-config", "nacos_config"],
+  },
+  {
     dataId: "echohunt_social_listening_config",
     label: "EchoHunt Social Listening 运行/AI Prompt 配置",
     group: DEFAULT_GROUP,

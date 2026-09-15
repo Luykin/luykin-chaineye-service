@@ -23,6 +23,7 @@ const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
 const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWebAuthnCredential");
 const XhuntNacosConfigSnapshotModel = require("../xhunt/models/XhuntNacosConfigSnapshot");
 const XhuntVipTestUserModel = require("../xhunt/models/XhuntVipTestUser");
+const XHuntUserSettingsModel = require("../xhunt/models/XHuntUserSettings");
 const XhuntUserTagModel = require("../xhunt/models/XhuntUserTag");
 const CollectorClientTokenModel = require("../xhunt/models/CollectorClientToken");
 const XHuntWebUserModel = require("../xhunt/models/XHuntWebUser");
@@ -112,6 +113,7 @@ const XhuntAdminAuditLog = XhuntAdminAuditLogModel(pgInstance);
 const XhuntAdminWebAuthnCredential = XhuntAdminWebAuthnCredentialModel(pgInstance);
 const XhuntNacosConfigSnapshot = XhuntNacosConfigSnapshotModel(pgInstance);
 const XhuntVipTestUser = XhuntVipTestUserModel(pgInstance);
+const XHuntUserSettings = XHuntUserSettingsModel(pgInstance);
 const XhuntUserTag = XhuntUserTagModel(pgInstance);
 const CollectorClientToken = CollectorClientTokenModel(pgInstance);
 const XHuntWebUser = XHuntWebUserModel(pgInstance);
@@ -263,6 +265,17 @@ XPrivateMessage.belongsTo(XHuntUser, {
 XPrivateMessage.belongsTo(XHuntUser, {
   foreignKey: "receiverId",
   as: "receiver",
+});
+
+// XHuntUserSettings 关系（用户配置中心）
+XHuntUser.hasMany(XHuntUserSettings, {
+  foreignKey: "userId",
+  as: "settings",
+});
+
+XHuntUserSettings.belongsTo(XHuntUser, {
+  foreignKey: "userId",
+  as: "user",
 });
 
 // XHuntUserProSubscription 关系（Pro 订阅记录）
@@ -510,6 +523,7 @@ module.exports = {
   XhuntAdminWebAuthnCredential,
   XhuntNacosConfigSnapshot,
   XhuntVipTestUser,
+  XHuntUserSettings,
   XhuntUserTag,
   CollectorClientToken,
 

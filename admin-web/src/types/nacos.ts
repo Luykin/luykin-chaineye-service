@@ -381,3 +381,27 @@ export interface NacosAdminConfigHistoryDetailResponse {
   data: NacosAdminConfigSnapshot;
   error?: string;
 }
+
+export interface CleanerRuleGroup {
+  name: string;
+  enabled: boolean;
+  strongKeywords?: string[];
+  exactKeywords: string[];
+  fuzzyKeywords: string[];
+  regexPatterns: string[];
+  intentKeywords?: string[];
+  maxWeakSpamLength?: number;
+}
+
+export interface CleanerRemoteConfig {
+  version: number;
+  enabled: boolean;
+  updateTime?: string;
+  description?: string;
+  rules: {
+    adult_traffic?: CleanerRuleGroup;
+    gray_promotion?: CleanerRuleGroup;
+    [key: string]: CleanerRuleGroup | undefined;
+  };
+  globalExemptHandles: string[];
+}
