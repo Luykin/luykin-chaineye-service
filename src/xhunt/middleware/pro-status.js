@@ -11,8 +11,8 @@ const PRO_STATUS_MIDDLEWARE_FLAG = Symbol.for(
   "xhunt.proStatusMiddlewareExecuted"
 );
 
-// 最小版本号：只有 >= 0.4.05 的版本才启用 Pro 检查
-const MIN_VERSION_FOR_PRO = "0.4.05";
+// 最小版本号：只有 >= 9.9.99 的版本才启用 Pro 检查
+const MIN_VERSION_FOR_PRO = "99.99.99";
 
 /**
  * 获取版本号（智能选择来源）
