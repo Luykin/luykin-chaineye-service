@@ -501,6 +501,7 @@ function campaignFromWebsiteRecord(record: AnyObj): AnyObj {
       ? clone(record.nacosPayload)
       : {};
   return normalizeCampaign({
+    ...payload,
     id: payload.id || record.nacosCampaignId || "",
     campaignKey: payload.campaignKey || record.campaignKey || "",
     sortWeight: payload.sortWeight ?? record.sortWeight ?? 0,
@@ -518,15 +519,14 @@ function campaignFromWebsiteRecord(record: AnyObj): AnyObj {
       zh: record.projectIntroductionZh || "",
       en: record.projectIntroductionEn || "",
     },
-    links: payload.links || {
-      guideUrl: record.guideUrl || "",
-      activeUrl: record.activeUrl || "",
-      showLeaderboardLink: false,
+    links: {
+      guideUrl: payload.links?.guideUrl || record.guideUrl || "",
+      activeUrl: payload.links?.activeUrl || record.activeUrl || "",
+      showLeaderboardLink: !!payload.links?.showLeaderboardLink,
     },
     logos: payload.logos || record.logos || [],
     tags: payload.tags || record.tags || [],
     writingThemes: payload.writingThemes || record.writingThemes || [],
-    ...payload,
   });
 }
 

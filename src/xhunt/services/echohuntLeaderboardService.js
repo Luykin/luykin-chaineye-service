@@ -1,3 +1,10 @@
+function cleanUrlOrNull(val) {
+  if (val === undefined || val === null) return null;
+  const s = String(val).trim();
+  if (!s || s === "https://" || s === "http://") return null;
+  return s;
+}
+
 const fs = require("fs/promises");
 const path = require("path");
 const axios = require("axios");
@@ -275,6 +282,15 @@ function emptyLeaderboardBundle(campaign = {}) {
   const project = String(campaign.project || campaign.projectName || title || key);
   const prize = String(campaign.prize || campaign.rewardText || campaign.reward?.text || "Reward TBD");
   const custom = buildCustomLeaderboardTracks(campaign);
+  const links = campaign.links || campaign.nacosPayload?.links || null;
+  const guideCandidate =
+    cleanUrlOrNull(campaign.guideUrl) ||
+    cleanUrlOrNull(links?.guideUrl) ||
+    cleanUrlOrNull(campaign.nacosPayload?.guideUrl) ||
+    cleanUrlOrNull(campaign.activeUrl) ||
+    cleanUrlOrNull(links?.activeUrl) ||
+    cleanUrlOrNull(campaign.nacosPayload?.activeUrl) ||
+    null;
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -290,7 +306,7 @@ function emptyLeaderboardBundle(campaign = {}) {
       endAt: campaign.endAt || null,
       logo: campaign.logo || campaign.rightLogo || null,
       logoAlt: campaign.logoAlt || campaign.rightLogoAlt || null,
-      guideUrl: campaign.guideUrl || null,
+      guideUrl: guideCandidate,
       sourcePage: null,
     },
     summary: {

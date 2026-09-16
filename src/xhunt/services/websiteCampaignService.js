@@ -1,3 +1,10 @@
+function cleanUrlOrNull(val) {
+  if (val === undefined || val === null) return null;
+  const s = String(val).trim();
+  if (!s || s === "https://" || s === "http://") return null;
+  return s;
+}
+
 const { Op } = require("sequelize");
 const { XHuntWebsiteCampaign, pgInstance } = require("../../models/postgres-start");
 const LEGACY_WEBSITE_CAMPAIGNS = require("../constants/legacyWebsiteCampaigns");
@@ -125,8 +132,16 @@ function normalizeNacosCampaign(campaign) {
       ? Number(campaign.rewardParticipantCount)
       : null,
     rewardUnit: trimOrNull(campaign.rewardUnit),
-    guideUrl: trimOrNull(links.guideUrl),
-    activeUrl: trimOrNull(links.activeUrl),
+    guideUrl:
+      cleanUrlOrNull(links.guideUrl) ||
+      cleanUrlOrNull(campaign.guideUrl) ||
+      cleanUrlOrNull(links.activeUrl) ||
+      cleanUrlOrNull(campaign.activeUrl) ||
+      null,
+    activeUrl:
+      cleanUrlOrNull(links.activeUrl) ||
+      cleanUrlOrNull(campaign.activeUrl) ||
+      null,
     logos: toSafeArray(campaign.logos),
     tags: toSafeArray(campaign.tags),
     writingThemes: toSafeArray(campaign.writingThemes),
@@ -567,6 +582,21 @@ function buildCampaignListItem(record, lang = "zh-CN") {
     showCompletedBadge,
   } = pickLogos(record);
   const status = normalizeWebsiteStatus(record.webStatus);
+  const links = record.nacosPayload?.links || null;
+  const guideUrl =
+    cleanUrlOrNull(record.guideUrl) ||
+    cleanUrlOrNull(links?.guideUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.guideUrl) ||
+    cleanUrlOrNull(record.activeUrl) ||
+    cleanUrlOrNull(links?.activeUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.activeUrl) ||
+    null;
+  const activeUrl =
+    cleanUrlOrNull(record.activeUrl) ||
+    cleanUrlOrNull(links?.activeUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.activeUrl) ||
+    null;
+
   return {
     id: record.id,
     nacosCampaignId: record.nacosCampaignId,
@@ -592,12 +622,34 @@ function buildCampaignListItem(record, lang = "zh-CN") {
     showCompletedBadge,
     sortOrder: deriveSortOrder(record),
     displayMetrics: Array.isArray(record.nacosPayload?.displayMetrics) ? record.nacosPayload.displayMetrics : null,
+    guideUrl,
+    activeUrl,
+    links: {
+      guideUrl: guideUrl || "",
+      activeUrl: activeUrl || "",
+      showLeaderboardLink: !!links?.showLeaderboardLink,
+    },
     startAt: record.startAt,
     endAt: record.endAt,
   };
 }
 
 function buildCampaignDetail(record, lang = "zh-CN") {
+  const links = record.nacosPayload?.links || null;
+  const guideUrl =
+    cleanUrlOrNull(record.guideUrl) ||
+    cleanUrlOrNull(links?.guideUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.guideUrl) ||
+    cleanUrlOrNull(record.activeUrl) ||
+    cleanUrlOrNull(links?.activeUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.activeUrl) ||
+    null;
+  const activeUrl =
+    cleanUrlOrNull(record.activeUrl) ||
+    cleanUrlOrNull(links?.activeUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.activeUrl) ||
+    null;
+
   return {
     id: record.id,
     nacosCampaignId: record.nacosCampaignId,
@@ -614,8 +666,13 @@ function buildCampaignDetail(record, lang = "zh-CN") {
       "",
     webStatus: normalizeWebsiteStatus(record.webStatus),
     buttonText: getButtonTextByStatus(record.webStatus, lang),
-    guideUrl: record.guideUrl,
-    activeUrl: record.activeUrl,
+    guideUrl,
+    activeUrl,
+    links: {
+      guideUrl: guideUrl || "",
+      activeUrl: activeUrl || "",
+      showLeaderboardLink: !!links?.showLeaderboardLink,
+    },
     startAt: record.startAt,
     endAt: record.endAt,
     logos: toSafeArray(record.logos),
@@ -656,10 +713,22 @@ function buildPluginCampaign(record, options = {}) {
       en: record.displayNameEn || "",
     }),
     copy: toSafeObject(payload.copy, {}),
-    links: toSafeObject(payload.links, {
-      guideUrl: record.guideUrl || "",
-      activeUrl: record.activeUrl || "",
-    }),
+    links: {
+      guideUrl:
+        cleanUrlOrNull(payload.links?.guideUrl) ||
+        cleanUrlOrNull(record.guideUrl) ||
+        cleanUrlOrNull(payload.guideUrl) ||
+        cleanUrlOrNull(payload.links?.activeUrl) ||
+        cleanUrlOrNull(record.activeUrl) ||
+        cleanUrlOrNull(payload.activeUrl) ||
+        "",
+      activeUrl:
+        cleanUrlOrNull(payload.links?.activeUrl) ||
+        cleanUrlOrNull(record.activeUrl) ||
+        cleanUrlOrNull(payload.activeUrl) ||
+        "",
+      showLeaderboardLink: !!payload.links?.showLeaderboardLink,
+    },
     projectIntroduction: toSafeObject(payload.projectIntroduction, {
       zh: record.projectIntroductionZh || "",
       en: record.projectIntroductionEn || "",

@@ -1,3 +1,10 @@
+function cleanUrlOrNull(val) {
+  if (val === undefined || val === null) return null;
+  const s = String(val).trim();
+  if (!s || s === "https://" || s === "http://") return null;
+  return s;
+}
+
 const express = require("express");
 const axios = require("axios");
 const { Op } = require("sequelize");
@@ -495,6 +502,27 @@ function buildRewardSummary(pluginCampaign, lang = "zh-CN") {
 function buildEchohuntCampaignListItem(record, lang, viewer) {
   const base = buildCampaignListItem(record, lang);
   const plugin = buildPluginCampaign(record, { channel: "echohunt" });
+  const links = plugin.links || record.nacosPayload?.links || base.links || null;
+  const guideUrl =
+    cleanUrlOrNull(base.guideUrl) ||
+    cleanUrlOrNull(record.guideUrl) ||
+    cleanUrlOrNull(links?.guideUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.guideUrl) ||
+    cleanUrlOrNull(plugin.guideUrl) ||
+    cleanUrlOrNull(base.activeUrl) ||
+    cleanUrlOrNull(record.activeUrl) ||
+    cleanUrlOrNull(links?.activeUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.activeUrl) ||
+    cleanUrlOrNull(plugin.activeUrl) ||
+    null;
+  const activeUrl =
+    cleanUrlOrNull(base.activeUrl) ||
+    cleanUrlOrNull(record.activeUrl) ||
+    cleanUrlOrNull(links?.activeUrl) ||
+    cleanUrlOrNull(record.nacosPayload?.activeUrl) ||
+    cleanUrlOrNull(plugin.activeUrl) ||
+    null;
+
   return {
     ...base,
     testingPhase: !!plugin.testingPhase,
@@ -518,8 +546,13 @@ function buildEchohuntCampaignListItem(record, lang, viewer) {
     rewardSummary: buildRewardSummary(plugin, lang),
     displayMetrics: Array.isArray(plugin.displayMetrics) ? plugin.displayMetrics : null,
     leaderboardTracks: buildCustomLeaderboardTrackSummaries(plugin, lang),
-    guideUrl: record.guideUrl || null,
-    activeUrl: record.activeUrl || null,
+    guideUrl,
+    activeUrl,
+    links: {
+      guideUrl: guideUrl || "",
+      activeUrl: activeUrl || "",
+      showLeaderboardLink: !!links?.showLeaderboardLink,
+    },
     tasksSummary: (Array.isArray(plugin.tasks) ? plugin.tasks : []).map((task) => ({
       id: task.id,
       type: task.type,
