@@ -219,6 +219,7 @@ type WebsiteForm = {
   claimPowContractAddress: string;
   claimEssayContractAddress: string;
   templateConfig: string;
+  displayMetrics?: string[];
 };
 
 function clone<T>(value: T): T {
@@ -612,6 +613,8 @@ function hasWebsiteCampaignContent(record?: AnyObj | null) {
       listAssets.chestImage,
       listAssets.echohuntHeroImage,
       websiteExtra.cardTheme,
+      record.displayMetrics,
+      record.nacosPayload?.displayMetrics,
     ].some(hasOwnMeaningfulValue) ||
     (record.pageTemplate && record.pageTemplate !== "standard") ||
     hasOwnMeaningfulValue(templateConfig)
@@ -624,6 +627,10 @@ function makeWebsiteForm(
 ): WebsiteForm {
   const assets = getWebsiteListAssets(record || null);
   const cardTheme = getWebsiteCardTheme(record || null);
+  const rawMetrics = campaign?.displayMetrics ?? record?.displayMetrics ?? record?.nacosPayload?.displayMetrics;
+  const displayMetrics = Array.isArray(rawMetrics)
+    ? rawMetrics.filter((it: unknown) => typeof it === "string" && DEFAULT_DISPLAY_METRICS.includes(it))
+    : undefined;
   return {
     slug: record?.slug || campaign?.campaignKey || "",
     webStatus: record?.webStatus || "draft",
@@ -645,6 +652,7 @@ function makeWebsiteForm(
     claimPowContractAddress: record?.claimPowContractAddress || "",
     claimEssayContractAddress: record?.claimEssayContractAddress || "",
     templateConfig: JSON.stringify(record?.templateConfig || {}, null, 2),
+    displayMetrics: displayMetrics && displayMetrics.length ? displayMetrics : undefined,
   };
 }
 
@@ -1574,6 +1582,7 @@ export function NacosCampaignsPage() {
         claimEssayContractAddress: websiteForm.claimEssayContractAddress,
         pageTemplate: websiteForm.pageTemplate.trim() || "standard",
         templateConfig,
+        displayMetrics: websiteForm.displayMetrics,
         websiteExtra: {
           listAssets: {
             leftLogo: websiteForm.listLeftLogo.trim(),
@@ -1603,6 +1612,24 @@ export function NacosCampaignsPage() {
           return next;
         });
         setWebsiteForm(makeWebsiteForm(record.data as AnyObj, websiteTarget));
+      }
+      if (c && record.data) {
+        const payload = (record.data as AnyObj).nacosPayload || {};
+        const nextMetrics = Array.isArray(payload.displayMetrics) ? payload.displayMetrics : undefined;
+        c.displayMetrics = nextMetrics;
+        if (originalConfig?.campaigns) {
+          const orig = originalConfig.campaigns.find(
+            (item: AnyObj) =>
+              String(item.id || item.nacosCampaignId) === String(c.id || c.nacosCampaignId) ||
+              String(item.campaignKey) === String(c.campaignKey),
+          );
+          if (orig) {
+            orig.displayMetrics = clone(nextMetrics);
+          }
+        }
+        if (JSON.stringify(config) === JSON.stringify(originalConfig)) {
+          setDirty(false);
+        }
       }
       setWebsiteDirty(false);
       showToast("网站配置保存成功", "success");
@@ -2106,6 +2133,11 @@ export function NacosCampaignsPage() {
               powEnabled={powEnabled}
               essayEnabled={essayEnabled}
               onSave={() => void saveWebsiteConfig()}
+              onDisplayMetricsChange={(values) => {
+                if (c) {
+                  setCampaignPath("displayMetrics", values);
+                }
+              }}
             />
             {c ? <CampaignAdvancedSection c={c} /> : null}
             {c ? (
@@ -2638,19 +2670,6 @@ function CampaignEditor(props: {
           <Col xs={24} md={8}><Field label="开始时间"><Input type="datetime-local" value={toDatetimeLocal(c.enrollmentWindow?.startAt)} onChange={(e) => setCampaignPath("enrollmentWindow.startAt", fromDatetimeLocalToIsoZ(e.target.value))} /></Field></Col>
           <Col xs={24} md={8}><Field label="结束时间"><Input type="datetime-local" value={toDatetimeLocal(c.enrollmentWindow?.endAt)} onChange={(e) => setCampaignPath("enrollmentWindow.endAt", fromDatetimeLocalToIsoZ(e.target.value))} /></Field></Col>
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
-          <Col xs={24}>
-            <Field label={<InfoLabel info="控制 EchoHunt 详情页概览展示哪些数据指标卡片；未选或留空时默认全部展示（总 Hunters、总推文、总浏览、总互动）。">概览数据展示项</InfoLabel>}>
-              <Select
-                mode="multiple"
-                allowClear
-                maxTagCount="responsive"
-                placeholder="默认全部展示（总 Hunters、总推文、总浏览、总互动）"
-                value={Array.isArray(c.displayMetrics) ? c.displayMetrics : []}
-                onChange={(values) => setCampaignPath("displayMetrics", Array.isArray(values) && values.length ? values.filter((v: string) => DEFAULT_DISPLAY_METRICS.includes(v)) : undefined)}
-                options={DISPLAY_METRIC_OPTIONS}
-              />
-            </Field>
-          </Col>
         </Row>
         <div style={{ marginTop: 12 }}>
           {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} mockEnabled={!!c.mockCustomLeaderboardDataEnabled} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
@@ -3437,6 +3456,7 @@ function WebsiteSection({
   powEnabled,
   essayEnabled,
   onSave,
+  onDisplayMetricsChange,
 }: any) {
   let jsonValid = true;
   try {
@@ -3498,6 +3518,26 @@ function WebsiteSection({
           <Col xs={24} md={8}>
             <Field label="页面模板">
               <Input disabled={!enabled} value={form.pageTemplate} onChange={(e) => update({ pageTemplate: e.target.value })} placeholder="standard" />
+            </Field>
+          </Col>
+          <Col xs={24}>
+            <Field label={<InfoLabel info="控制 EchoHunt 详情页概览展示哪些数据指标卡片；未选或留空时默认全部展示（总 Hunters、总推文、总浏览、总互动）。">概览数据展示项</InfoLabel>}>
+              <Select
+                disabled={!enabled}
+                mode="multiple"
+                allowClear
+                maxTagCount="responsive"
+                placeholder="默认全部展示（总 Hunters、总推文、总浏览、总互动）"
+                value={Array.isArray(form.displayMetrics) ? form.displayMetrics : []}
+                onChange={(values) => {
+                  const nextMetrics = Array.isArray(values) && values.length
+                    ? values.filter((v: string) => DEFAULT_DISPLAY_METRICS.includes(v))
+                    : undefined;
+                  update({ displayMetrics: nextMetrics });
+                  onDisplayMetricsChange?.(nextMetrics);
+                }}
+                options={DISPLAY_METRIC_OPTIONS}
+              />
             </Field>
           </Col>
         </Row>

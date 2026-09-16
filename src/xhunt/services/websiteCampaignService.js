@@ -551,6 +551,7 @@ function serializeWebsiteCampaignAdmin(record) {
     ...data,
     websiteExtra,
     echohuntHeroImage: trimOrNull(listAssets.echohuntHeroImage) || null,
+    displayMetrics: Array.isArray(data.nacosPayload?.displayMetrics) ? data.nacosPayload.displayMetrics : null,
   };
 }
 
@@ -953,6 +954,19 @@ async function saveWebsiteCampaignConfig(identifier, payload) {
       templateConfig: toSafeObject(payload.templateConfig, {}),
       websiteExtra: normalizeWebsiteExtra(payload.websiteExtra, record.websiteExtra),
     };
+
+    if (Object.prototype.hasOwnProperty.call(payload, "displayMetrics")) {
+      const nacosPayload = toSafeObject(record.nacosPayload, {});
+      if (Array.isArray(payload.displayMetrics)) {
+        const filtered = payload.displayMetrics.filter(
+          (it) => typeof it === "string" && ["hunters", "tweets", "views", "engagement"].includes(it)
+        );
+        nacosPayload.displayMetrics = filtered.length ? filtered : null;
+      } else {
+        nacosPayload.displayMetrics = null;
+      }
+      nextValues.nacosPayload = nacosPayload;
+    }
 
     validateContractAddress(nextValues.claimPoiContractAddress, "POI 合约地址");
     validateContractAddress(nextValues.claimPowContractAddress, "POW 合约地址");
