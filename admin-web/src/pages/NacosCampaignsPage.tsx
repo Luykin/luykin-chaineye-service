@@ -2133,7 +2133,7 @@ export function NacosCampaignsPage() {
               powEnabled={powEnabled}
               essayEnabled={essayEnabled}
               onSave={() => void saveWebsiteConfig()}
-              onDisplayMetricsChange={(values) => {
+              onDisplayMetricsChange={(values?: string[]) => {
                 if (c) {
                   setCampaignPath("displayMetrics", values);
                 }
@@ -3457,7 +3457,17 @@ function WebsiteSection({
   essayEnabled,
   onSave,
   onDisplayMetricsChange,
-}: any) {
+}: {
+  form: WebsiteForm;
+  update: (patch: Partial<WebsiteForm>) => void;
+  enabled: boolean;
+  meta: string;
+  claimVisible: boolean;
+  powEnabled: boolean;
+  essayEnabled: boolean;
+  onSave: () => void;
+  onDisplayMetricsChange?: (values?: string[]) => void;
+}) {
   let jsonValid = true;
   try {
     JSON.parse(form.templateConfig || "{}");
