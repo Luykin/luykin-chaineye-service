@@ -38,6 +38,7 @@ const PERMISSION_OPTIONS = [
   { label: "采集脚本", value: "tampermonkey" },
   { label: "公告配置", value: "nacos-messages" },
   { label: "活动配置", value: "nacos_config" },
+  { label: "活动报名删除", value: "campaign-registrations:delete" },
   { label: "翻译配置", value: "nacos-i18n" },
   { label: "标签配置", value: "nacos-tags" },
   { label: "净化规则配置", value: "cleaner-config" },

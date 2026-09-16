@@ -73,7 +73,8 @@ export function CampaignRegistrationsModal({
   onClose: () => void;
   onToast?: (message: string, type?: "success" | "error" | "info") => void;
 }) {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const canDelete = hasPermission("campaign-registrations:delete");
   const [loading, setLoading] = useState(false);
   const [usernameSearch, setUsernameSearch] = useState("");
   const [rows, setRows] = useState<CampaignRegistrationItem[]>([]);
@@ -345,7 +346,7 @@ export function CampaignRegistrationsModal({
               width: 100,
               fixed: "right",
               render: (_value, record) =>
-                user?.role === "super" ? (
+                canDelete ? (
                   <Popconfirm
                     title="删除报名记录"
                     description={`确认删除 @${record.username || record.twitterId || "该用户"} 的报名记录？`}
@@ -359,7 +360,7 @@ export function CampaignRegistrationsModal({
                     </Button>
                   </Popconfirm>
                 ) : (
-                  <Tag>仅 super 可删</Tag>
+                  <Tag>无删除权限</Tag>
                 ),
             },
           ]}

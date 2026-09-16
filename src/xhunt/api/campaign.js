@@ -40,6 +40,7 @@ const {
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
+const { writeAdminAudit } = require("../../admin/services/admin-audit");
 
 const router = express.Router();
 
@@ -742,30 +743,55 @@ router.post(
   }
 );
 
-// 管理后台：超级管理员删除活动报名记录
+// 管理后台：删除活动报名记录（超级管理员或具备活动报名删除权限）
 router.delete(
   "/internal/registrations/:id",
   adminAuth,
-  requireRole("super"),
+  requirePermission("campaign-registrations:delete"),
   async (req, res) => {
+    const id = String(req.params.id || "").trim();
+    const normalizedCampaign = normalizeCampaign(req.query.campaign);
     try {
-      const id = String(req.params.id || "").trim();
       if (!id) return res.status(400).json({ success: false, error: "id 为必填字段" });
 
       const where = { id };
-      const normalizedCampaign = normalizeCampaign(req.query.campaign);
       if (normalizedCampaign) where.campaign = normalizedCampaign;
 
       const record = await CampaignRegistration.findOne({ where });
       if (!record) {
+        await writeAdminAudit(req, {
+          action: "campaign-registration-delete",
+          success: false,
+          message: `删除活动报名记录失败（未找到记录）: registrationId=${id}${normalizedCampaign ? `, campaign=${normalizedCampaign}` : ""}`,
+        });
         return res.status(404).json({ success: false, error: "报名记录不存在或已删除" });
       }
 
       const safeRecord = serializeCampaignRegistration(record);
       await record.destroy();
+
+      await writeAdminAudit(req, {
+        action: "campaign-registration-delete",
+        success: true,
+        message: `删除活动报名记录成功: campaign=${record.campaign}, twitterId=${record.twitterId || "-"}, username=@${record.username || "-"}`,
+        payload: {
+          id: safeRecord.id,
+          campaign: safeRecord.campaign,
+          twitterId: safeRecord.twitterId,
+          username: safeRecord.username,
+          evmAddress: safeRecord.evmAddress,
+          email: safeRecord.email,
+        },
+      });
+
       return res.json({ success: true, data: safeRecord });
     } catch (err) {
       console.error("Admin campaign registration delete error:", err);
+      await writeAdminAudit(req, {
+        action: "campaign-registration-delete",
+        success: false,
+        message: `删除活动报名记录异常: ${err.message || err}`,
+      });
       return res.status(500).json({ success: false, error: "服务器内部错误（delete campaign registration）" });
     }
   }
