@@ -159,7 +159,13 @@ function sanitizeUrlForLog(url = "") {
   }
 }
 
-function setFrontendStaticCacheHeaders(res, filePath) {
+function setFrontendStaticCacheHeaders(res, filePath, stat) {
+  // 关键防御：如果文件为空（例如在构建写入中被并发请求击中），绝对不可设置长期强缓存
+  if (stat && stat.size === 0) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    return;
+  }
+
   const normalizedPath = filePath.split(path.sep).join("/");
   const isHtml = /\.html?$/i.test(normalizedPath);
   const isViteHashedAsset = /\/admin-web\/assets\//.test(normalizedPath);
@@ -417,7 +423,7 @@ async function initializeAndStartServer() {
       contentSecurityPolicy: {
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-          "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"],
+          "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", "https://static.cloudflareinsights.com"],
           "style-src": ["'self'", "'unsafe-inline'"],
           "img-src": [
             "'self'",
@@ -442,6 +448,7 @@ async function initializeAndStartServer() {
             "https://vercel.com",
             "https://*.vercel-storage.com",
             "https://*.blob.vercel-storage.com",
+            "https://cloudflareinsights.com",
           ],
         },
       },

@@ -773,7 +773,7 @@ router.delete(
       await writeAdminAudit(req, {
         action: "campaign-registration-delete",
         success: true,
-        message: `删除活动报名记录成功: campaign=${record.campaign}, twitterId=${record.twitterId || "-"}, username=@${record.username || "-"}`,
+        message: `删除活动报名记录成功: campaign=${safeRecord.campaign}, twitterId=${safeRecord.twitterId || "-"}, username=@${safeRecord.username || "-"}`,
         payload: {
           id: safeRecord.id,
           campaign: safeRecord.campaign,

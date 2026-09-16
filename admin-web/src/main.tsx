@@ -105,8 +105,69 @@ const queryClient = new QueryClient({
   },
 });
 
+class AdminErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[AdminErrorBoundary] Uncaught render error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "grid",
+            placeItems: "center",
+            padding: 24,
+            background: "#070b14",
+            color: "#e5edf8",
+            fontFamily: "system-ui, -apple-system, sans-serif",
+          }}
+        >
+          <div style={{ maxWidth: 520, textAlign: "center" }}>
+            <h2 style={{ fontSize: 20, marginBottom: 12 }}>管理后台加载异常</h2>
+            <p style={{ color: "#94a3b8", marginBottom: 20, wordBreak: "break-word" }}>
+              {this.state.error?.message || "发生了未预期的渲染错误"}
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={{
+                padding: "8px 24px",
+                backgroundColor: "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: 14,
+              }}
+            >
+              刷新页面
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AdminThemeProviders />
+    <AdminErrorBoundary>
+      <AdminThemeProviders />
+    </AdminErrorBoundary>
   </React.StrictMode>
 );
