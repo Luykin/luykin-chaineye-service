@@ -591,6 +591,7 @@ function buildCampaignListItem(record, lang = "zh-CN") {
     echohuntHeroImage,
     showCompletedBadge,
     sortOrder: deriveSortOrder(record),
+    displayMetrics: Array.isArray(record.nacosPayload?.displayMetrics) ? record.nacosPayload.displayMetrics : null,
     startAt: record.startAt,
     endAt: record.endAt,
   };
@@ -632,6 +633,7 @@ function buildCampaignDetail(record, lang = "zh-CN") {
     templateConfig: toSafeObject(record.templateConfig, {}),
     cardTheme: getCardTheme(record),
     websiteExtra: mergeListAssets(record),
+    displayMetrics: Array.isArray(record.nacosPayload?.displayMetrics) ? record.nacosPayload.displayMetrics : null,
     nacosPayload: toSafeObject(record.nacosPayload, {}),
   };
 }
@@ -678,6 +680,7 @@ function buildPluginCampaign(record, options = {}) {
     showExtraComponents: payload.showExtraComponents !== false,
     showSponsoredPolicy: payload.showSponsoredPolicy !== false,
     riskConfirmHtml: payload.riskConfirmHtml || null,
+    displayMetrics: Array.isArray(payload.displayMetrics) ? payload.displayMetrics : null,
     leaderboardMode: payload.leaderboardMode === "custom" ? "custom" : "traditional",
     mockCustomLeaderboardDataEnabled: payload.mockCustomLeaderboardDataEnabled === true,
   };

@@ -74,6 +74,7 @@ function buildCustomLeaderboardTracks(campaign) {
     const id = String(item?.id || item?.distributionType || `custom-${index}`).trim() || `custom-${index}`;
     const title = pickLocalizedText(item?.name, id, lang);
     const shortTitle = pickLocalizedText(item?.short_name, title, lang);
+    const emptyText = pickLocalizedText(item?.empty_text || item?.emptyText, "", lang);
     return {
       id,
       type: "leaderboard",
@@ -82,6 +83,8 @@ function buildCustomLeaderboardTracks(campaign) {
       sourceKey: id,
       ranges: ["all"],
       reward: formatCustomReward(item),
+      emptyText: emptyText || undefined,
+      empty_text: emptyText || undefined,
       counts: { all: 0 },
       customConfig: {
         distributionType: item?.distributionType || null,
@@ -216,6 +219,7 @@ function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
     const id = getCustomTrackId(item, index);
     const title = pickLocalizedText(item?.name, id, lang);
     const shortTitle = pickLocalizedText(item?.short_name, title, lang);
+    const emptyText = pickLocalizedText(item?.empty_text || item?.emptyText, "", lang);
     const rows = getRowsForCustomConfig(rawMap, item, index).map((row, rowIndex) => normalizeCustomLeaderboardRow(row, rowIndex, id));
     leaderboards[id] = rows;
     return {
@@ -226,6 +230,8 @@ function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
       sourceKey: id,
       ranges: ["all"],
       reward: formatCustomReward(item),
+      emptyText: emptyText || undefined,
+      empty_text: emptyText || undefined,
       counts: { all: rows.length },
       customConfig: {
         distributionType: item?.distributionType || null,

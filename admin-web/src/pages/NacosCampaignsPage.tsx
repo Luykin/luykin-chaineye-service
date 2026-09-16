@@ -165,6 +165,14 @@ function normalizeCustomLeaderboardDisplayChannels(value: unknown) {
 }
 
 type AnyObj = Record<string, any>;
+export const DISPLAY_METRIC_OPTIONS = [
+  { value: "hunters", label: "总 Hunters" },
+  { value: "tweets", label: "总推文" },
+  { value: "views", label: "总浏览" },
+  { value: "engagement", label: "总互动" },
+];
+export const DEFAULT_DISPLAY_METRICS = ["hunters", "tweets", "views", "engagement"];
+
 export interface CustomLeaderboardConfig {
   id?: string;
   name: string | { zh?: string; en?: string };
@@ -173,6 +181,7 @@ export interface CustomLeaderboardConfig {
   distributionType?: "equal" | "mindshare" | "workshare" | string;
   unit?: string;
   short_name?: string | { zh?: string; en?: string };
+  empty_text?: string | { zh?: string; en?: string };
   displayChannels?: string[];
 }
 type CampaignConfig = {
@@ -338,8 +347,13 @@ function normalizeCampaign(
     participantCount: it?.participantCount,
     distributionType: it?.distributionType || "",
     unit: it?.unit || "",
+    empty_text: normalizeI18nText(it?.empty_text || it?.emptyText),
     displayChannels: normalizeCustomLeaderboardDisplayChannels(it?.displayChannels),
   }));
+  if (Array.isArray(c.displayMetrics)) {
+    const filtered = c.displayMetrics.filter((it: unknown) => typeof it === "string" && DEFAULT_DISPLAY_METRICS.includes(it));
+    c.displayMetrics = filtered.length ? filtered : undefined;
+  }
   c.logos.forEach((logo: AnyObj) => {
     if (!logo.ringClassName) logo.ringClassName = DEFAULT_RING;
   });
@@ -475,6 +489,7 @@ function makeNewCampaign(): AnyObj {
     userActivityApiUrl: DEFAULT_CUSTOM_USER_ACTIVITY_API_URL,
     mockCustomLeaderboardDataEnabled: false,
     customLeaderboards: [],
+    displayMetrics: undefined,
     enableEssayContest: false,
     enablePowLeaderboard: false,
   });
@@ -1718,6 +1733,7 @@ export function NacosCampaignsPage() {
           id: "",
           name: { zh: "", en: "" },
           short_name: { zh: "", en: "" },
+          empty_text: { zh: "", en: "" },
           amount: undefined,
           participantCount: undefined,
           distributionType: "equal",
@@ -2622,6 +2638,19 @@ function CampaignEditor(props: {
           <Col xs={24} md={8}><Field label="开始时间"><Input type="datetime-local" value={toDatetimeLocal(c.enrollmentWindow?.startAt)} onChange={(e) => setCampaignPath("enrollmentWindow.startAt", fromDatetimeLocalToIsoZ(e.target.value))} /></Field></Col>
           <Col xs={24} md={8}><Field label="结束时间"><Input type="datetime-local" value={toDatetimeLocal(c.enrollmentWindow?.endAt)} onChange={(e) => setCampaignPath("enrollmentWindow.endAt", fromDatetimeLocalToIsoZ(e.target.value))} /></Field></Col>
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
+          <Col xs={24}>
+            <Field label={<InfoLabel info="控制 EchoHunt 详情页概览展示哪些数据指标卡片；未选或留空时默认全部展示（总 Hunters、总推文、总浏览、总互动）。">概览数据展示项</InfoLabel>}>
+              <Select
+                mode="multiple"
+                allowClear
+                maxTagCount="responsive"
+                placeholder="默认全部展示（总 Hunters、总推文、总浏览、总互动）"
+                value={Array.isArray(c.displayMetrics) ? c.displayMetrics : []}
+                onChange={(values) => setCampaignPath("displayMetrics", Array.isArray(values) && values.length ? values.filter((v: string) => DEFAULT_DISPLAY_METRICS.includes(v)) : undefined)}
+                options={DISPLAY_METRIC_OPTIONS}
+              />
+            </Field>
+          </Col>
         </Row>
         <div style={{ marginTop: 12 }}>
           {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} mockEnabled={!!c.mockCustomLeaderboardDataEnabled} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
@@ -3202,6 +3231,7 @@ function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number
       <AntTag color="gold">{getCustomLeaderboardRewardText(item)}</AntTag>
       <AntTag color="green">{item.participantCount || "-"} 人</AntTag>
       <AntTag>{getDistributionLabel(item.distributionType)}</AntTag>
+      {item.empty_text?.zh || item.empty_text?.en ? <AntTag color="purple">占位: {item.empty_text?.zh || item.empty_text?.en}</AntTag> : null}
       {channels.map((channel) => (
         <AntTag key={channel} color={channel === "echohunt" ? "purple" : "cyan"}>
           {CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.find((opt) => opt.value === channel)?.label || channel}
@@ -3267,6 +3297,16 @@ function CustomLeaderboards({
         <Col xs={12} md={4}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
         <Col xs={12} md={4}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
         <Col xs={12} md={4}><Field label="单位"><Input value={it.unit || ""} onChange={(e) => update("customLeaderboards", i, "unit", e.target.value)} placeholder="USDT" /></Field></Col>
+        <Col xs={24} md={12}>
+          <Field label={<InfoLabel info="该自定义榜单无数据时的占位提示文案，默认展示“暂无数据。”。">空数据占位文案（中文）</InfoLabel>}>
+            <Input value={it.empty_text?.zh || ""} onChange={(e) => update("customLeaderboards", i, "empty_text.zh", e.target.value)} placeholder="暂无数据。" />
+          </Field>
+        </Col>
+        <Col xs={24} md={12}>
+          <Field label={<InfoLabel info='Empty state placeholder text in English, defaults to "No data available."'>空数据占位文案（English）</InfoLabel>}>
+            <Input value={it.empty_text?.en || ""} onChange={(e) => update("customLeaderboards", i, "empty_text.en", e.target.value)} placeholder="No data available." />
+          </Field>
+        </Col>
       </Row>
     ),
   }));

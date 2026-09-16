@@ -434,10 +434,13 @@ function summarizeCustomLeaderboards(list, lang = "zh-CN") {
     const id = String(item.id || item.distributionType || `custom-${index}`).trim() || `custom-${index}`;
     const name = localizeTextValue(item.name, lang, id);
     const shortName = localizeTextValue(item.short_name, lang, name);
+    const emptyText = localizeTextValue(item.empty_text || item.emptyText, lang, "");
     return {
       id,
       name,
       short_name: shortName,
+      emptyText: emptyText || null,
+      empty_text: emptyText || null,
       amount: item.amount ?? null,
       participantCount: item.participantCount ?? null,
       distributionType: item.distributionType || null,
@@ -456,6 +459,8 @@ function buildCustomLeaderboardTrackSummaries(pluginCampaign, lang = "zh-CN") {
     sourceKey: item.id,
     winnerKey: null,
     reward: item.amount === null || item.amount === undefined || item.amount === "" ? null : `${item.amount}${item.unit ? ` ${item.unit}` : ""}`,
+    emptyText: item.emptyText || null,
+    empty_text: item.empty_text || item.emptyText || null,
     counts: {},
   }));
 }
@@ -511,6 +516,7 @@ function buildEchohuntCampaignListItem(record, lang, viewer) {
       customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards, lang),
     },
     rewardSummary: buildRewardSummary(plugin, lang),
+    displayMetrics: Array.isArray(plugin.displayMetrics) ? plugin.displayMetrics : null,
     leaderboardTracks: buildCustomLeaderboardTrackSummaries(plugin, lang),
     guideUrl: record.guideUrl || null,
     activeUrl: record.activeUrl || null,
