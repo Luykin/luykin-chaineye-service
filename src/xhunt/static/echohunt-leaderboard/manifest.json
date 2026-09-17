@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-02T03:00:53.085Z",
+  "generatedAt": "2026-09-17T02:20:47.352Z",
   "campaigns": [
     {
       "key": "mantle",
@@ -312,6 +312,81 @@
           "reward": "5,000 USDC",
           "counts": {
             "winners": 10
+          }
+        }
+      ]
+    },
+    {
+      "key": "yzilabs",
+      "title": "YZi Labs Amplify S1($15K)",
+      "project": "YZi Labs Amplify S1($15K)",
+      "status": "ended",
+      "prize": "Reward: 15,000 $USDC",
+      "announcement": "YZi Labs Amplify S1($15K)",
+      "note": null,
+      "startAt": "2026-07-13T00:00:00.000Z",
+      "endAt": "2026-08-09T16:00:00.000Z",
+      "logo": "https://pbs.twimg.com/profile_images/1882427944750190592/dkLQ6Yh6_400x400.jpg",
+      "logoAlt": "Campaign Logo",
+      "guideUrl": "https://docs.google.com/document/d/1v0EyVvklfY4dVTSSs92Dfp3wTftrKECwdb6I9oW1m2w/edit?tab=t.0#heading=h.i0a0dupgxh3p",
+      "sourcePage": "/campaigns/yzilabs",
+      "sourceCampaignId": "10",
+      "dataUrl": "/leaderboard-static/campaigns/yzilabs.json",
+      "summary": {
+        "participants": 0,
+        "tweets": 0,
+        "views": 0,
+        "engagement": 0,
+        "bridges": null,
+        "updatedAt": "2026-08-09T15:29:47Z"
+      },
+      "tracks": [
+        {
+          "id": "Cohort",
+          "type": "leaderboard",
+          "title": "Cohort Leaderboard",
+          "shortTitle": "Cohort",
+          "sourceKey": "Cohort",
+          "winnerKey": null,
+          "reward": "15000 USDT",
+          "counts": {
+            "all": 231
+          }
+        },
+        {
+          "id": "HertzFlow",
+          "type": "leaderboard",
+          "title": "HertzFlow (Prize Pool 5K)",
+          "shortTitle": "HertzFlow",
+          "sourceKey": "HertzFlow",
+          "winnerKey": null,
+          "reward": "5000 USDT",
+          "counts": {
+            "all": 192
+          }
+        },
+        {
+          "id": "Renaiss",
+          "type": "leaderboard",
+          "title": "Renaiss (Prize Pool 5K)",
+          "shortTitle": "Renaiss",
+          "sourceKey": "Renaiss",
+          "winnerKey": null,
+          "reward": "5000 USDT",
+          "counts": {
+            "all": 191
+          }
+        },
+        {
+          "id": "Velvet",
+          "type": "leaderboard",
+          "title": "Velvet(Prize  Pool 5K)",
+          "shortTitle": "Velvet",
+          "sourceKey": "Velvet",
+          "winnerKey": null,
+          "reward": "5000 USDT",
+          "counts": {
+            "all": 167
           }
         }
       ]
