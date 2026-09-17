@@ -1,7 +1,7 @@
 const axios = require("axios");
 const { EchohuntSocialListeningPost } = require("../../../models/postgres-start");
 
-const TWITTER_USER_API_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const TWITTER_TWEET_RESULT_URL = "https://cdn.syndication.twimg.com/tweet-result";
 const LOOKUP_CONCURRENCY = 8;
 const LOOKUP_TIMEOUT_MS = 7000;
 const LOOKUP_RESPONSE_BUDGET_MS = 3500;
@@ -12,6 +12,11 @@ const MAX_IDENTITIES_PER_RESPONSE = 100;
 function normalizeTwitterId(value) {
   const id = String(value || "").trim();
   return /^\d{1,64}$/.test(id) ? id : "";
+}
+
+function normalizeTweetId(value) {
+  const id = String(value || "").trim();
+  return /^\d{5,32}$/.test(id) ? id : "";
 }
 
 function normalizeHandle(value) {
@@ -26,8 +31,8 @@ function pickAvatar(user = {}) {
 }
 
 function buildTwitterIdentity(user, requestedTwitterId) {
-  const twitterId = normalizeTwitterId(user?.id || user?.twitterId || requestedTwitterId);
-  const handle = normalizeHandle(user?.username || user?.username_raw || user?.handle || user?.profile?.username);
+  const twitterId = normalizeTwitterId(user?.id || user?.id_str || user?.twitterId || requestedTwitterId);
+  const handle = normalizeHandle(user?.username || user?.username_raw || user?.screen_name || user?.handle || user?.profile?.username);
   const name = String(user?.name || user?.displayName || user?.profile?.name || "").trim() || null;
   const avatar = pickAvatar(user);
   if (!twitterId || (!handle && !name && !avatar)) return null;
@@ -35,7 +40,9 @@ function buildTwitterIdentity(user, requestedTwitterId) {
 }
 
 function cacheKey(twitterId) {
-  return `echohunt:social-listening:twitter-identity:${twitterId}`;
+  // Versioned separately from the removed user-id lookup path, so old
+  // "not found" cache values cannot suppress the tweet-detail lookup.
+  return `echohunt:social-listening:tweet-identity-v2:${twitterId}`;
 }
 
 async function getCachedIdentity(redisClient, twitterId) {
@@ -58,49 +65,59 @@ async function cacheIdentity(redisClient, twitterId, identity) {
   await redisClient.set(cacheKey(twitterId), value, { EX: ttl }).catch(() => null);
 }
 
-async function fetchTwitterIdentity(twitterId, timeout = LOOKUP_TIMEOUT_MS) {
-  const response = await axios.get(TWITTER_USER_API_URL, {
-    params: { user_id: twitterId, "x-language": "en" },
+async function fetchTwitterIdentityFromTweet(tweetId, timeout = LOOKUP_TIMEOUT_MS) {
+  const response = await axios.get(TWITTER_TWEET_RESULT_URL, {
+    // The syndication endpoint requires a non-empty token but does not use it
+    // as authentication. It is a public tweet-rendering endpoint, not an X API key.
+    params: { id: tweetId, lang: "en", token: "0" },
     timeout,
   });
-  return buildTwitterIdentity(response?.data?.data?.data, twitterId);
+  return buildTwitterIdentity(response?.data?.user, null);
 }
 
-async function resolveTwitterIdentities(twitterIds, redisClient) {
-  const ids = Array.from(new Set((twitterIds || []).map(normalizeTwitterId).filter(Boolean))).slice(0, MAX_IDENTITIES_PER_RESPONSE);
-  const identities = new Map();
-  const uncachedIds = [];
+async function resolveTwitterIdentitiesFromPosts(posts, redisClient) {
+  const candidates = [];
+  const seenTweetIds = new Set();
+  for (const post of (posts || [])) {
+    const twitterId = normalizeTwitterId(post?.author?.twitterId);
+    const tweetId = normalizeTweetId(post?.tweetId);
+    if (!twitterId || !tweetId || seenTweetIds.has(tweetId)) continue;
+    seenTweetIds.add(tweetId);
+    candidates.push({ twitterId, tweetId });
+    if (candidates.length >= MAX_IDENTITIES_PER_RESPONSE) break;
+  }
 
-  await Promise.all(ids.map(async (twitterId) => {
-    const cached = await getCachedIdentity(redisClient, twitterId);
-    if (cached === undefined) uncachedIds.push(twitterId);
-    else if (cached) identities.set(twitterId, cached);
+  const identities = new Map();
+  const uncachedCandidates = [];
+  await Promise.all(candidates.map(async (candidate) => {
+    const cached = await getCachedIdentity(redisClient, candidate.twitterId);
+    if (cached === undefined) uncachedCandidates.push(candidate);
+    else if (cached) identities.set(candidate.twitterId, cached);
   }));
 
-  // Keep the page API responsive when an unusually large page has historical
-  // missing identities. Remaining IDs are retried on later reads and become
-  // progressively backfilled; they are deliberately not negative-cached here.
   const deadline = Date.now() + LOOKUP_RESPONSE_BUDGET_MS;
   let cursor = 0;
   const worker = async () => {
-    while (cursor < uncachedIds.length && Date.now() < deadline) {
-      const twitterId = uncachedIds[cursor];
+    while (cursor < uncachedCandidates.length && Date.now() < deadline) {
+      const candidate = uncachedCandidates[cursor];
       cursor += 1;
       const remainingMs = Math.max(1, Math.min(LOOKUP_TIMEOUT_MS, deadline - Date.now()));
       let identity = null;
       try {
-        identity = await fetchTwitterIdentity(twitterId, remainingMs);
+        identity = await fetchTwitterIdentityFromTweet(candidate.tweetId, remainingMs);
       } catch (_) {
         identity = null;
       }
-      if (identity) identities.set(twitterId, identity);
-      // Cache actual failed requests briefly, but never cache IDs skipped by
-      // the response deadline so a later read can still resolve them.
-      await cacheIdentity(redisClient, twitterId, identity);
+      if (identity) {
+        identities.set(candidate.twitterId, identity);
+        // Cache against the source author ID. Some historical dev.tweet rows
+        // contain an invalid author ID, but that is still the key used by the
+        // social-listening snapshot and is therefore the correct cache key.
+        await cacheIdentity(redisClient, candidate.twitterId, identity);
+      }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(LOOKUP_CONCURRENCY, uncachedIds.length) }, worker));
-
+  await Promise.all(Array.from({ length: Math.min(LOOKUP_CONCURRENCY, candidates.length) }, worker));
   return identities;
 }
 
@@ -129,30 +146,30 @@ function applyIdentity(post, identity) {
   };
 }
 
-async function backfillIdentity(boardId, identity) {
-  if (!boardId || !identity?.twitterId) return;
+async function backfillIdentity(boardId, sourceTwitterId, identity) {
+  if (!boardId || !sourceTwitterId || !identity) return;
   const patch = {};
   if (identity.handle) patch.authorHandle = identity.handle;
   if (identity.name) patch.authorName = identity.name;
   if (identity.avatar) patch.authorAvatar = identity.avatar;
   if (!Object.keys(patch).length) return;
   await EchohuntSocialListeningPost.update(patch, {
-    where: { boardId, authorTwitterId: identity.twitterId },
+    where: { boardId, authorTwitterId: sourceTwitterId },
   }).catch((error) => {
-    console.warn(`[SocialListening] 作者资料回填失败 board=${boardId} twitterId=${identity.twitterId}: ${error.message}`);
+    console.warn(`[SocialListening] 作者资料回填失败 board=${boardId} twitterId=${sourceTwitterId}: ${error.message}`);
   });
 }
 
 async function enrichPostsWithTwitterIdentities(posts, options = {}) {
   const rows = Array.isArray(posts) ? posts : [];
-  const ids = rows.filter(identityNeedsEnrichment).map((post) => post.author?.twitterId);
-  if (!ids.length) return rows;
+  const unresolvedPosts = rows.filter(identityNeedsEnrichment);
+  if (!unresolvedPosts.length) return rows;
 
-  const identities = await resolveTwitterIdentities(ids, options.redisClient);
+  const identities = await resolveTwitterIdentitiesFromPosts(unresolvedPosts, options.redisClient);
   if (!identities.size) return rows;
 
   if (options.boardId) {
-    await Promise.all([...identities.values()].map((identity) => backfillIdentity(options.boardId, identity)));
+    await Promise.all([...identities.entries()].map(([twitterId, identity]) => backfillIdentity(options.boardId, twitterId, identity)));
   }
   return rows.map((post) => applyIdentity(post, identities.get(normalizeTwitterId(post.author?.twitterId))));
 }
