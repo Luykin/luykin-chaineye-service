@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 将已结束的 EchoHunt 自定义榜单固化到 src/xhunt/static/echohunt-leaderboard，
- * 并同步其中参赛者的 X 头像链接。
+ * 并同步其中参赛者的 X 头像、显示名和 handler。
  *
  * 用法：
  *   NODE_ENV=production yarn echohunt:leaderboard:sync
@@ -13,7 +13,7 @@
  * 默认会：
  * 1. 从线上 EchoHunt 活动接口读取数据库中的已结束 custom 活动；
  * 2. 为 manifest 中尚不存在的活动写入最终榜单快照；
- * 3. 通过 data.cryptohunt.ai 批量刷新所有静态榜单和获奖者的头像。
+ * 3. 通过不可变的 Twitter ID 刷新所有静态榜单和获奖者的头像、显示名和 handler。
  *
  * 不会覆盖已有榜单的名次或分数；需要重新出榜时请先人工核对后删除对应静态文件和 manifest 条目。
  */
@@ -32,9 +32,9 @@ const { buildCustomLeaderboardBundle } = require("../src/xhunt/services/echohunt
 const STATIC_ROOT = path.resolve(__dirname, "../src/xhunt/static/echohunt-leaderboard");
 const STATIC_CAMPAIGNS_DIR = path.join(STATIC_ROOT, "campaigns");
 const MANIFEST_PATH = path.join(STATIC_ROOT, "manifest.json");
-const TWITTER_USERS_API_URL = "https://data.cryptohunt.ai/fetch/twitter/users";
-const TWITTER_USERS_CHUNK_SIZE = 50;
-const TWITTER_USERS_TIMEOUT_MS = 10000;
+const TWITTER_USER_API_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const TWITTER_USER_LOOKUP_CONCURRENCY = 8;
+const TWITTER_USER_TIMEOUT_MS = 10000;
 // 线上接口直接读取数据库中的 XHuntWebsiteCampaigns 活动。
 const ECHOHUNT_CAMPAIGNS_URL = "https://kb.xhunt.ai/api/xhunt/echohunt/campaigns?lang=en";
 
@@ -69,7 +69,7 @@ function printHelp() {
 选项：
   --dry-run          只输出会变更的活动和头像数量，不写文件
   --snapshots-only   只补齐缺失的已结束活动快照
-  --avatars-only     只刷新已有静态活动中的头像
+  --avatars-only     只刷新已有静态活动中的 Twitter 身份资料
   --campaign <key>   只处理指定活动（头像刷新也只处理该活动）
   --include-testing  允许固化 testingPhase 活动（默认跳过）
   -h, --help         显示帮助
@@ -316,9 +316,17 @@ function buildManifestIndex(manifest) {
   return index;
 }
 
-function getObjectUsername(value) {
+function normalizeTwitterId(value) {
+  const twitterId = String(value || "").trim();
+  return /^\d{1,32}$/.test(twitterId) ? twitterId : "";
+}
+
+function getObjectTwitterId(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  return normalizeHandle(value.username) || normalizeHandle(value.handle) || normalizeHandle(value.author);
+  return normalizeTwitterId(value.twitterId) ||
+    normalizeTwitterId(value.twitter_id) ||
+    normalizeTwitterId(value.t_twitter_id) ||
+    normalizeTwitterId(value.user_id);
 }
 
 function visitJsonObjects(value, visitor) {
@@ -331,38 +339,57 @@ function visitJsonObjects(value, visitor) {
   Object.values(value).forEach((item) => visitJsonObjects(item, visitor));
 }
 
-function collectBundleHandles(bundle) {
-  const handles = new Set();
+function collectBundleTwitterIds(bundle) {
+  const twitterIds = new Set();
   visitJsonObjects(bundle, (value) => {
-    const handle = getObjectUsername(value);
-    if (handle) handles.add(handle);
+    const twitterId = getObjectTwitterId(value);
+    if (twitterId) twitterIds.add(twitterId);
   });
-  return handles;
+  return twitterIds;
 }
 
-function applyAvatarMap(bundle, avatarMap) {
+function updateIdentityField(value, field, nextValue) {
+  if (!(field in value) || !nextValue || value[field] === nextValue) return 0;
+  value[field] = nextValue;
+  return 1;
+}
+
+function formatHandleLike(currentValue, username) {
+  return String(currentValue || "").trim().startsWith("@") ? `@${username}` : username;
+}
+
+function applyTwitterIdentityMap(bundle, identityMap) {
   let changed = 0;
   visitJsonObjects(bundle, (value) => {
-    const handle = getObjectUsername(value);
-    const avatar = handle ? avatarMap.get(handle) : null;
-    if (!avatar) return;
+    const twitterId = getObjectTwitterId(value);
+    const identity = twitterId ? identityMap.get(twitterId) : null;
+    if (!identity) return;
 
     const avatarFields = ["avatar", "image", "profile_image_url", "profile_image_url_https", "avatarUrl", "avatar_url"];
     let wroteExistingAvatarField = false;
     avatarFields.forEach((field) => {
       if (!(field in value)) return;
       wroteExistingAvatarField = true;
-      if (value[field] !== avatar) {
-        value[field] = avatar;
-        changed += 1;
-      }
+      changed += updateIdentityField(value, field, identity.avatar);
     });
 
-    // 榜单行或获奖者有时上游漏传 avatar；为前端补上标准字段。
-    if (!wroteExistingAvatarField && ("rank" in value || "author" in value || "username" in value)) {
-      value.avatar = avatar;
+    if (!wroteExistingAvatarField && identity.avatar && ("rank" in value || "author" in value || "username" in value)) {
+      value.avatar = identity.avatar;
       changed += 1;
     }
+
+    ["username", "username_raw"].forEach((field) => {
+      changed += updateIdentityField(value, field, identity.username);
+    });
+    if ("handle" in value && identity.username) {
+      changed += updateIdentityField(value, "handle", formatHandleLike(value.handle, identity.username));
+    }
+    if ("author" in value && identity.username && normalizeHandle(value.author)) {
+      changed += updateIdentityField(value, "author", formatHandleLike(value.author, identity.username));
+    }
+    ["name", "displayName", "display_name"].forEach((field) => {
+      changed += updateIdentityField(value, field, identity.name);
+    });
   });
   return changed;
 }
@@ -378,22 +405,41 @@ function getTwitterProfileAvatar(user) {
   return profile.profile_image_url || profile.profile_image_url_https || profile.avatar || profile.image || null;
 }
 
-async function fetchAvatarMap(handles) {
-  const avatarMap = new Map();
-  for (const handleChunk of chunk([...handles], TWITTER_USERS_CHUNK_SIZE)) {
-    const response = await axios.get(TWITTER_USERS_API_URL, {
-      params: { usernames: handleChunk.join(",") },
-      timeout: TWITTER_USERS_TIMEOUT_MS,
-    });
-    const users = response?.data?.data?.data;
-    if (!Array.isArray(users)) continue;
-    users.forEach((user) => {
-      const handle = normalizeHandle(user?.profile?.username || user?.username || user?.username_raw);
-      const avatar = getTwitterProfileAvatar(user);
-      if (handle && typeof avatar === "string" && avatar.trim()) avatarMap.set(handle, avatar.trim());
+function buildTwitterIdentity(user, requestedTwitterId) {
+  const twitterId = normalizeTwitterId(user?.id || requestedTwitterId);
+  const username = normalizeHandle(user?.username || user?.username_raw || user?.profile?.username);
+  const name = String(user?.name || user?.profile?.name || "").trim();
+  const avatar = getTwitterProfileAvatar(user);
+  if (!twitterId || (!username && !name && !avatar)) return null;
+  return {
+    twitterId,
+    username: username || null,
+    name: name || null,
+    avatar: typeof avatar === "string" && avatar.trim() ? avatar.trim() : null,
+  };
+}
+
+async function fetchTwitterIdentityMap(twitterIds) {
+  const identityMap = new Map();
+  const failures = [];
+  for (const idChunk of chunk([...twitterIds], TWITTER_USER_LOOKUP_CONCURRENCY)) {
+    const results = await Promise.allSettled(idChunk.map(async (twitterId) => {
+      const response = await axios.get(TWITTER_USER_API_URL, {
+        params: { user_id: twitterId, "x-language": "en" },
+        timeout: TWITTER_USER_TIMEOUT_MS,
+      });
+      return buildTwitterIdentity(response?.data?.data?.data, twitterId);
+    }));
+    results.forEach((result, index) => {
+      const twitterId = idChunk[index];
+      if (result.status === "rejected") {
+        failures.push({ key: twitterId, error: result.reason?.message || String(result.reason) });
+      } else if (result.value) {
+        identityMap.set(twitterId, result.value);
+      }
     });
   }
-  return avatarMap;
+  return { identityMap, failures };
 }
 
 async function readJson(filePath) {
@@ -512,41 +558,42 @@ async function createMissingSnapshots(manifest, options, report) {
   return manifestChanged;
 }
 
-async function refreshStaticAvatars(manifest, options, report) {
+async function refreshStaticTwitterIdentities(manifest, options, report) {
   const { bundles, errors } = await loadStaticBundles(manifest, options.campaign);
-  report.avatars.failed.push(...errors);
-  const handles = new Set();
-  bundles.forEach(({ bundle }) => collectBundleHandles(bundle).forEach((handle) => handles.add(handle)));
-  report.avatars.handles = handles.size;
-  if (!handles.size) return;
+  report.identities.failed.push(...errors);
+  const twitterIds = new Set();
+  bundles.forEach(({ bundle }) => collectBundleTwitterIds(bundle).forEach((twitterId) => twitterIds.add(twitterId)));
+  report.identities.twitterIds = twitterIds.size;
+  if (!twitterIds.size) return;
 
-  let avatarMap;
+  let identityResult;
   try {
-    avatarMap = await fetchAvatarMap(handles);
+    identityResult = await fetchTwitterIdentityMap(twitterIds);
   } catch (error) {
-    report.avatars.failed.push({ key: "twitter-users-api", error: error.message || String(error) });
+    report.identities.failed.push({ key: "twitter-user-api", error: error.message || String(error) });
     return;
   }
-  report.avatars.resolved = avatarMap.size;
+  report.identities.failed.push(...identityResult.failures);
+  report.identities.resolved = identityResult.identityMap.size;
 
   for (const { key, filePath, bundle } of bundles) {
-    const changed = applyAvatarMap(bundle, avatarMap);
+    const changed = applyTwitterIdentityMap(bundle, identityResult.identityMap);
     if (changed && !options.dryRun) await writeJsonAtomic(filePath, bundle);
-    if (changed) report.avatars.changed.push({ key, fields: changed });
+    if (changed) report.identities.changed.push({ key, fields: changed });
   }
 }
 
 function printReport(report, options) {
   const skipped = report.snapshots.skipped.map((item) => `${item.key}(${item.reason})`).join(", ");
-  const failures = [...report.snapshots.failed, ...report.avatars.failed];
+  const failures = [...report.snapshots.failed, ...report.identities.failed];
   console.log("\n[EchoHunt static leaderboard sync]");
   console.log(`mode=${options.dryRun ? "dry-run" : "write"}`);
   console.log(`snapshots created=${report.snapshots.created.length}, alreadyStatic=${report.snapshots.alreadyStatic.length}, manifestRepaired=${report.snapshots.manifestRepaired.length}, skipped=${report.snapshots.skipped.length}, failed=${report.snapshots.failed.length}`);
-  console.log(`avatars handles=${report.avatars.handles}, resolved=${report.avatars.resolved}, bundlesChanged=${report.avatars.changed.length}, fieldsChanged=${report.avatars.changed.reduce((total, item) => total + item.fields, 0)}, failed=${report.avatars.failed.length}`);
+  console.log(`twitterIds=${report.identities.twitterIds}, resolved=${report.identities.resolved}, bundlesChanged=${report.identities.changed.length}, fieldsChanged=${report.identities.changed.reduce((total, item) => total + item.fields, 0)}, failed=${report.identities.failed.length}`);
   if (report.snapshots.created.length) console.log(`created: ${report.snapshots.created.map((item) => `${item.key}(${item.rows})`).join(", ")}`);
   if (report.snapshots.manifestRepaired.length) console.log(`manifest repaired: ${report.snapshots.manifestRepaired.join(", ")}`);
   if (skipped) console.log(`skipped: ${skipped}`);
-  if (report.avatars.changed.length) console.log(`avatar updated: ${report.avatars.changed.map((item) => `${item.key}(${item.fields})`).join(", ")}`);
+  if (report.identities.changed.length) console.log(`identity updated: ${report.identities.changed.map((item) => `${item.key}(${item.fields})`).join(", ")}`);
   failures.forEach((item) => console.warn(`failed: ${item.key}: ${item.error}`));
 }
 
@@ -567,12 +614,12 @@ async function main() {
   if (!Array.isArray(manifest.campaigns)) manifest.campaigns = [];
   const report = {
     snapshots: { created: [], alreadyStatic: [], manifestRepaired: [], skipped: [], failed: [] },
-    avatars: { handles: 0, resolved: 0, changed: [], failed: [] },
+    identities: { twitterIds: 0, resolved: 0, changed: [], failed: [] },
   };
 
   let manifestChanged = false;
   if (!options.avatarsOnly) manifestChanged = await createMissingSnapshots(manifest, options, report);
-  if (!options.snapshotsOnly) await refreshStaticAvatars(manifest, options, report);
+  if (!options.snapshotsOnly) await refreshStaticTwitterIdentities(manifest, options, report);
 
   if (manifestChanged && !options.dryRun) {
     manifest.generatedAt = new Date().toISOString();
@@ -580,7 +627,7 @@ async function main() {
   }
   printReport(report, options);
 
-  if (report.snapshots.failed.length || report.avatars.failed.length) process.exitCode = 1;
+  if (report.snapshots.failed.length || report.identities.failed.length) process.exitCode = 1;
 }
 
 if (require.main === module) {
@@ -591,9 +638,9 @@ if (require.main === module) {
 }
 
 module.exports = {
-  applyAvatarMap,
+  applyTwitterIdentityMap,
   buildManifestCampaign,
-  collectBundleHandles,
+  collectBundleTwitterIds,
   isCampaignEnded,
   makeStaticCampaignInput,
   parseArgs,
