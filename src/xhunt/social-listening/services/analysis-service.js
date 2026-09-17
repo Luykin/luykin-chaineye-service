@@ -25,6 +25,7 @@ const { syncInfluentialSignalForPost } = require("./aggregate-service");
 const LONG_TEXT_CONDENSATION_MIN_LENGTH = 900;
 const LONG_TEXT_CONDENSATION_MAX_LENGTH = 1800;
 const LONG_TEXT_CONDENSATION_RULE_VERSION = "ratio-v1";
+const AUTHOR_PROFILE_MAX_LENGTH = 600;
 
 function clampInteger(value, fallback, min, max) {
   const num = Number(value);
@@ -68,6 +69,13 @@ function getPostAiText(post, options = {}) {
     fallbackTruncated,
     maxLength,
   };
+}
+
+function getAuthorProfileDescription(post = {}) {
+  const rawAuthor = post.rawAuthor && typeof post.rawAuthor === "object" ? post.rawAuthor : {};
+  const profile = rawAuthor.profile && typeof rawAuthor.profile === "object" ? rawAuthor.profile : {};
+  const description = profile.description || rawAuthor.description || post.authorDescription || "";
+  return truncateText(normalizeTweetText(description), AUTHOR_PROFILE_MAX_LENGTH);
 }
 
 function getPostReferenceCandidates(post = {}) {
@@ -391,6 +399,11 @@ function removeEmptyMediaLine(prompt, media) {
   return String(prompt || "").replace(/^[\t ]*(?:媒体|media)\s*[:：][\t ]*(?:\r?\n|$)/gim, "");
 }
 
+function removeEmptyAuthorProfileLine(prompt, authorProfile) {
+  if (String(authorProfile || "").trim()) return prompt;
+  return String(prompt || "").replace(/^[\t ]*作者 X Profile 简介（仅作作者背景，不代表当前推文立场）：[\t ]*(?:\r?\n|$)/gm, "");
+}
+
 function buildPromptInfo(board, aiConfig, field, variables = {}) {
   const boardTemplate = getBoardPrompt(board, field, aiConfig?.promptMaxLength);
   const runtimeTemplate = getRuntimePrompt(aiConfig, field);
@@ -412,12 +425,16 @@ function buildPromptInfo(board, aiConfig, field, variables = {}) {
 
   let prompt = renderPromptTemplate(template, variables);
   prompt = removeEmptyMediaLine(prompt, variables.media);
+  prompt = removeEmptyAuthorProfileLine(prompt, variables.authorProfile);
   prompt = appendKeywordExclusionRule(prompt, field, variables);
   if (variables.text && !prompt.includes(String(variables.text))) {
     prompt = `${prompt}\n\n输入文本：\n${variables.text}`;
   }
   if (variables.referenceContext && !prompt.includes(String(variables.referenceContext))) {
     prompt = `${prompt}\n\n${variables.referenceContext}`;
+  }
+  if (variables.authorProfile && !prompt.includes(String(variables.authorProfile))) {
+    prompt = `${prompt}\n\n作者 X Profile 简介（仅作背景，不代表当前推文立场）：\n${variables.authorProfile}`;
   }
   return {
     prompt,
@@ -685,6 +702,7 @@ async function buildTweetAnalysisPromptPreview(board) {
     media: "{{media}}",
     createdAt: "{{tweet_created_at}}",
     referenceContext: "{{reference_context}}",
+    authorProfile: "{{author_profile}}",
   };
   const { prompt, promptTrace, analysisTemplate } = buildTweetAnalysisPrompt(board, aiConfig, variables);
   return {
@@ -708,6 +726,7 @@ async function callTweetAnalysisAi(board, post, options = {}) {
   const keywordExclusionValues = getKeywordExclusionValues(board);
   const keywordExclusions = keywordExclusionValues.join("、");
   const media = pickFirstMedia(post);
+  const authorProfile = getAuthorProfileDescription(post);
   const reference = options.reference || getPostReference(post, options.referenceRowsById || new Map(), {
     maxReferenceContextLength: options.maxReferenceContextLength,
     condensedTextsByTweetId: options.condensedTextsByTweetId,
@@ -729,6 +748,7 @@ async function callTweetAnalysisAi(board, post, options = {}) {
     words: summaryWords,
     media,
     createdAt,
+    authorProfile,
   };
   const { prompt, promptTrace } = buildTweetAnalysisPrompt(board, aiConfig, variables);
   if (!aiText.text) {
