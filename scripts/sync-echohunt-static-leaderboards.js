@@ -198,6 +198,23 @@ function firstMetric(sources, keys) {
   return null;
 }
 
+function getSummaryRows(bundle) {
+  const allLeaderboards = bundle?.leaderboards?.all || {};
+  // YZiLabs 的 Cohort 是主榜；其余三个榜单是不同奖励赛道，同一用户会重复出现。
+  // 总参与者、推文、浏览和互动只从主榜统计，避免将赛道数据重复相加。
+  if (safeCampaignKey(bundle?.campaign?.key) === "yzilabs") {
+    const primaryTrack = (bundle?.tracks || []).find((track) => track?.type === "leaderboard" && track?.sourceKey);
+    const primaryRows = primaryTrack ? allLeaderboards[primaryTrack.sourceKey] : null;
+    if (Array.isArray(primaryRows)) return primaryRows;
+  }
+  return Object.values(allLeaderboards).flatMap((value) => Array.isArray(value) ? value : []);
+}
+
+function pickPositiveMetric(value, fallback) {
+  const numeric = parseMetricNumber(value);
+  return numeric !== null && numeric > 0 ? value : fallback;
+}
+
 function summarizeStaticBundle(bundle, rawResponse) {
   const raw = rawResponse?.raw && typeof rawResponse.raw === "object" ? rawResponse.raw : rawResponse;
   const sources = [
@@ -214,7 +231,7 @@ function summarizeStaticBundle(bundle, rawResponse) {
     raw?.data?.summary,
     raw?.data?.stats,
   ];
-  const rows = Object.values(bundle?.leaderboards?.all || {}).flatMap((value) => Array.isArray(value) ? value : []);
+  const rows = getSummaryRows(bundle);
   const userKeys = new Set(
     rows
       .map((row) => row?.twitterId || row?.twitter_id || row?.user_id || row?.username || row?.handle)
@@ -231,10 +248,10 @@ function summarizeStaticBundle(bundle, rawResponse) {
   const base = bundle?.summary || {};
 
   return {
-    participants: firstMetric(sources, ["participants", "hunters", "totalHunters", "total_hunters", "participantCount", "participant_count", "userCount", "user_count", "totalUsers", "total_users"]) ?? base.participants ?? fallbackParticipants,
-    tweets: firstMetric(sources, ["tweets", "totalTweets", "total_tweets", "tweetCount", "tweet_count", "posts", "totalPosts", "total_posts"]) ?? base.tweets ?? sumRows(["tweets", "tweet_count"]),
-    views: firstMetric(sources, ["views", "totalViews", "total_views", "viewCount", "view_count", "impressions", "totalImpressions", "total_impressions"]) ?? base.views ?? sumRows(["views", "view_count"]),
-    engagement: firstMetric(sources, ["engagement", "totalEngagement", "total_engagement", "interactions", "totalInteractions", "total_interactions", "likes", "totalLikes", "like_count"]) ?? base.engagement ?? sumRows(["engagement", "likes", "like_count"]),
+    participants: pickPositiveMetric(firstMetric(sources, ["participants", "hunters", "totalHunters", "total_hunters", "participantCount", "participant_count", "userCount", "user_count", "totalUsers", "total_users"]) ?? base.participants, fallbackParticipants),
+    tweets: pickPositiveMetric(firstMetric(sources, ["tweets", "totalTweets", "total_tweets", "tweetCount", "tweet_count", "posts", "totalPosts", "total_posts"]) ?? base.tweets, sumRows(["tweets", "tweet_count"])),
+    views: pickPositiveMetric(firstMetric(sources, ["views", "totalViews", "total_views", "viewCount", "view_count", "impressions", "totalImpressions", "total_impressions"]) ?? base.views, sumRows(["views", "view_count"])),
+    engagement: pickPositiveMetric(firstMetric(sources, ["engagement", "totalEngagement", "total_engagement", "interactions", "totalInteractions", "total_interactions", "likes", "totalLikes", "like_count"]) ?? base.engagement, sumRows(["engagement", "likes", "like_count"])),
     bridges: firstMetric(sources, ["bridges", "totalBridges", "total_bridges", "bridgeCount", "bridge_count"]) ?? base.bridges ?? null,
     updatedAt:
       rawResponse?.leaderboardDataUpdatedAt ||

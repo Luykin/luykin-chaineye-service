@@ -333,10 +333,10 @@
       "sourceCampaignId": "10",
       "dataUrl": "/leaderboard-static/campaigns/yzilabs.json",
       "summary": {
-        "participants": 0,
-        "tweets": 0,
-        "views": 0,
-        "engagement": 0,
+        "participants": 231,
+        "tweets": 3405,
+        "views": 18108400,
+        "engagement": 109618,
         "bridges": null,
         "updatedAt": "2026-08-09T15:29:47Z"
       },
