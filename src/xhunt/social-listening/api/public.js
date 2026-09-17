@@ -43,6 +43,8 @@ const {
 } = require("../services/post-filter");
 const { sendJsonError, publicError } = require("../services/errors");
 const { buildTweetUrl } = require("../utils/twitter");
+const { buildPostPreview } = require("../services/post-preview");
+const { enrichPostsWithTwitterIdentities } = require("../services/twitter-identity-enrichment");
 const {
   mapTweetRowToPostPayload,
   fetchTweetRowById,
@@ -384,7 +386,8 @@ function serializePublicBoard(record) {
 }
 
 function serializePublicPost(record) {
-  const post = record?.author ? record : serializePost(record);
+  const rawRecord = record?.toJSON ? record.toJSON() : (record || {});
+  const post = rawRecord?.author ? rawRecord : serializePost(rawRecord);
   const author = post.author && typeof post.author === "object" ? post.author : {};
   const source = post.source || "mention";
   const postType = post.postType || (source === "reply" || post.replyId ? "reply" : "post");
@@ -398,11 +401,14 @@ function serializePublicPost(record) {
       handle: author.handle || post.authorHandle || null,
       name: author.name || post.authorName || null,
       avatar: author.avatar || post.authorAvatar || null,
+      avatarUrl: author.avatarUrl || author.avatar || post.authorAvatar || null,
+      profileImageUrl: author.profileImageUrl || author.avatar || post.authorAvatar || null,
       followersCount: author.followersCount ?? null,
       globalRank: author.globalRank ?? null,
     },
     postCreatedAt: post.postCreatedAt,
     text: post.text || null,
+    textPreview: buildPostPreview(post.text || "", rawRecord.rawTweet || post.rawTweet || {}),
     source,
     postType,
     isReply: postType === "reply",
@@ -559,6 +565,13 @@ router.get("/boards/:boardId/overview", async (req, res) => {
     // the live calculation, so using the stored result preserves the current
     // board rules without rebuilding the full range on every request.
     const snapshot = storedSnapshot || await buildSnapshotPayload(board, rangeKey, { excludeUnknownSentiment: true });
+    const snapshotResponse = buildSnapshotResponse(snapshot);
+    if (snapshotResponse?.topViewedPosts?.length) {
+      snapshotResponse.topViewedPosts = await enrichPostsWithTwitterIdentities(snapshotResponse.topViewedPosts, {
+        boardId: board.id,
+        redisClient: req.redisClient,
+      });
+    }
     res.set("Cache-Control", "private, max-age=30");
     return res.json({
       success: true,
@@ -566,7 +579,7 @@ router.get("/boards/:boardId/overview", async (req, res) => {
         board: serializePublicBoard(await getBoardDetail(board.id)),
         rangeKey,
         state: storedSnapshot ? "ready" : (board.status === "failed" ? "failed" : (snapshot ? "ready" : "processing")),
-        snapshot: buildSnapshotResponse(snapshot),
+        snapshot: snapshotResponse,
       },
     });
   } catch (error) {
@@ -585,12 +598,16 @@ router.get("/boards/:boardId/posts", async (req, res) => {
       offset,
       limit,
     });
+    const items = await enrichPostsWithTwitterIdentities(result.rows.map(serializePublicPost), {
+      boardId: board.id,
+      redisClient: req.redisClient,
+    });
     res.set("Cache-Control", "private, max-age=30");
     return res.json({
       success: true,
       data: {
         rangeKey,
-        items: result.rows.map(serializePublicPost),
+        items,
         page,
         pageSize,
         total: result.count,
@@ -681,7 +698,11 @@ router.get("/boards/:boardId/accounts/:twitterId", async (req, res) => {
       }),
     ]);
     const enrichedSignals = await enrichSignalAvatars(await enrichSignalPostSources(signals, board.id));
-    return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals: enrichedSignals.map(serializePublicAccountSignal), posts: posts.map(serializePublicPost) } });
+    const enrichedPosts = await enrichPostsWithTwitterIdentities(posts.map(serializePublicPost), {
+      boardId: board.id,
+      redisClient: req.redisClient,
+    });
+    return res.json({ success: true, data: { rangeKey, twitterId: req.params.twitterId, signals: enrichedSignals.map(serializePublicAccountSignal), posts: enrichedPosts } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ACCOUNT_DETAIL_FAILED");
   }
