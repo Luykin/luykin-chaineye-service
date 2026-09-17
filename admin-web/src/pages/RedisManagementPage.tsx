@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Modal, message } from "antd";
+import { AutoComplete, Modal, message } from "antd";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { fetchVipLists } from "@/services/feature-flags";
+import type { VipListItem } from "@/types/feature-flags";
 import {
   deleteRedisKey,
   fetchRedisBusinessKeyScenarios,
@@ -142,8 +144,11 @@ export function RedisManagementPage() {
   const [businessScenarios, setBusinessScenarios] = useState<RedisBusinessKeyScenario[]>([]);
   const [businessScene, setBusinessScene] = useState("");
   const [businessHandler, setBusinessHandler] = useState("");
+  const [businessVipUsers, setBusinessVipUsers] = useState<VipListItem[]>([]);
+  const [businessInternalTestUsers, setBusinessInternalTestUsers] = useState<VipListItem[]>([]);
   const [businessLookup, setBusinessLookup] = useState<RedisBusinessKeyLookup | null>(null);
   const [businessLoading, setBusinessLoading] = useState(false);
+  const [businessUsersLoading, setBusinessUsersLoading] = useState(false);
   const [businessResetting, setBusinessResetting] = useState(false);
   const [pattern, setPattern] = useState("");
   const [scannedKeys, setScannedKeys] = useState<string[]>([]);
@@ -175,6 +180,19 @@ export function RedisManagementPage() {
       setBusinessScene((currentScene) => currentScene || scenarios[0]?.id || "");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "加载 Redis 业务场景失败");
+    }
+  }
+
+  async function loadBusinessUsers() {
+    setBusinessUsersLoading(true);
+    try {
+      const resp = await fetchVipLists();
+      setBusinessVipUsers(resp.data?.vip || []);
+      setBusinessInternalTestUsers(resp.data?.internalTest || []);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "加载内测/VIP 用户列表失败");
+    } finally {
+      setBusinessUsersLoading(false);
     }
   }
 
@@ -228,6 +246,7 @@ export function RedisManagementPage() {
     void loadInfo();
     void loadConfig();
     void loadBusinessScenarios();
+    void loadBusinessUsers();
   }, []);
 
   useEffect(() => {
@@ -271,19 +290,19 @@ export function RedisManagementPage() {
     }
   }
 
-  async function handleBusinessLookup() {
+  async function handleBusinessLookup(handler = businessHandler) {
     if (!businessScene) {
       messageApi.warning("请选择业务场景");
       return;
     }
-    if (!businessHandler.trim()) {
+    if (!handler.trim()) {
       messageApi.warning("请输入用户的 X handler");
       return;
     }
 
     setBusinessLoading(true);
     try {
-      const resp = await lookupRedisBusinessKeys({ scene: businessScene, handler: businessHandler.trim() });
+      const resp = await lookupRedisBusinessKeys({ scene: businessScene, handler: handler.trim() });
       setBusinessLookup(resp.data || null);
     } catch (error) {
       setBusinessLookup(null);
@@ -521,6 +540,21 @@ export function RedisManagementPage() {
     ["命中率", hitRate(info)],
   ], [info]);
 
+  const businessUserOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return [...businessInternalTestUsers, ...businessVipUsers].reduce<Array<{ value: string; label: string }>>((options, item) => {
+      const handle = String(item.username || "").trim().replace(/^@+/, "").toLowerCase();
+      if (!handle || seen.has(handle)) return options;
+      seen.add(handle);
+      const source = businessInternalTestUsers.some((candidate) => String(candidate.username || "").trim().replace(/^@+/, "").toLowerCase() === handle) ? "内测" : "VIP";
+      options.push({
+        value: handle,
+        label: item.twitterId ? `${item.username} · ${source} · ${item.twitterId}` : `${item.username} · ${source}`,
+      });
+      return options;
+    }, []);
+  }, [businessInternalTestUsers, businessVipUsers]);
+
 
   const configSummary = useMemo(() => {
     const items = configData?.items || [];
@@ -588,17 +622,25 @@ export function RedisManagementPage() {
                 {businessScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label}</option>)}
               </select>
               <div className="input-group business-key-input-group">
-                <input
-                  className="redis-input"
+                <AutoComplete
+                  className="business-handler-autocomplete"
                   value={businessHandler}
-                  onChange={(e) => {
-                    setBusinessHandler(e.target.value);
+                  options={businessUserOptions}
+                  placeholder={businessUsersLoading ? "正在加载内测/VIP 用户…" : "选择内测用户，或输入 handler 后回车"}
+                  filterOption={(inputValue, option) =>
+                    String(option?.label || option?.value || "").toLowerCase().includes(inputValue.toLowerCase())
+                  }
+                  onChange={(value) => {
+                    setBusinessHandler(value);
                     setBusinessLookup(null);
                   }}
+                  onSelect={(value) => {
+                    setBusinessHandler(value);
+                    void handleBusinessLookup(value);
+                  }}
                   onKeyDown={(e) => { if (e.key === "Enter") void handleBusinessLookup(); }}
-                  placeholder="输入 X handler，如 @jack"
                 />
-                <button className="redis-btn redis-btn-primary" disabled={businessLoading || !businessScene} onClick={handleBusinessLookup}>{businessLoading ? "查询中" : "定位"}</button>
+                <button className="redis-btn redis-btn-primary" disabled={businessLoading || !businessScene} onClick={() => void handleBusinessLookup()}>{businessLoading ? "查询中" : "定位"}</button>
               </div>
               {businessLookup ? (
                 <div className="business-key-result">

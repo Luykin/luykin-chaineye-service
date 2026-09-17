@@ -146,6 +146,25 @@
   margin-top: 8px;
 }
 
+.redis-section .business-handler-autocomplete {
+  flex: 1;
+  min-width: 0;
+}
+
+.redis-section .business-handler-autocomplete .ant-select-selector {
+  height: 38px !important;
+  border-color: var(--admin-border-soft) !important;
+  background: var(--admin-surface) !important;
+  box-shadow: none !important;
+}
+
+.redis-section .business-handler-autocomplete .ant-select-selection-search-input,
+.redis-section .business-handler-autocomplete .ant-select-selection-item,
+.redis-section .business-handler-autocomplete .ant-select-selection-placeholder {
+  height: 36px !important;
+  line-height: 36px !important;
+}
+
 .redis-section .business-key-result {
   margin-top: 12px;
   padding-top: 12px;
