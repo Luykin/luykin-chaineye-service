@@ -144,7 +144,7 @@ const POST_FIELD_GUIDE = [
   { field: "topics / keywords", desc: "内容 AI 生成主题标签与热词，保存到 EchohuntSocialListeningPosts.topics / keywords。" },
   { field: "summaryZh / summaryEn", desc: "AI 生成中英文摘要，保存到 EchohuntSocialListeningPosts.summaryZh / summaryEn；不再生成全文翻译 postZh。" },
   { field: "projectAttitudeScore", desc: "项目态度分，保存到 EchohuntSocialListeningPosts.projectAttitudeScore / sentimentScore。" },
-  { field: "ai.relevantToProject", desc: "AI 返回的 relevant_to_project 映射：true 表示有效项目讨论；false 时项目态度会被置为 unknown。" },
+  { field: "ai.relevantToProject / ai.relevanceScore", desc: "AI 返回的项目相关性布尔值与 1–10 分数；分数越高表示越直接讨论项目，历史数据可为空。" },
   { field: "sentiment", desc: "positive / neutral / negative / unknown；无关、证据不足、无法可靠判断会写 unknown，不强行并入 neutral。" },
   { field: "sentimentSummaryZh", desc: "态度判断原因，保存到 EchohuntSocialListeningPosts.sentimentSummaryZh。" },
   { field: "ai.*Status", desc: "标签、摘要、态度和总状态，保存到 tagStatus / summaryStatus / attitudeStatus / aiStatus。" },
@@ -1105,6 +1105,7 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
                           <Card size="small" title="态度字段" bordered={false} style={{ background: "#fffdf8" }}>
                             <Descriptions size="small" column={1}>
                               <Descriptions.Item label="relevant_to_project"><RelevantToProjectValue value={ai.relevantToProject} /></Descriptions.Item>
+                              <Descriptions.Item label="relevance_score">{ai.relevanceScore === null || ai.relevanceScore === undefined ? <Text type="secondary">未生成</Text> : <Text strong>{String(ai.relevanceScore)}</Text>}</Descriptions.Item>
                               <Descriptions.Item label="sentiment">{statusTag(post.sentiment)}</Descriptions.Item>
                               <Descriptions.Item label="projectAttitudeScore">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? <Text type="secondary">未生成</Text> : <Text strong>{String(row.projectAttitudeScore)}</Text>}</Descriptions.Item>
                               <Descriptions.Item label="sentimentSummaryZh"><AiTextValue value={row.sentimentSummaryZh} rows={3} /></Descriptions.Item>

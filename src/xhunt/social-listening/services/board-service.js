@@ -317,7 +317,10 @@ function serializePost(record, { includeRelevantToProject = false } = {}) {
       aiAnalyzedAt: row.aiAnalyzedAt || null,
       aiSource: row.aiSource || null,
       aiError: row.aiError || null,
-      ...(includeRelevantToProject ? { relevantToProject: typeof relevantToProject === "boolean" ? relevantToProject : null } : {}),
+      ...(includeRelevantToProject ? {
+        relevantToProject: typeof relevantToProject === "boolean" ? relevantToProject : null,
+        relevanceScore: row.projectRelevanceScore === null || row.projectRelevanceScore === undefined ? null : Number(row.projectRelevanceScore),
+      } : {}),
     },
   };
 }

@@ -148,6 +148,7 @@ export interface SocialListeningPost {
     aiSource?: string | null;
     aiError?: string | null;
     relevantToProject?: boolean | null;
+    relevanceScore?: number | null;
   };
 }
 

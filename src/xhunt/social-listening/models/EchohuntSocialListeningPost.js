@@ -31,6 +31,7 @@ module.exports = (sequelize) => {
       metricsRefreshedAt: { type: DataTypes.DATE, allowNull: true, comment: "互动指标最后一次完成源库回查的时间" },
       sentiment: { type: DataTypes.STRING(32), allowNull: true, comment: "项目态度情绪：positive/neutral/negative/unknown" },
       projectAttitudeScore: { type: DataTypes.DECIMAL(8, 4), allowNull: true, comment: "项目态度 AI 分数，旧口径 score < 4 为负面" },
+      projectRelevanceScore: { type: DataTypes.DECIMAL(8, 4), allowNull: true, comment: "项目相关性 AI 分数，1–10 分，数值越高越直接相关" },
       sentimentScore: { type: DataTypes.DECIMAL(8, 4), allowNull: true, comment: "兼容情绪分数字段，默认等同 projectAttitudeScore" },
       sentimentSummaryZh: { type: DataTypes.TEXT, allowNull: true, comment: "项目态度中文摘要/原因" },
       topics: { type: DataTypes.JSONB, allowNull: true, comment: "主题标签 JSON，由 Social Listening 本地 LLM tweet_tag_v2 逻辑生成" },

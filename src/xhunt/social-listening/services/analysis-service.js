@@ -755,7 +755,7 @@ async function callTweetAnalysisAi(board, post, options = {}) {
     return {
       tag: { topics: [], keywords: [], raw: {}, promptTrace: promptTrace.analysis },
       summary: { summaryZh: null, summaryEn: null, raw: {}, promptTrace: promptTrace.analysis },
-      attitude: { score: 5, sentiment: SENTIMENTS.UNKNOWN, relevantToProject: null, confidence: null, summary: null, raw: {}, promptTrace: promptTrace.analysis },
+      attitude: { score: 5, sentiment: SENTIMENTS.UNKNOWN, relevantToProject: null, relevanceScore: null, confidence: null, summary: null, raw: {}, promptTrace: promptTrace.analysis },
       promptTrace,
       raw: {},
     };
@@ -765,6 +765,10 @@ async function callTweetAnalysisAi(board, post, options = {}) {
   const summary = extractSummaryResult(data);
   const explicitSentiment = normalizeSentiment(data.sentiment);
   const relevantToProject = data.relevant_to_project ?? data.relevantToProject;
+  const rawRelevanceScore = data.relevance_score ?? data.relevanceScore;
+  const relevanceScore = rawRelevanceScore === null || rawRelevanceScore === undefined || rawRelevanceScore === ""
+    ? null
+    : Math.max(1, Math.min(10, Number(rawRelevanceScore)));
   const rawConfidence = data.confidence;
   const confidence = rawConfidence === null || rawConfidence === undefined || rawConfidence === "" ? NaN : Number(rawConfidence);
   const sentiment = explicitSentiment || scoreToSentiment(data.score, aiConfig);
@@ -780,6 +784,7 @@ async function callTweetAnalysisAi(board, post, options = {}) {
       score: data.score,
       sentiment: strictSentiment,
       relevantToProject: relevantToProject === undefined ? null : Boolean(relevantToProject),
+      relevanceScore: Number.isFinite(relevanceScore) ? relevanceScore : null,
       confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
       summary: data.attitude_summary || data.attitudeSummary || data.summary || null,
       raw: data,
@@ -952,6 +957,7 @@ async function analyzePendingPostAi(board, options = {}) {
 
       if (shouldGenerateAttitude) {
         patch.projectAttitudeScore = result.attitude.score;
+        patch.projectRelevanceScore = result.attitude.relevanceScore;
         patch.sentimentScore = result.attitude.score;
         patch.sentiment = result.attitude.sentiment;
         patch.sentimentSummaryZh = result.attitude.summary;
@@ -960,6 +966,7 @@ async function analyzePendingPostAi(board, options = {}) {
           score: result.attitude.score,
           sentiment: result.attitude.sentiment,
           relevantToProject: result.attitude.relevantToProject,
+          relevanceScore: result.attitude.relevanceScore,
           confidence: result.attitude.confidence,
           summary: result.attitude.summary,
           prompt: result.attitude.promptTrace,
