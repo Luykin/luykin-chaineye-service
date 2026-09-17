@@ -114,6 +114,117 @@
   padding: 20px;
 }
 
+.redis-section .business-key-tool {
+  padding: 16px 20px;
+  background: var(--admin-surface-soft);
+  border-bottom: 1px solid var(--admin-surface-hover);
+}
+
+.redis-section .business-key-tool-head h4,
+.redis-section .query-form-label {
+  display: block;
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--admin-text);
+}
+
+.redis-section .business-key-tool-head p,
+.redis-section .business-key-description {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--admin-text-muted);
+}
+
+.redis-section .business-key-select {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.redis-section .business-key-input-group {
+  margin-top: 8px;
+}
+
+.redis-section .business-key-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--admin-border);
+}
+
+.redis-section .business-key-user {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--admin-text);
+}
+
+.redis-section .business-key-user span {
+  color: var(--admin-text-muted);
+}
+
+.redis-section .business-key-list {
+  margin-top: 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.redis-section .business-key-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.redis-section .business-key-item:last-child {
+  border-bottom: none;
+}
+
+.redis-section .business-key-item > div {
+  min-width: 0;
+}
+
+.redis-section .business-key-item strong,
+.redis-section .business-key-item code,
+.redis-section .business-key-item span {
+  display: block;
+}
+
+.redis-section .business-key-item strong {
+  font-size: 0.75rem;
+  color: var(--admin-text);
+}
+
+.redis-section .business-key-item code {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', ui-monospace, monospace;
+  font-size: 0.6875rem;
+  color: var(--admin-text-muted);
+}
+
+.redis-section .business-key-item span {
+  margin-top: 3px;
+  font-size: 0.6875rem;
+  color: var(--admin-text-muted);
+}
+
+.redis-section .business-key-reset {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.redis-section .query-form-label {
+  margin-bottom: 10px;
+  color: var(--admin-text-muted);
+}
+
 .redis-section .input-group {
   display: flex;
   gap: 8px;

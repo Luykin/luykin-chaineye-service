@@ -11,7 +11,13 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const { adminAuth, requireRole } = require("../middleware/adminAuth");
 const { getRedisClient } = require("../../lib/redisClient");
-const { XhuntAdminAuditLog } = require("../../models/postgres-start");
+const { Op } = require("sequelize");
+const { XHuntUser, XhuntAdminAuditLog } = require("../../models/postgres-start");
+const {
+  getGhostFollowingAnalyzeQuotaKey,
+  getGhostFollowingAnalyzeHistoryKey,
+  getGhostFollowingListQuotaKey,
+} = require("../../xhunt/constants/ghost-following-redis-keys");
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -31,6 +37,32 @@ const SENSITIVE_KEY_PREFIXES = [
 
 // 最大 Value 显示大小 (100KB)
 const MAX_VALUE_SIZE = 100 * 1024;
+
+// 仅在这里登记可以按用户处理的 Redis 业务场景。新增场景时必须提供明确的
+// key 生成函数，避免管理端成为任意 Redis key 拼接/删除入口。
+const REDIS_BUSINESS_KEY_SCENARIOS = [
+  {
+    id: "ghost-following-analyze-quota",
+    label: "Ghost Following · 分析额度",
+    description: "重置会同时清除分析额度和 30 天申领冷却记录；用户下次分析会重新领取额度。",
+    keyDefinitions: [
+      { label: "分析额度", getKey: getGhostFollowingAnalyzeQuotaKey },
+      { label: "申领冷却记录", getKey: getGhostFollowingAnalyzeHistoryKey },
+    ],
+  },
+  {
+    id: "ghost-following-list-quota",
+    label: "Ghost Following · Following 额度",
+    description: "重置会清除 Following 查询的月额度；用户下次查询会重新创建额度。",
+    keyDefinitions: [
+      { label: "Following 月额度", getKey: getGhostFollowingListQuotaKey },
+    ],
+  },
+];
+
+const REDIS_BUSINESS_KEY_SCENARIO_MAP = new Map(
+  REDIS_BUSINESS_KEY_SCENARIOS.map((scenario) => [scenario.id, scenario])
+);
 
 
 const REDIS_CONFIG_CATALOG = [
@@ -819,6 +851,59 @@ async function getKeyInfo(redis, key) {
   };
 }
 
+function normalizeTwitterHandler(handler) {
+  const normalized = String(handler || "").trim().replace(/^@/, "").toLowerCase();
+  if (!/^[a-z0-9_]{1,64}$/.test(normalized)) {
+    const error = new Error("请输入有效的 X handler（可带 @，仅限字母、数字和下划线）");
+    error.statusCode = 400;
+    throw error;
+  }
+  return normalized;
+}
+
+function getRedisBusinessKeyScenario(sceneId) {
+  const scenario = REDIS_BUSINESS_KEY_SCENARIO_MAP.get(String(sceneId || ""));
+  if (!scenario) {
+    const error = new Error("不支持的 Redis 业务场景");
+    error.statusCode = 400;
+    throw error;
+  }
+  return scenario;
+}
+
+async function findXHuntUserByHandler(handler) {
+  const normalizedHandler = normalizeTwitterHandler(handler);
+  const user = await XHuntUser.findOne({
+    where: {
+      username: { [Op.iLike]: normalizedHandler },
+    },
+    attributes: ["id", "username", "displayName", "twitterId"],
+  });
+
+  if (!user) {
+    const error = new Error(`未找到 handler 为 @${normalizedHandler} 的 XHunt 用户`);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return { normalizedHandler, user };
+}
+
+function serializeBusinessKeyScenario(scenario) {
+  return {
+    id: scenario.id,
+    label: scenario.label,
+    description: scenario.description,
+  };
+}
+
+function getBusinessScenarioKeys(scenario, userId) {
+  return scenario.keyDefinitions.map((definition) => ({
+    label: definition.label,
+    key: definition.getKey(userId),
+  }));
+}
+
 
 /**
  * 获取常用 Redis 运行配置
@@ -1171,6 +1256,100 @@ router.get("/query", adminAuth, requireRole("super"), async (req, res) => {
   } catch (err) {
     console.error("[redis admin] query error:", err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * 获取可按 X handler 查询/重置的 Redis 业务场景
+ * GET /api/admin/system/redis/business-keys/scenarios
+ */
+router.get("/business-keys/scenarios", adminAuth, requireRole("super"), (req, res) => {
+  res.json({
+    success: true,
+    data: REDIS_BUSINESS_KEY_SCENARIOS.map(serializeBusinessKeyScenario),
+  });
+});
+
+/**
+ * 通过 X handler 定位预置业务场景的 Redis key，并返回 key 当前状态
+ * GET /api/admin/system/redis/business-keys/lookup?scene=xxx&handler=xxx
+ */
+router.get("/business-keys/lookup", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const scenario = getRedisBusinessKeyScenario(req.query.scene);
+    const { normalizedHandler, user } = await findXHuntUserByHandler(req.query.handler);
+    const redis = await getRedisClient();
+    const keys = getBusinessScenarioKeys(scenario, user.id);
+    const keyStates = await Promise.all(keys.map(async (item) => ({
+      ...item,
+      info: await getKeyInfo(redis, item.key),
+    })));
+
+    res.json({
+      success: true,
+      data: {
+        scenario: serializeBusinessKeyScenario(scenario),
+        user: {
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName,
+          twitterId: user.twitterId,
+          handler: `@${normalizedHandler}`,
+        },
+        keys: keyStates,
+      },
+    });
+  } catch (err) {
+    console.error("[redis admin] business key lookup error:", err);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * 重置预置业务场景的全部 Redis key。不会接受客户端传入的原始 key。
+ * POST /api/admin/system/redis/business-keys/reset
+ */
+router.post("/business-keys/reset", adminAuth, requireRole("super"), express.json(), async (req, res) => {
+  try {
+    const scenario = getRedisBusinessKeyScenario(req.body?.scene);
+    const { normalizedHandler, user } = await findXHuntUserByHandler(req.body?.handler);
+    const keys = getBusinessScenarioKeys(scenario, user.id);
+    const redis = await getRedisClient();
+    const deleted = keys.length ? await redis.del(keys.map((item) => item.key)) : 0;
+
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser.id,
+        email: req.adminUser.email,
+        action: "redis-business-key-reset",
+        route: "/admin/system/redis/business-keys/reset",
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: true,
+        message: JSON.stringify({
+          scene: scenario.id,
+          handler: normalizedHandler,
+          xhuntUserId: user.id,
+          keys: keys.map((item) => item.key),
+          deleted,
+        }),
+      });
+    } catch (auditErr) {
+      console.error("[redis admin] business key reset audit log error:", auditErr);
+    }
+
+    res.json({
+      success: true,
+      message: `已重置 ${scenario.label}，删除 ${deleted} 个 Key`,
+      data: {
+        deleted,
+        keys: keys.map((item) => item.key),
+      },
+    });
+  } catch (err) {
+    console.error("[redis admin] business key reset error:", err);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
   }
 });
 

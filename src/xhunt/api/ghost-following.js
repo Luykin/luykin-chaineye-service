@@ -5,6 +5,11 @@ const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
 const { checkProStatusRequired } = require("../middleware/pro-status");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const {
+  getGhostFollowingAnalyzeQuotaKey,
+  getGhostFollowingAnalyzeHistoryKey,
+  getGhostFollowingListQuotaKey,
+} = require("../constants/ghost-following-redis-keys");
 
 const router = express.Router();
 
@@ -20,11 +25,6 @@ const FOLLOWING_QUOTA_CONFIG = {
   monthlyLimit: 150,
   periodDays: 30,
 };
-
-// Redis Key 前缀
-const REDIS_KEY_PREFIX = "xhunt:ghost:new";
-// Following 额度独立的 Key 前缀
-const FOLLOWING_REDIS_KEY_PREFIX = "xhunt:ghost:following:new";
 
 // ======== CryptoHunt Pro API 配置 ========
 const PRO_API_CONFIG = {
@@ -321,14 +321,14 @@ end
  * 获取额度 Redis Key
  */
 function getQuotaKey(userId) {
-  return `${REDIS_KEY_PREFIX}:${userId}:quota`;
+  return getGhostFollowingAnalyzeQuotaKey(userId);
 }
 
 /**
  * 获取历史记录 Redis Key
  */
 function getHistoryKey(userId) {
-  return `${REDIS_KEY_PREFIX}:${userId}:history`;
+  return getGhostFollowingAnalyzeHistoryKey(userId);
 }
 
 /**
@@ -958,7 +958,7 @@ router.get(
  * 获取 Following 额度 Redis Key
  */
 function getFollowingQuotaKey(userId) {
-  return `${FOLLOWING_REDIS_KEY_PREFIX}:${userId}:quota`;
+  return getGhostFollowingListQuotaKey(userId);
 }
 
 /**

@@ -3,11 +3,14 @@ import { Modal, message } from "antd";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
   deleteRedisKey,
+  fetchRedisBusinessKeyScenarios,
   fetchRedisConfig,
   fetchRedisDiagnostics,
   fetchRedisInfo,
   fetchRedisSystemd,
   queryRedisKey,
+  lookupRedisBusinessKeys,
+  resetRedisBusinessKeys,
   resetRedisSlowlog,
   scanRedisKeys,
   updateRedisConfig,
@@ -15,6 +18,8 @@ import {
   updateRedisKey,
   type RedisConfigData,
   type RedisConfigItem,
+  type RedisBusinessKeyLookup,
+  type RedisBusinessKeyScenario,
   type RedisDiagnosticsData,
   type RedisDiagnosticsFinding,
   type RedisInfo,
@@ -134,6 +139,12 @@ export function RedisManagementPage() {
   const [systemdSaving, setSystemdSaving] = useState(false);
   const [savingConfigKey, setSavingConfigKey] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState("");
+  const [businessScenarios, setBusinessScenarios] = useState<RedisBusinessKeyScenario[]>([]);
+  const [businessScene, setBusinessScene] = useState("");
+  const [businessHandler, setBusinessHandler] = useState("");
+  const [businessLookup, setBusinessLookup] = useState<RedisBusinessKeyLookup | null>(null);
+  const [businessLoading, setBusinessLoading] = useState(false);
+  const [businessResetting, setBusinessResetting] = useState(false);
   const [pattern, setPattern] = useState("");
   const [scannedKeys, setScannedKeys] = useState<string[]>([]);
   const [current, setCurrent] = useState<RedisKeyInfo | null>(null);
@@ -153,6 +164,17 @@ export function RedisManagementPage() {
       setInfo(resp.data || null);
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "加载 Redis 信息失败");
+    }
+  }
+
+  async function loadBusinessScenarios() {
+    try {
+      const resp = await fetchRedisBusinessKeyScenarios();
+      const scenarios = resp.data || [];
+      setBusinessScenarios(scenarios);
+      setBusinessScene((currentScene) => currentScene || scenarios[0]?.id || "");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "加载 Redis 业务场景失败");
     }
   }
 
@@ -205,6 +227,7 @@ export function RedisManagementPage() {
   useEffect(() => {
     void loadInfo();
     void loadConfig();
+    void loadBusinessScenarios();
   }, []);
 
   useEffect(() => {
@@ -246,6 +269,55 @@ export function RedisManagementPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleBusinessLookup() {
+    if (!businessScene) {
+      messageApi.warning("请选择业务场景");
+      return;
+    }
+    if (!businessHandler.trim()) {
+      messageApi.warning("请输入用户的 X handler");
+      return;
+    }
+
+    setBusinessLoading(true);
+    try {
+      const resp = await lookupRedisBusinessKeys({ scene: businessScene, handler: businessHandler.trim() });
+      setBusinessLookup(resp.data || null);
+    } catch (error) {
+      setBusinessLookup(null);
+      messageApi.error(error instanceof Error ? error.message : "查询业务 Key 失败");
+    } finally {
+      setBusinessLoading(false);
+    }
+  }
+
+  async function handleBusinessReset() {
+    if (!businessLookup) return;
+
+    Modal.confirm({
+      title: `确认重置「${businessLookup.scenario.label}」？`,
+      content: `将删除 @${businessLookup.user.username || businessLookup.user.handler.replace(/^@/, "")} 的 ${businessLookup.keys.length} 个业务 Key。用户下次使用该功能时会按业务规则重新创建额度/状态。`,
+      okText: "确认重置",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setBusinessResetting(true);
+        try {
+          const resp = await resetRedisBusinessKeys({ scene: businessLookup.scenario.id, handler: businessHandler.trim() });
+          messageApi.success(resp.message || `已删除 ${resp.data?.deleted || 0} 个业务 Key`);
+          if (current && businessLookup.keys.some((item) => item.key === current.key)) {
+            setCurrent(null);
+          }
+          await handleBusinessLookup();
+        } catch (error) {
+          messageApi.error(error instanceof Error ? error.message : "重置业务 Key 失败");
+        } finally {
+          setBusinessResetting(false);
+        }
+      },
+    });
   }
 
   async function handleScan() {
@@ -498,7 +570,61 @@ export function RedisManagementPage() {
         <div className="redis-main">
           <div className="redis-panel redis-panel-query">
             <div className="panel-header"><h3>查询 Key</h3></div>
+            <div className="business-key-tool">
+              <div className="business-key-tool-head">
+                <div>
+                  <h4>用户业务 Key</h4>
+                  <p>按 X handler 定位常见业务的精确 Key，无需手动拼接。</p>
+                </div>
+              </div>
+              <select
+                className="redis-input business-key-select"
+                value={businessScene}
+                onChange={(e) => {
+                  setBusinessScene(e.target.value);
+                  setBusinessLookup(null);
+                }}
+              >
+                {businessScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label}</option>)}
+              </select>
+              <div className="input-group business-key-input-group">
+                <input
+                  className="redis-input"
+                  value={businessHandler}
+                  onChange={(e) => {
+                    setBusinessHandler(e.target.value);
+                    setBusinessLookup(null);
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") void handleBusinessLookup(); }}
+                  placeholder="输入 X handler，如 @jack"
+                />
+                <button className="redis-btn redis-btn-primary" disabled={businessLoading || !businessScene} onClick={handleBusinessLookup}>{businessLoading ? "查询中" : "定位"}</button>
+              </div>
+              {businessLookup ? (
+                <div className="business-key-result">
+                  <div className="business-key-user">
+                    <strong>{businessLookup.user.handler}</strong>
+                    {businessLookup.user.displayName ? <span>{businessLookup.user.displayName}</span> : null}
+                  </div>
+                  <p className="business-key-description">{businessLookup.scenario.description}</p>
+                  <div className="business-key-list">
+                    {businessLookup.keys.map((item) => (
+                      <div className="business-key-item" key={item.key}>
+                        <div>
+                          <strong>{item.label}</strong>
+                          <code>{item.key}</code>
+                          <span>{item.info ? `${item.info.type} · ${formatDuration(item.info.ttl)}` : "当前未创建"}</span>
+                        </div>
+                        <button className="btn-text" disabled={!item.info} onClick={() => handleQuery(item.key)}>查看</button>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="redis-btn redis-btn-danger business-key-reset" disabled={businessResetting} onClick={handleBusinessReset}>{businessResetting ? "重置中" : "重置该场景"}</button>
+                </div>
+              ) : null}
+            </div>
             <div className="query-form">
+              <span className="query-form-label">原始 Key 查询</span>
               <div className="input-group">
                 <input className="redis-input" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void handleQuery(); }} placeholder="输入 Key，如: user:session:xxx" />
                 <button className="redis-btn redis-btn-primary" disabled={loading} onClick={() => handleQuery()}>查询</button>

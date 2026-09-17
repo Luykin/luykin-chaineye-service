@@ -26,6 +26,30 @@ export interface RedisKeyInfo {
   parsedValue?: unknown;
 }
 
+export interface RedisBusinessKeyScenario {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface RedisBusinessKeyLookupItem {
+  label: string;
+  key: string;
+  info: RedisKeyInfo | null;
+}
+
+export interface RedisBusinessKeyLookup {
+  scenario: RedisBusinessKeyScenario;
+  user: {
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    twitterId: string | null;
+    handler: string;
+  };
+  keys: RedisBusinessKeyLookupItem[];
+}
+
 
 export interface RedisConfigItem {
   key: string;
@@ -181,6 +205,22 @@ export function fetchRedisInfo() {
 
 export function queryRedisKey(key: string) {
   return apiRequest<ApiEnvelope<RedisKeyInfo | null>>(`/admin/system/redis/query?key=${encodeURIComponent(key)}`);
+}
+
+export function fetchRedisBusinessKeyScenarios() {
+  return apiRequest<ApiEnvelope<RedisBusinessKeyScenario[]>>("/admin/system/redis/business-keys/scenarios");
+}
+
+export function lookupRedisBusinessKeys(params: { scene: string; handler: string }) {
+  const query = new URLSearchParams(params);
+  return apiRequest<ApiEnvelope<RedisBusinessKeyLookup>>(`/admin/system/redis/business-keys/lookup?${query.toString()}`);
+}
+
+export function resetRedisBusinessKeys(params: { scene: string; handler: string }) {
+  return apiRequest<ApiEnvelope<{ deleted: number; keys: string[] }>>("/admin/system/redis/business-keys/reset", {
+    method: "POST",
+    body: params,
+  });
 }
 
 export function scanRedisKeys(pattern: string, count = 100) {
