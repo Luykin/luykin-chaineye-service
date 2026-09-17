@@ -207,6 +207,12 @@
   min-width: 0;
 }
 
+.redis-section .business-key-item-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
 .redis-section .business-key-item strong,
 .redis-section .business-key-item code,
 .redis-section .business-key-item span {

@@ -46,8 +46,8 @@ const REDIS_BUSINESS_KEY_SCENARIOS = [
     label: "Ghost Following · 分析额度",
     description: "重置会同时清除分析额度和 30 天申领冷却记录；用户下次分析会重新领取额度。",
     keyDefinitions: [
-      { label: "分析额度", getKey: getGhostFollowingAnalyzeQuotaKey },
-      { label: "申领冷却记录", getKey: getGhostFollowingAnalyzeHistoryKey },
+      { label: "分析额度", getKey: (user) => getGhostFollowingAnalyzeQuotaKey(user.id) },
+      { label: "申领冷却记录", getKey: (user) => getGhostFollowingAnalyzeHistoryKey(user.id) },
     ],
   },
   {
@@ -55,10 +55,48 @@ const REDIS_BUSINESS_KEY_SCENARIOS = [
     label: "Ghost Following · Following 额度",
     description: "重置会清除 Following 查询的月额度；用户下次查询会重新创建额度。",
     keyDefinitions: [
-      { label: "Following 月额度", getKey: getGhostFollowingListQuotaKey },
+      { label: "Following 月额度", getKey: (user) => getGhostFollowingListQuotaKey(user.id) },
     ],
   },
+  {
+    id: "kol-chat-daily-limit",
+    label: "KOL Chat · 今日额度",
+    description: "重置会清除该用户今天的 KOL Chat 调用计数；额度仍会在北京时间 00:00 自然重置。",
+    keyDefinitions: [
+      { label: "KOL Chat 今日调用次数", getKey: (user) => `kol_chat_limit:user:${user.id}:${getBeijingDate()}` },
+    ],
+  },
+  {
+    id: "ai-detect-daily-limit",
+    label: "AI Detect · 今日额度",
+    description: "重置会清除该用户今天的 AI Detect 调用计数；额度仍会在北京时间 00:00 自然重置。",
+    keyDefinitions: [
+      { label: "AI Detect 今日调用次数", getKey: (user) => `ai_detect_limit:user:${user.id}:${getBeijingDate()}` },
+    ],
+  },
+  {
+    id: "kol-marketing-search-daily-limit",
+    label: "KOL Marketing · 今日搜索额度",
+    description: "重置会清除该用户今天的 KOL Marketing 搜索计数；额度仍会在北京时间 00:00 自然重置。",
+    keyDefinitions: [
+      { label: "KOL Marketing 今日搜索次数", getKey: (user) => `kol_marketing_search_limit:tw:${user.twitterId}:${getBeijingDate()}` },
+    ],
+  },
+  {
+    id: "user-settings-cache",
+    label: "用户设置 · 缓存",
+    description: "重置仅清除 Redis 缓存，不会修改数据库中的用户设置；用户下次读取时会自动回源并重建缓存。",
+    keyDefinitions: ["all", "cleaner", "display", "features", "sidebars"].map((category) => ({
+      label: `用户设置缓存 · ${category}`,
+      getKey: (user) => `xhunt:user_settings:${user.id}:${category}`,
+    })),
+  },
 ];
+
+function getBeijingDate() {
+  const beijingTime = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
+  return beijingTime.toISOString().split("T")[0];
+}
 
 const REDIS_BUSINESS_KEY_SCENARIO_MAP = new Map(
   REDIS_BUSINESS_KEY_SCENARIOS.map((scenario) => [scenario.id, scenario])
@@ -897,10 +935,10 @@ function serializeBusinessKeyScenario(scenario) {
   };
 }
 
-function getBusinessScenarioKeys(scenario, userId) {
+function getBusinessScenarioKeys(scenario, user) {
   return scenario.keyDefinitions.map((definition) => ({
     label: definition.label,
-    key: definition.getKey(userId),
+    key: definition.getKey(user),
   }));
 }
 
@@ -1279,7 +1317,7 @@ router.get("/business-keys/lookup", adminAuth, requireRole("super"), async (req,
     const scenario = getRedisBusinessKeyScenario(req.query.scene);
     const { normalizedHandler, user } = await findXHuntUserByHandler(req.query.handler);
     const redis = await getRedisClient();
-    const keys = getBusinessScenarioKeys(scenario, user.id);
+    const keys = getBusinessScenarioKeys(scenario, user);
     const keyStates = await Promise.all(keys.map(async (item) => ({
       ...item,
       info: await getKeyInfo(redis, item.key),
@@ -1313,7 +1351,7 @@ router.post("/business-keys/reset", adminAuth, requireRole("super"), express.jso
   try {
     const scenario = getRedisBusinessKeyScenario(req.body?.scene);
     const { normalizedHandler, user } = await findXHuntUserByHandler(req.body?.handler);
-    const keys = getBusinessScenarioKeys(scenario, user.id);
+    const keys = getBusinessScenarioKeys(scenario, user);
     const redis = await getRedisClient();
     const deleted = keys.length ? await redis.del(keys.map((item) => item.key)) : 0;
 

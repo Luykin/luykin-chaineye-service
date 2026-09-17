@@ -339,6 +339,15 @@ export function RedisManagementPage() {
     });
   }
 
+  async function copyBusinessKey(key: string) {
+    try {
+      await navigator.clipboard.writeText(key);
+      messageApi.success("Key 已复制到剪贴板");
+    } catch {
+      messageApi.error("复制失败，请手动复制 Key");
+    }
+  }
+
   async function handleScan() {
     setLoading(true);
     try {
@@ -657,7 +666,10 @@ export function RedisManagementPage() {
                           <code>{item.key}</code>
                           <span>{item.info ? `${item.info.type} · ${formatDuration(item.info.ttl)}` : "当前未创建"}</span>
                         </div>
-                        <button className="btn-text" disabled={!item.info} onClick={() => handleQuery(item.key)}>查看</button>
+                        <div className="business-key-item-actions">
+                          {item.info ? <button className="btn-text" onClick={() => handleQuery(item.key)}>查看</button> : null}
+                          <button className="btn-text" onClick={() => void copyBusinessKey(item.key)}>复制</button>
+                        </div>
                       </div>
                     ))}
                   </div>
