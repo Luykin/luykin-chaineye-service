@@ -9,6 +9,7 @@ import {
   Checkbox,
   Collapse,
   ColorPicker,
+  DatePicker,
   Descriptions,
   Divider,
   Drawer,
@@ -40,6 +41,7 @@ import {
   type TableProps,
 } from "antd";
 import { ClearOutlined, ClockCircleOutlined, DatabaseOutlined, DeleteOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import dayjs, { type Dayjs } from "dayjs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -65,6 +67,7 @@ import {
   pauseSocialListeningAiWorker,
   pauseSocialListeningBoard,
   reconcileRecentSocialListeningBoard,
+  queueSocialListeningPostsReanalysis,
   refreshSocialListeningBoard,
   reanalyzeSocialListeningPost,
   recoverSocialListeningJob,
@@ -875,6 +878,8 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
   const [pageSize, setPageSize] = useState(10);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [bulkReanalyzeOpen, setBulkReanalyzeOpen] = useState(false);
+  const [bulkReanalyzeRange, setBulkReanalyzeRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().subtract(6, "day").startOf("day"), dayjs().endOf("day")]);
   const samplesQuery = useQuery({
     queryKey: ["social-listening", "latest-ai-samples", boardId, page, pageSize, searchTerm],
     queryFn: () => fetchSocialListeningPosts(boardId, { range: "30D", page, pageSize, q: searchTerm, sort: "ai_recent", ai: "analyzed" }),
@@ -888,6 +893,18 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
     mutationFn: (postId: string) => reanalyzeSocialListeningPost(boardId, postId),
     onSuccess: () => { messageApi.success("已按当前提示词重新完成 AI 分析"); void samplesQuery.refetch(); },
     onError: (error: Error) => messageApi.error(error.message || "重新 AI 分析失败"),
+  });
+  const bulkReanalyzeMutation = useMutation({
+    mutationFn: () => queueSocialListeningPostsReanalysis(boardId, {
+      startAt: bulkReanalyzeRange[0].startOf("day").toISOString(),
+      endAt: bulkReanalyzeRange[1].endOf("day").toISOString(),
+    }),
+    onSuccess: (response) => {
+      setBulkReanalyzeOpen(false);
+      messageApi.success(response.data.reused ? "已有批量 AI 重分析任务正在执行，已复用该任务" : "批量 AI 重分析任务已加入队列，可在“更多 → 执行过程”查看进度");
+      void samplesQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "创建批量 AI 重分析任务失败"),
   });
 
   function applySearch(value: string) {
@@ -904,8 +921,36 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
         showIcon
         message="AI 回填检查"
         description="按 AI 分析时间倒序查看。可搜索推文正文、作者或 Tweet ID；单条重跑会直接使用当前生效的提示词覆盖旧 AI 结果，不重新采集原文。"
-        action={<Space size={8} wrap><Text type="secondary">共 {formatNumber(total)} 条</Text><Button size="small" icon={<ReloadOutlined />} loading={samplesQuery.isFetching} onClick={() => samplesQuery.refetch()}>刷新样本</Button></Space>}
+        action={<Space size={8} wrap><Text type="secondary">共 {formatNumber(total)} 条</Text><Button size="small" icon={<ReloadOutlined />} loading={samplesQuery.isFetching} onClick={() => samplesQuery.refetch()}>刷新样本</Button><Button size="small" type="primary" icon={<ReloadOutlined />} onClick={() => setBulkReanalyzeOpen(true)}>批量重新分析</Button></Space>}
       />
+      <Modal
+        open={bulkReanalyzeOpen}
+        title="批量重新 AI 分析"
+        okText="创建任务"
+        cancelText="取消"
+        confirmLoading={bulkReanalyzeMutation.isPending}
+        onCancel={() => setBulkReanalyzeOpen(false)}
+        onOk={() => bulkReanalyzeMutation.mutate()}
+      >
+        <Space direction="vertical" size={14} className="social-listening-full">
+          <Alert
+            type="warning"
+            showIcon
+            message="将覆盖所选时间范围内推文的现有 AI 字段"
+            description="按推文发布时间筛选，最多最近 30 天，默认最近 7 天。任务会交给现有 AI Worker 分批执行，不会重新采集原文；执行进度可在“更多 → 执行过程”查看。"
+          />
+          <DatePicker.RangePicker
+            value={bulkReanalyzeRange}
+            allowClear={false}
+            style={{ width: "100%" }}
+            disabledDate={(date) => date.isAfter(dayjs(), "day") || date.isBefore(dayjs().subtract(29, "day"), "day")}
+            onChange={(dates) => {
+              if (dates?.[0] && dates[1]) setBulkReanalyzeRange([dates[0], dates[1]]);
+            }}
+          />
+          <Text type="secondary">当前范围：{bulkReanalyzeRange[0].format("YYYY-MM-DD")} 至 {bulkReanalyzeRange[1].format("YYYY-MM-DD")}</Text>
+        </Space>
+      </Modal>
       <Card size="small" bordered={false} style={{ background: "#f8fafc" }}>
         <Space wrap className="social-listening-full" size={10}>
           <Input.Search

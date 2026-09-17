@@ -801,7 +801,10 @@ async function analyzePendingPostAi(board, options = {}) {
   const attitudeEnabled = Boolean(aiConfig.projectAttitudeEnabled && hasLocalAiConfig(aiConfig));
   const force = Boolean(options.force);
   const postId = String(options.postId || "").trim();
-  if (force && !postId) throw new Error("SOCIAL_LISTENING_REANALYZE_POST_ID_REQUIRED");
+  const postIds = Array.isArray(options.postIds)
+    ? options.postIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  if (force && !postId && !postIds.length) throw new Error("SOCIAL_LISTENING_REANALYZE_POST_ID_REQUIRED");
   if (!contentEnabled && !attitudeEnabled) {
     return {
       enabled: false,
@@ -832,10 +835,11 @@ async function analyzePendingPostAi(board, options = {}) {
   const postWhere = {
       boardId: board.id,
       text: { [Op.ne]: null },
-      ...(force ? { id: postId } : { [Op.or]: pendingClauses }),
+      ...(force ? { id: postId || { [Op.in]: postIds } } : { [Op.or]: pendingClauses }),
     };
   const posts = await EchohuntSocialListeningPost.findAll({
-    where: applyRecallExcludeAuthorFilter(postWhere, board),
+    // 批量任务已经由后台按看板、日期和具体 ID 固定候选集；不能再套召回排除规则，否则“全部重跑”会悄悄漏掉已入库的旧推文。
+    where: force && postIds.length ? postWhere : applyRecallExcludeAuthorFilter(postWhere, board),
     order: [
       [getAiTextLengthOrder(), "ASC"],
       [getAiRankOrder(), "ASC"],

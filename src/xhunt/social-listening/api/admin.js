@@ -12,7 +12,7 @@ const {
   EchohuntSocialListeningAlert,
   EchohuntSocialListeningAccessAuditLog,
 } = require("../../../models/postgres-start");
-const { SOCIAL_LISTENING_PERMISSION, BOARD_STATUSES } = require("../constants");
+const { SOCIAL_LISTENING_PERMISSION, BOARD_STATUSES, JOB_STATUSES, JOB_TYPES } = require("../constants");
 const {
   resolveMonitoredAccount,
   createMonitoredAccount,
@@ -91,6 +91,7 @@ router.use(createAdminWriteAudit((req) => {
   if (req.method === "POST" && /^\/boards\/[^/]+\/refresh$/.test(req.path)) return "social-listening-board-refresh";
   if (req.method === "POST" && /^\/boards\/[^/]+\/reconcile-recent$/.test(req.path)) return "social-listening-board-reconcile-recent";
   if (req.method === "POST" && /^\/boards\/[^/]+\/ai-config$/.test(req.path)) return "social-listening-board-ai-config-update";
+  if (req.method === "POST" && /^\/boards\/[^/]+\/posts\/reanalyze$/.test(req.path)) return "social-listening-posts-ai-reanalyze";
   if (req.method === "POST" && /^\/boards\/[^/]+\/posts\/[^/]+\/reanalyze$/.test(req.path)) return "social-listening-post-ai-reanalyze";
   if (req.method === "POST" && /^\/boards\/[^/]+\/accesses$/.test(req.path)) return "social-listening-access-grant";
   if (req.method === "DELETE" && /^\/boards\/[^/]+\/accesses\/[^/]+$/.test(req.path)) return "social-listening-access-revoke";
@@ -1173,6 +1174,79 @@ router.delete("/boards/:boardId/accesses/:accessId", async (req, res) => {
     return res.json({ success: true, data: serializeAccess(access) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_REVOKE_FAILED");
+  }
+});
+
+router.post("/boards/:boardId/posts/reanalyze", async (req, res) => {
+  try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+    if (board.status !== BOARD_STATUSES.MONITORING) {
+      throw publicError("BOARD_NOT_MONITORING", 409, "看板未处于监控中，无法创建批量 AI 重分析任务。");
+    }
+
+    const startAt = new Date(req.body?.startAt);
+    const endAt = new Date(req.body?.endAt);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || startAt > endAt) {
+      throw publicError("INVALID_REANALYZE_RANGE", 400, "请选择有效的开始和结束日期。");
+    }
+    const rangeDays = Math.ceil((endAt.getTime() - startAt.getTime()) / (24 * 60 * 60 * 1000));
+    if (rangeDays > 30 || startAt.getTime() < Date.now() - 31 * 24 * 60 * 60 * 1000 || endAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      throw publicError("REANALYZE_RANGE_TOO_LARGE", 400, "批量 AI 重分析仅支持最近 30 天内的时间范围。");
+    }
+
+    const existing = await EchohuntSocialListeningJob.findOne({
+      where: {
+        boardId: board.id,
+        jobType: JOB_TYPES.REANALYZE,
+        status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] },
+      },
+      order: [["createdAt", "DESC"]],
+    });
+    if (existing) {
+      return res.json({ success: true, data: { job: serializeJob(existing), reused: true } });
+    }
+
+    const totalPosts = await EchohuntSocialListeningPost.count({
+      where: {
+        boardId: board.id,
+        text: { [Op.ne]: null },
+        postCreatedAt: { [Op.gte]: startAt, [Op.lte]: endAt },
+      },
+    });
+    if (!totalPosts) {
+      throw publicError("NO_REANALYZE_POSTS", 409, "所选时间范围内没有可重新分析的推文。");
+    }
+
+    const job = await EchohuntSocialListeningJob.create({
+      boardId: board.id,
+      jobType: JOB_TYPES.REANALYZE,
+      status: JOB_STATUSES.PENDING,
+      rangeStartAt: startAt,
+      rangeEndAt: endAt,
+      triggeredBy: "admin",
+      triggeredByAdminId: getAdminId(req),
+      metadata: {
+        stage: "manual_range_reanalyze",
+        source: "admin_ai_backfill_check",
+        totalPosts,
+      },
+      progress: {
+        stage: "manual_range_reanalyze",
+        phase: "queued",
+        statusMessage: `已排队，等待 AI Worker 处理 ${totalPosts} 条推文。`,
+        counters: { total: totalPosts, processed: 0, contentAiAnalyzed: 0, contentAiFailed: 0, aiAnalyzed: 0, aiFailed: 0 },
+      },
+    });
+    await writeAudit({
+      boardId: board.id,
+      adminId: getAdminId(req),
+      action: "posts_ai_reanalyze",
+      payload: { jobId: job.id, totalPosts, rangeStartAt: startAt.toISOString(), rangeEndAt: endAt.toISOString() },
+    });
+    return res.status(201).json({ success: true, data: { job: serializeJob(job), reused: false } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_POSTS_REANALYZE_FAILED");
   }
 });
 
