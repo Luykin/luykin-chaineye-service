@@ -10,6 +10,8 @@ module.exports = (sequelize) =>
       projectTwitterId: { type: DataTypes.STRING(64), allowNull: false },
       projectTwitterHandle: { type: DataTypes.STRING(128), allowNull: true },
       projectDisplayName: { type: DataTypes.STRING(256), allowNull: true },
+      projectTwitterAvatarUrl: { type: DataTypes.STRING(2048), allowNull: true },
+      projectTwitterBannerUrl: { type: DataTypes.STRING(2048), allowNull: true },
       fundingPoolAmount: { type: DataTypes.DECIMAL(20, 2), allowNull: false },
       currency: { type: DataTypes.STRING(8), allowNull: false },
       reservedAmount: { type: DataTypes.DECIMAL(20, 2), allowNull: false, defaultValue: 0 },

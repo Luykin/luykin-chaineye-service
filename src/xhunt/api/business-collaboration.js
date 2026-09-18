@@ -140,7 +140,28 @@ function getAvailableAmountCents(activity) {
   ]);
 }
 
-function serializeActivityForManager(activity, access) {
+function emptyManagerActivityStats() {
+  return { invited: 0, confirmed: 0 };
+}
+
+async function loadManagerActivityStats(activities) {
+  const ids = activities.map((activity) => String(activity.id)).filter(Boolean);
+  if (!ids.length) return new Map();
+  const invitations = await BusinessCollaborationInvitation.findAll({
+    where: { activityId: { [Op.in]: ids } },
+    attributes: ["activityId", "status"],
+  });
+  const statsByActivity = new Map(ids.map((id) => [id, emptyManagerActivityStats()]));
+  invitations.forEach((invitation) => {
+    const stats = statsByActivity.get(String(invitation.activityId));
+    if (!stats) return;
+    stats.invited += 1;
+    if (invitation.status === "confirmed") stats.confirmed += 1;
+  });
+  return statsByActivity;
+}
+
+function serializeActivityForManager(activity, access, stats = null) {
   const item = activity.toJSON ? activity.toJSON() : activity;
   const available = getAvailableAmountCents(item);
   return {
@@ -173,6 +194,7 @@ function serializeActivityForManager(activity, access) {
     status: item.status,
     recruitmentState: recruitmentState(item),
     invitationTemplate: item.invitationTemplate || {},
+    stats: stats || emptyManagerActivityStats(),
     access: access
       ? { id: access.id, role: access.role, status: access.status }
       : undefined,
@@ -401,11 +423,13 @@ router.get("/me", async (req, res) => {
         order: [["updatedAt", "DESC"]],
       }) : Promise.resolve([]),
     ]);
+    const managedActivityRows = accesses.filter((access) => access.activity);
+    const managerStatsByActivity = await loadManagerActivityStats(managedActivityRows.map((access) => access.activity));
     res.set("Cache-Control", "no-store");
     return res.json({
       success: true,
       data: {
-        managedActivities: accesses.filter((access) => access.activity).map((access) => serializeActivityForManager(access.activity, access)),
+        managedActivities: managedActivityRows.map((access) => serializeActivityForManager(access.activity, access, managerStatsByActivity.get(String(access.activity.id)))),
         kolTasks: invitations.map(serializeKolInvitation),
       },
     });

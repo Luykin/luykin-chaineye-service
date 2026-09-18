@@ -97,6 +97,7 @@ function normalizeTwitterAccount(payload) {
     handle,
     displayName: text(source.name || source.displayName || source.display_name || profile.name || handle, 256),
     avatar: text(source.avatar || source.profile_image_url || source.profileImageUrl || profile.profile_image_url, 2048),
+    banner: text(source.banner || source.bannerUrl || source.profile_banner_url || source.profileBannerUrl || profile.banner || profile.banner_url || profile.profile_banner_url, 2048),
     followers: Number(source.followers || source.followers_count || profile.followers_count || 0) || 0,
   };
 }
@@ -123,8 +124,8 @@ function normalizeActivityPayload(payload, { partial = false } = {}) {
     if (!value) throw publicError("项目 X 账号 Twitter ID 不能为空");
     next.projectTwitterId = value;
   }
-  ["projectTwitterHandle", "projectDisplayName", "description"].forEach((key) => {
-    if (has(key)) next[key] = text(payload[key], key === "description" ? 10000 : key === "projectDisplayName" ? 256 : 128);
+  ["projectTwitterHandle", "projectDisplayName", "projectTwitterAvatarUrl", "projectTwitterBannerUrl", "description"].forEach((key) => {
+    if (has(key)) next[key] = text(payload[key], key === "description" ? 10000 : key === "projectDisplayName" ? 256 : key.includes("Url") ? 2048 : 128);
   });
   if (!partial || has("fundingPoolAmount")) next.fundingPoolAmount = decimal(payload.fundingPoolAmount, "资金池金额");
   if (!partial || has("currency")) {
