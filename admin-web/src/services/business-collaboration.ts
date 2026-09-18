@@ -6,10 +6,11 @@ export interface CollaborationActivity { id: string; name: string; description?:
 export interface CollaborationProjectAccount { twitterId: string; handle: string; displayName?: string | null; avatar?: string | null; followers?: number; }
 export interface CollaborationAssignee { id: string; accountName?: string | null; displayName?: string | null; primaryTwitterId?: string | null; primaryGoogleEmail?: string | null; twitterHandle?: string | null; twitterDisplayName?: string | null; }
 
-const base = "/api/admin/business-collaboration/activities";
+const apiBase = "/api/admin/business-collaboration";
+const base = `${apiBase}/activities`;
 export const fetchCollaborationActivities = () => apiRequest<{ success: boolean; data: CollaborationActivity[] }>(base);
-export const lookupCollaborationProjectAccount = (handle: string) => apiRequest<{ success: boolean; data: CollaborationProjectAccount }>(`${base}/project-account?handle=${encodeURIComponent(handle)}`);
-export const fetchCollaborationAssignees = (query = "") => apiRequest<{ success: boolean; data: CollaborationAssignee[] }>(`${base}/assignees?q=${encodeURIComponent(query)}`);
+export const lookupCollaborationProjectAccount = (handle: string) => apiRequest<{ success: boolean; data: CollaborationProjectAccount }>(`${apiBase}/project-account?handle=${encodeURIComponent(handle)}`);
+export const fetchCollaborationAssignees = (query = "") => apiRequest<{ success: boolean; data: CollaborationAssignee[] }>(`${apiBase}/assignees?q=${encodeURIComponent(query)}`);
 export const createCollaborationActivity = (body: Partial<CollaborationActivity>) => apiRequest<{ success: boolean; data: CollaborationActivity }>(base, { method: "POST", body });
 export const updateCollaborationActivity = (id: string, body: Partial<CollaborationActivity>) => apiRequest<{ success: boolean; data: CollaborationActivity }>(`${base}/${id}`, { method: "PATCH", body });
 export const deleteCollaborationActivity = (id: string) => apiRequest<{ success: boolean }>(`${base}/${id}`, { method: "DELETE" });

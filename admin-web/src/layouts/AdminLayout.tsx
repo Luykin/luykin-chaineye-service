@@ -5,7 +5,6 @@ import {
   CaretRightOutlined,
   CheckCircleFilled,
   CodeOutlined,
-  LockOutlined,
   LogoutOutlined,
   MenuOutlined,
   MonitorOutlined,
@@ -66,15 +65,6 @@ const navGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon: Re
 
 function getNavGroupKey(item: AdminNavItem): SidebarGroupKey {
   return item.sidebarGroup || (item.section === "system" ? "system" : "data");
-}
-
-function getPermissionLabel(item: AdminNavItem) {
-  return (
-    <span className="admin-top-nav-no-permission-item">
-      <span className="admin-top-nav-no-permission-title">{item.label}</span>
-      <span className="admin-top-nav-no-permission-badge">无权限</span>
-    </span>
-  );
 }
 
 function getWebAuthnPromptStorageKey(adminId?: number) {
@@ -172,11 +162,6 @@ export function AdminLayout() {
     [hasPermission, visibleMainNavItems]
   );
 
-  const noPermissionNavItems = useMemo(
-    () => visibleMainNavItems.filter((item) => !hasPermission(item.permission)),
-    [hasPermission, visibleMainNavItems]
-  );
-
   const navigationMenuItems = useMemo<MenuProps["items"]>(() => {
     const groupedItems = navGroupDefinitions
       .map((group) => {
@@ -196,31 +181,11 @@ export function AdminLayout() {
       })
       .filter(Boolean) as NonNullable<MenuProps["items"]>;
 
-    const noPermissionGroup = noPermissionNavItems.length
-      ? [
-          {
-            key: "group-no-permission",
-            icon: <LockOutlined />,
-            label: "无权限",
-            popupClassName: "admin-top-nav-popup admin-top-nav-popup--no-permission",
-            children: noPermissionNavItems.map((item) => ({
-              key: `no-permission:${item.key}`,
-              icon: item.icon,
-              label: getPermissionLabel(item),
-            })),
-          },
-        ]
-      : [];
-
-    return [...groupedItems, ...noPermissionGroup];
-  }, [noPermissionNavItems, permittedNavItems]);
+    return groupedItems;
+  }, [permittedNavItems]);
 
   const handleNavigationClick: MenuProps["onClick"] = ({ key }) => {
     const itemKey = String(key);
-    if (itemKey.startsWith("no-permission:")) {
-      messageApi.warning("当前账号暂无此功能权限");
-      return;
-    }
     if (itemKey.startsWith("/")) {
       navigate(itemKey);
     }
