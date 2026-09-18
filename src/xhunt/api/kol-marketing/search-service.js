@@ -1006,6 +1006,21 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
 
   // 所有用户输入都放 bind，SQL 字符串里只拼接白名单生成的固定条件。
   const bind = {};
+  // 活跃度后置筛选时，调用方会单独批量查询近期原创推文；此处不要再为
+  // 每个画像执行一次 LATERAL latest lookup，否则仍会落入原来的超时路径。
+  // activityDays 的 WHERE 本身依赖 activity 别名，因此该条件存在时必须保留 join。
+  const includeLastActive = options.includeLastActive !== false || filters.activityDays !== undefined;
+  const activityJoinSql = includeLastActive
+    ? `LEFT JOIN LATERAL (
+          SELECT t.create_time AS last_active_at
+          FROM dev.tweet t
+          WHERE t.twitter_user_id = p.twitter_user_id
+            AND t.id = t.conversation_id
+            AND t.retweet_id IS NULL
+          ORDER BY t.create_time DESC
+          LIMIT 1
+        ) activity ON true`
+    : "";
 
   if (options.personProfileTypeFilter?.clause) {
     clauses.push(options.personProfileTypeFilter.clause);
@@ -1090,24 +1105,16 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       WITH filtered_profiles AS MATERIALIZED (
         SELECT
           p.twitter_user_id,
-          activity.last_active_at,
+          ${includeLastActive ? "activity.last_active_at," : ""}
           p.marketing_profile_embedding
         FROM dev.kol_marketing_profile p
-        LEFT JOIN LATERAL (
-          SELECT t.create_time AS last_active_at
-          FROM dev.tweet t
-          WHERE t.twitter_user_id = p.twitter_user_id
-            AND t.id = t.conversation_id
-            AND t.retweet_id IS NULL
-          ORDER BY t.create_time DESC
-          LIMIT 1
-        ) activity ON true
+        ${activityJoinSql}
         WHERE ${clauses.join(" AND ")}
       ),
       ranked_profiles AS MATERIALIZED (
         SELECT
           fp.twitter_user_id,
-          fp.last_active_at,
+          ${includeLastActive ? "fp.last_active_at," : ""}
           fp.marketing_profile_embedding,
           count(*) OVER()::integer AS candidate_total
         FROM filtered_profiles fp
@@ -1153,7 +1160,7 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
         p.collaboration_source AS "collaborationSource",
         p.updated_at AS "updatedAt",
         p.metrics_calculated_at AS "metricsCalculatedAt",
-        ranked.last_active_at AS "lastActiveAt",
+        ${includeLastActive ? 'ranked.last_active_at AS "lastActiveAt",' : 'NULL AS "lastActiveAt",'}
         p.embedding_model AS "embeddingModel",
         p.embedding_version AS "embeddingVersion",
         p.embedding_generated_at AS "embeddingGeneratedAt",
@@ -1209,7 +1216,7 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       p.collaboration_source AS "collaborationSource",
       p.updated_at AS "updatedAt",
       p.metrics_calculated_at AS "metricsCalculatedAt",
-      activity.last_active_at AS "lastActiveAt",
+      ${includeLastActive ? 'activity.last_active_at AS "lastActiveAt",' : 'NULL AS "lastActiveAt",'}
       p.embedding_model AS "embeddingModel",
       p.embedding_version AS "embeddingVersion",
       p.embedding_generated_at AS "embeddingGeneratedAt",
@@ -1218,15 +1225,7 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       1 - (p.marketing_profile_embedding <=> $embedding::vector) AS similarity
     FROM dev.kol_marketing_profile p
     LEFT JOIN dev.twitter_user u ON u.id = p.twitter_user_id
-    LEFT JOIN LATERAL (
-      SELECT t.create_time AS last_active_at
-      FROM dev.tweet t
-      WHERE t.twitter_user_id = p.twitter_user_id
-        AND t.id = t.conversation_id
-        AND t.retweet_id IS NULL
-      ORDER BY t.create_time DESC
-      LIMIT 1
-    ) activity ON true
+    ${activityJoinSql}
     WHERE ${clauses.join(" AND ")}
     ORDER BY p.marketing_profile_embedding <=> $embedding::vector
     LIMIT $limit
@@ -1283,6 +1282,7 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
   const personProfileTypeFilter = getKolMarketingPersonProfileFilterSql("p");
   const { sql, bind, searchMode } = buildKolMarketingProfileSearchSql(filters, {
     personProfileTypeFilter,
+    includeLastActive: params.includeLastActive,
   });
 
   const startedAt = Date.now();
@@ -1292,6 +1292,7 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
     searchMode,
     personProfileTypeColumn: personProfileTypeFilter.column || null,
     embeddingDimensions: params.embedding?.length,
+    includeLastActive: params.includeLastActive !== false,
   });
 
   const queryOptions = {
@@ -1455,7 +1456,7 @@ async function applyActivityPostFilter(rows, options = {}) {
   let scannedCount = 0;
   let batchesQueried = 0;
 
-  for (let offset = 0; offset < rows.length && activeRows.length < requestedLimit; offset += ACTIVITY_POST_FILTER_BATCH_SIZE) {
+  for (let offset = 0; offset < rows.length; offset += ACTIVITY_POST_FILTER_BATCH_SIZE) {
     throwIfSearchAborted(isAborted);
     const batch = rows.slice(offset, offset + ACTIVITY_POST_FILTER_BATCH_SIZE);
     if (!batch.length) break;
@@ -1476,13 +1477,14 @@ async function applyActivityPostFilter(rows, options = {}) {
       const lastActiveAt = activityByTwitterUserId.get(String(row.twitterUserId));
       if (!lastActiveAt) continue;
       activeRows.push({ ...row, lastActiveAt });
-      if (activeRows.length >= requestedLimit) break;
     }
   }
 
+  // 该数值是当前有限 recall window 内的活跃候选数，而不是全库精确总数。
+  // 扫完整个 window，避免把提前凑满 requestedLimit 的数量误报成候选总数。
   const candidateTotal = activeRows.length;
   return {
-    items: activeRows.map((row) => ({ ...row, candidateTotal })),
+    items: activeRows.slice(0, requestedLimit).map((row) => ({ ...row, candidateTotal })),
     candidateTotal,
     scannedCount,
     batchesQueried,
@@ -1594,6 +1596,7 @@ async function searchKolMarketingProfiles(params = {}) {
     // 活跃度不参与全量画像的 tweet 关联；先做至多 2,000 条纯向量召回，
     // 再按 1,000 条一批筛选近期原创推文。
     limit: useActivityPostFilter ? getActivityPostFilterCandidateLimit(requestedLimit) : requestedLimit,
+    includeLastActive: !useActivityPostFilter,
   };
   let searchResult;
   let finalRetry = null;
@@ -1645,6 +1648,8 @@ async function searchKolMarketingProfiles(params = {}) {
       ...searchResult,
       items: activityResult.items,
       filters: searchPlan.effectiveFilters,
+      // 对外 limit 始终表示调用方请求的最大返回数量，而不是内部 recall window。
+      limit: requestedLimit,
       searchMode: `${searchResult.searchMode}_activity_post_filter`,
       dbCostMs: Date.now() - dbSearchStartedAt,
       activityPostFilter: {
@@ -1652,6 +1657,7 @@ async function searchKolMarketingProfiles(params = {}) {
         scannedCount: activityResult.scannedCount,
         batchesQueried: activityResult.batchesQueried,
         candidateTotal: activityResult.candidateTotal,
+        candidateTotalScope: "active_recall_window",
       },
     };
   }
