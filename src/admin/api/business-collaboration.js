@@ -175,8 +175,28 @@ function validateActivityDates(next, existing = null) {
   }
 }
 
+function accessUserInclude() {
+  return {
+    model: AuthCenterXhuntUser,
+    as: "authCenterUser",
+    attributes: ["id", "accountName", "displayName", "primaryTwitterId"],
+    include: [{
+      model: AuthCenterXhuntIdentity,
+      as: "identities",
+      where: { provider: "twitter" },
+      required: false,
+      attributes: ["providerSubject", "username", "displayName"],
+    }],
+  };
+}
+
+function activityAccessInclude() {
+  return { model: BusinessCollaborationActivityAccess, as: "accesses", include: [accessUserInclude()] };
+}
+
 function serializeAccess(row) {
   const item = row.toJSON ? row.toJSON() : row;
+  const twitterIdentity = item.authCenterUser?.identities?.[0] || null;
   return {
     id: item.id,
     activityId: item.activityId,
@@ -189,7 +209,14 @@ function serializeAccess(row) {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     user: item.authCenterUser
-      ? { id: item.authCenterUser.id, accountName: item.authCenterUser.accountName, displayName: item.authCenterUser.displayName, primaryTwitterId: item.authCenterUser.primaryTwitterId }
+      ? {
+        id: item.authCenterUser.id,
+        accountName: item.authCenterUser.accountName,
+        displayName: item.authCenterUser.displayName,
+        primaryTwitterId: item.authCenterUser.primaryTwitterId,
+        twitterUsername: twitterIdentity?.username || null,
+        twitterDisplayName: twitterIdentity?.displayName || null,
+      }
       : null,
   };
 }
@@ -282,7 +309,7 @@ async function loadActivity(id, { transaction, lock = false } = {}) {
   }
   const activity = await BusinessCollaborationActivity.findByPk(id, {
     transaction,
-    include: [{ model: BusinessCollaborationActivityAccess, as: "accesses", include: [{ model: AuthCenterXhuntUser, as: "authCenterUser", attributes: ["id", "accountName", "displayName", "primaryTwitterId"] }] }],
+    include: [activityAccessInclude()],
   });
   if (!activity) throw publicError("定向合作活动不存在", 404, "ACTIVITY_NOT_FOUND");
   return activity;
@@ -297,7 +324,7 @@ router.get("/activities", async (req, res) => {
     if (projectTwitterId) where.projectTwitterId = projectTwitterId;
     const activities = await BusinessCollaborationActivity.findAll({
       where,
-      include: [{ model: BusinessCollaborationActivityAccess, as: "accesses", include: [{ model: AuthCenterXhuntUser, as: "authCenterUser", attributes: ["id", "accountName", "displayName", "primaryTwitterId"] }] }],
+      include: [activityAccessInclude()],
       order: [["updatedAt", "DESC"]],
     });
     const statsByActivity = await loadActivityStats(activities);
@@ -449,7 +476,7 @@ router.get("/activities/:activityId/accesses", async (req, res) => {
     await loadActivity(req.params.activityId);
     const rows = await BusinessCollaborationActivityAccess.findAll({
       where: { activityId: req.params.activityId },
-      include: [{ model: AuthCenterXhuntUser, as: "authCenterUser", attributes: ["id", "accountName", "displayName", "primaryTwitterId"] }],
+      include: [accessUserInclude()],
       order: [["createdAt", "DESC"]],
     });
     return res.json({ success: true, data: rows.map(serializeAccess) });
@@ -478,8 +505,9 @@ router.post("/activities/:activityId/accesses", async (req, res) => {
       }
       return BusinessCollaborationActivityAccess.create(values, { transaction });
     });
+    const populatedAccess = await BusinessCollaborationActivityAccess.findByPk(access.id, { include: [accessUserInclude()] });
     await logAdminAction(req, { action: "business-collaboration-access-grant", success: true, message: `activityId=${req.params.activityId};authCenterUserId=${authCenterUserId}` });
-    return res.status(201).json({ success: true, data: serializeAccess(access) });
+    return res.status(201).json({ success: true, data: serializeAccess(populatedAccess || access) });
   } catch (error) {
     await logAdminAction(req, { action: "business-collaboration-access-grant", success: false, message: error.message }).catch(() => {});
     return res.status(error.status || 500).json({ success: false, error: error.code || error.message });

@@ -72,16 +72,22 @@ function getIdempotencyKey(req) {
   return key;
 }
 
-function getTwitterIdentity(req) {
+function getOptionalTwitterIdentity(req) {
   const identity = (req.authCenter?.identities || []).find((item) => item.provider === PROVIDERS.TWITTER);
   const twitterId = String(identity?.providerSubject || "").trim();
-  if (!twitterId) throw publicError("请先使用 X 登录 EchoHunt。", 400, "TWITTER_ID_REQUIRED");
+  if (!twitterId) return null;
   return {
     twitterId,
     username: identity.username || null,
     displayName: identity.displayName || identity.username || null,
     authCenterUserId: req.authCenter.user.id,
   };
+}
+
+function getTwitterIdentity(req) {
+  const identity = getOptionalTwitterIdentity(req);
+  if (!identity) throw publicError("请先使用 X 登录 EchoHunt。", 400, "TWITTER_ID_REQUIRED");
+  return identity;
 }
 
 function text(value, field, max = 0, { required = false } = {}) {
@@ -379,21 +385,21 @@ router.get("/activities/available", async (req, res) => {
 
 router.get("/me", async (req, res) => {
   try {
-    const identity = getTwitterIdentity(req);
+    const identity = getOptionalTwitterIdentity(req);
     const [accesses, invitations] = await Promise.all([
       BusinessCollaborationActivityAccess.findAll({
         where: { authCenterUserId: req.authCenter.user.id, status: "active", role: { [Op.in]: [...ACCESS_ROLES] } },
         include: [{ model: BusinessCollaborationActivity, as: "activity" }],
         order: [[{ model: BusinessCollaborationActivity, as: "activity" }, "updatedAt", "DESC"]],
       }),
-      BusinessCollaborationInvitation.findAll({
+      identity ? BusinessCollaborationInvitation.findAll({
         where: { kolTwitterId: identity.twitterId },
         include: [
           { model: BusinessCollaborationActivity, as: "activity" },
           { model: BusinessCollaboration, as: "collaboration" },
         ],
         order: [["updatedAt", "DESC"]],
-      }),
+      }) : Promise.resolve([]),
     ]);
     res.set("Cache-Control", "no-store");
     return res.json({
