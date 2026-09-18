@@ -7,6 +7,7 @@ const {
   BusinessCollaborationActivityAccess,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
+  XhuntVipTestUser,
   pgInstance,
 } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
@@ -245,36 +246,35 @@ router.get("/project-account", async (req, res) => {
   }
 });
 
-router.get("/assignees", async (req, res) => {
+router.get("/internal-test-users", async (req, res) => {
   try {
-    const query = text(req.query.q, 128) || "";
-    const like = `%${query}%`;
-    const twitterHandleLike = `%${query.replace(/^@+/, "")}%`;
-    const users = await AuthCenterXhuntUser.findAll({
-      where: {
-        status: "active",
-        ...(query ? { [Op.or]: [
-          { accountName: { [Op.iLike]: like } },
-          { displayName: { [Op.iLike]: like } },
-          { primaryGoogleEmail: { [Op.iLike]: like } },
-          { "$identities.username$": { [Op.iLike]: twitterHandleLike } },
-        ] } : {}),
-      },
-      include: [{ model: AuthCenterXhuntIdentity, as: "identities", where: { provider: "twitter" }, required: false, attributes: ["username", "displayName"] }],
-      attributes: ["id", "accountName", "displayName", "primaryTwitterId", "primaryGoogleEmail"],
-      order: [["updatedAt", "DESC"]],
-      limit: 20,
-      subQuery: false,
+    const internalTestUsers = await XhuntVipTestUser.findAll({
+      where: { listType: "internal_test" },
+      attributes: ["username", "twitterId"],
+      order: [["username", "ASC"]],
     });
-    return res.json({ success: true, data: users.map((user) => ({
-      id: user.id,
-      accountName: user.accountName,
-      displayName: user.displayName,
-      primaryTwitterId: user.primaryTwitterId,
-      primaryGoogleEmail: user.primaryGoogleEmail,
-      twitterHandle: user.identities?.[0]?.username || null,
-      twitterDisplayName: user.identities?.[0]?.displayName || null,
-    })) });
+    const twitterIds = internalTestUsers.map((item) => text(item.twitterId, 64)).filter(Boolean);
+    const usernames = internalTestUsers.map((item) => text(item.username, 128)?.toLowerCase()).filter(Boolean);
+    const identities = internalTestUsers.length ? await AuthCenterXhuntIdentity.findAll({
+      where: {
+        provider: "twitter",
+        [Op.or]: [
+          ...(twitterIds.length ? [{ providerSubject: { [Op.in]: twitterIds } }] : []),
+          ...usernames.map((username) => ({ username: { [Op.iLike]: username } })),
+        ],
+      },
+      include: [{ model: AuthCenterXhuntUser, as: "user", required: true, where: { status: "active" }, attributes: ["id"] }],
+      attributes: ["providerSubject", "username"],
+    }) : [];
+    const identityByTwitterId = new Map(identities.map((identity) => [String(identity.providerSubject), identity]));
+    const identityByUsername = new Map(identities.filter((identity) => identity.username).map((identity) => [String(identity.username).toLowerCase(), identity]));
+    const data = internalTestUsers.flatMap((item) => {
+      const username = String(item.username || "").trim();
+      const identity = (item.twitterId && identityByTwitterId.get(String(item.twitterId))) || identityByUsername.get(username.toLowerCase());
+      if (!identity?.user) return [];
+      return [{ id: identity.user.id, username, twitterId: item.twitterId || identity.providerSubject || null }];
+    });
+    return res.json({ success: true, data });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
   }
