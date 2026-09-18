@@ -30,14 +30,14 @@ const SOCIAL_LISTENING_TABLES = Object.freeze([
 /**
  * PostgreSQL 数据库自动备份服务
  * - 每 30 分钟自动备份一次
- * - 只保留最近 5 个备份文件
+ * - 只保留最近 2 个备份文件
  * - 备份文件存储在项目根目录的 backups/postgres 文件夹
  */
 class PostgresBackupService {
   constructor() {
     this.backupJob = null;
     this.backupDir = path.join(__dirname, "../../backups/postgres");
-    this.maxBackups = 5; // 只保留最近 5 个备份
+    this.maxBackups = 2; // 只保留最近 2 个备份
 
     // 数据库配置（从环境变量或默认配置读取）
     this.dbConfig = {
