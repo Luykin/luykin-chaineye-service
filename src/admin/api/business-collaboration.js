@@ -205,9 +205,16 @@ function serializeActivity(row) {
 }
 
 async function loadActivity(id, { transaction, lock = false } = {}) {
+  if (lock) {
+    const activity = await BusinessCollaborationActivity.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!activity) throw publicError("定向合作活动不存在", 404, "ACTIVITY_NOT_FOUND");
+    return activity;
+  }
   const activity = await BusinessCollaborationActivity.findByPk(id, {
     transaction,
-    lock: lock ? transaction.LOCK.UPDATE : undefined,
     include: [{ model: BusinessCollaborationActivityAccess, as: "accesses", include: [{ model: AuthCenterXhuntUser, as: "authCenterUser", attributes: ["id", "accountName", "displayName", "primaryTwitterId"] }] }],
   });
   if (!activity) throw publicError("定向合作活动不存在", 404, "ACTIVITY_NOT_FOUND");
