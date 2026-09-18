@@ -2,7 +2,7 @@
 
 ## 1. 结论与范围
 
-本需求是在已上线的 KOL Match 搜索能力之上，增加一套由「定向合作活动」（Targeted Collaboration Campaign，以下简称 TCC）驱动的定向商务合作闭环：运营预配置活动和授权，项目方或 Agency 从 KOL Match 中选择 KOL 并发送固定价邀约，KOL 表达兴趣后由项目方确认并锁定预算；随后完成草稿 AI 初审、人工审核、正式链接提交及活动结束后的奖励领取。奖励实际支付成功才是合作完成。
+本需求是在已上线的 KOL Match 搜索能力之上，增加一套由「定向合作活动」（Targeted Collaboration Campaign，以下简称 TCC）驱动的定向商务合作闭环：运营预配置活动和授权，项目方或 Agency 从 KOL Match 中选择 KOL 并发送固定价邀约，KOL 接受邀约时原子预留预算和名额，项目方在时限内确认后将预留转为锁定；随后完成草稿 AI 初审、人工审核、正式链接提交及活动结束后的奖励领取。奖励实际支付成功才是合作完成。
 
 首期应把它实现为独立的“商务合作域”，不要把状态塞进现有通用活动报名、KOL 搜索画像或前端 localStorage。现有模块可复用登录身份、KOL 搜索结果、商务资料、功能授权基础设施和后台权限框架；活动、邀约、预算、审核、支付、审计和异常处理需要新增持久化模型与服务。
 
@@ -34,8 +34,8 @@
 | --- | --- |
 | EchoHunt 运营 | 在后台“定向合作活动”Tab 对 TCC 做增删改查；配置项目 X、资金池、起止时间、审核方；将活动管理权限授予项目方或 Agency；查看全流程与处理人工审核、异常。 |
 | 项目方或 Agency | 仅查看被明确分配的 TCC；从 KOL Match 选择多个可邀约 KOL；逐人定价并发送邀约；在预算、名额、活动状态、地址均有效时确认合作；查看预算、交付和审核。 |
-| KOL | 未受邀时不显示任务模块；受邀后维护商务资料及默认收款地址、查看/拒绝/表达邀约兴趣；在确认后查看完整 Brief；提交 Google Docs 草稿、查看历次意见、提交正式 X 链接、在开放日领取奖励。 |
-| 系统 | 对同活动同 KOL 去重；确认合作时原子锁资；保留邀约快照与审核历史；领取和支付幂等；实际到账后才完成。 |
+| KOL | 未受邀时不显示任务模块；受邀后维护商务资料及默认收款地址、查看/拒绝/接受邀约；在确认后查看完整 Brief；提交 Google Docs 草稿、查看历次意见、提交正式 X 链接、在开放日领取奖励。 |
+| 系统 | 对同活动同 KOL 去重；KOL 接受时原子预留预算和名额、项目方确认时原子锁资；保留邀约快照与审核历史；领取和支付幂等；实际到账后才完成。 |
 
 ### 3.2 明确不在首期承诺内
 
@@ -92,7 +92,7 @@ PostgreSQL（唯一业务事实来源）
   活动 / 授权 / 商务资料和地址 / 邀约与合作 / 审核轮次 / 资金账本 / 支付 / 审计
 
 Redis / 队列
-  钱包验证 nonce、接口限流、幂等键、AI 审核任务、通知重试、到期和领取开放任务
+  钱包验证 nonce、接口限流、幂等键、AI 审核任务、通知重试、预留到期释放与发放审核候选提醒
 ```
 
 推荐将新后端代码收敛在 `src/xhunt/business-collaboration/`，路由挂载在既有 EchoHunt router 下：
@@ -111,56 +111,65 @@ Redis / 队列
 
 | 表 | 关键字段 | 说明 |
 | --- | --- | --- |
-| `BusinessCollaborationActivities` | `id`、`projectId`、`projectTwitterId`、`projectTwitterHandle`、`projectDisplayName`、名称/简介、`fundingPoolAmount`、`lockedAmount`、`claimableAmount`、`paidAmount`、`startAt`、`endAt`、`seatLimit`、`reviewerMode`、`status` | 运营配置的 TCC；绑定项目 X 配置快照，活动自身不存每次邀约的内容要求。 |
+| `BusinessCollaborationActivities` | `id`、`projectId`、`projectTwitterId`、`projectTwitterHandle`、`projectDisplayName`、名称/简介、`fundingPoolAmount`、`reservedAmount`、`lockedAmount`、`claimableAmount`、`paidAmount`、`reservedSeatCount`、`confirmedSeatCount`、`seatLimit`、`startAt`、`endAt`、`reviewerMode`、`status`、邀约默认模板 | 运营配置的 TCC；绑定项目 X 配置快照，保存预算聚合与 Agency 邀约表单默认值。 |
 | `BusinessCollaborationActivityAccesses` | `activityId`、`authCenterUserId`、`twitterId`、`role(project_manager/agency_manager)`、`status` | 活动范围授权；一个账号可管理多个活动。建议不要只复用全局 `kol-match` 授权，因为资源和角色语义不同。 |
 | `XHuntKolCollaborations` 扩展 | 默认收款地址、设置时间、版本、锁定状态 | 继续做 KOL 的商务资料主记录；增加地址后不允许普通 PUT 直接覆盖。 |
 | `KolPayoutAddressChangeRequests` | KOL、旧/新地址、X 再验证结果、旧钱包签名证据、状态、人工处理人 | 地址变更审计。新地址与旧地址均保存小写规范值，展示时可保留 checksum 格式。 |
-| `BusinessCollaborationInvitations` | `activityId`、`kolTwitterId`、`kolAuthCenterUserId`、`inviterAccessId`、邀约快照、`offerAmount`、`status`、`interestedAt` | 一份发给一位 KOL 的邀约；以 `activityId + kolTwitterId` 保证同活动不重复。 |
+| `BusinessCollaborationInvitations` | `activityId`、`kolTwitterId`、`kolAuthCenterUserId`、`inviterAccessId`、邀约快照、`offerAmount`、`status`、`acceptedAt`、`reservationExpiresAt`、`payoutAddressSnapshot` | 一份发给一位 KOL 的邀约；以 `activityId + kolTwitterId` 保证同活动不重复。KOL 接受后暂存预算/名额预留和地址快照。 |
 | `BusinessCollaborations` | `invitationId`、`activityId`、双方身份快照、`lockedAmount`、`payoutAddressSnapshot`、执行状态 | 只在项目方确认后创建，代表真实的已确认合作。 |
 | `BusinessCollaborationReviewRounds` | `collaborationId`、轮次、草稿 URL、AI 状态/结果、人工状态/意见、提交人/审核人 | 每次重提是一轮，AI 通过后才能进入人工审核。 |
 | `BusinessCollaborationDeliveries` | `collaborationId`、`draftUrl`、`publishedUrl`、`submittedAt` | P0 只支持一个正式 X 链接；将来多内容可拆为 deliverable item 表。 |
-| `BusinessCollaborationBudgetLedger` | `activityId`、`collaborationId`、`type(lock/release/claimable/paid/reversal)`、金额、幂等键 | 预算展示和对账的不可变流水；活动聚合字段只用于快速读取。 |
+| `BusinessCollaborationGrants` | `activityId`、`collaborationId`、`grantAmount`、`currency`、`status(approved/rejected)`、批次 ID、审核人、审核时间、原因 | 仅由活动结束后的后台发放审核创建；它是 KOL 可见可领取金额的唯一来源。 |
+| `BusinessCollaborationBudgetLedger` | `activityId`、`invitationId`、`collaborationId`、`grantId`、`type(reserve/lock/release/grant/paid/reversal)`、金额、幂等键 | 预算展示和对账的不可变流水；`grant` 只在后台批准发放时写入，活动聚合字段只用于快速读取。 |
 | `BusinessCollaborationPayouts` | `collaborationId`、金额、地址快照、支付渠道/交易哈希、`status`、幂等键、失败原因 | “点击领取”不是“已付款”；支付确认成功才置 paid。 |
 | `BusinessCollaborationAuditLogs` | 资源、动作、前后状态、actor、requestId、metadata | 覆盖授权、邀约、锁资、审核、地址和支付的可追溯性。 |
 
-### 6.3 Admin Web：新增“定向合作活动”Tab
+### 6.2 TCC 必填配置与邀约默认值
+
+运营创建/编辑 TCC 时必须填写：活动名称、所属项目 X 账号（Twitter ID 必填，handle/展示名作快照）、活动描述、资金池金额和币种、开始/结束时间、名额、审核方、启停状态。开始时间必须早于结束时间，资金池和名额必须为正数；已发送邀约后，项目 X、币种和资金池不得以覆盖方式修改，需走受审计的调整/归档流程。
+
+每个 TCC 还可配置一份 **邀约默认模板**，至少包含：邀约标题/说明、完整 Brief、内容形式、内容数量、语言、必须表达事项、最低单人报价、接受邀约后的项目方确认时限。Agency 发邀约时只需选择一个已分配且处于 `open` 状态的 TCC，表单自动带入这份模板；Agency 可以补充或覆盖允许编辑的邀约信息和详细要求。所有最终值在发送时写入 `invitationSnapshot`，后续修改活动默认值不会影响已经发送的邀约。
+
+默认模板字段是否可由 Agency 覆盖应由活动配置显式控制；至少预算币种、最低报价、项目 X 归属和审核方不可由 Agency 覆盖。
+
+### 6.3 必须保存的邀约快照
+
+邀约不得在后续编辑活动或商务资料后改变历史含义。`BusinessCollaborationInvitations` 至少固化：活动/项目展示信息、内容形式、内容数量、内容语言、完整 Brief、邀约信息、固定报价和币种、KOL 名称/handle/Twitter ID、报价来源（KOL 资料或人工输入）、发送时的活动时间和审核方。项目方确认后，再把接受邀约时固化的收款地址复制到 `BusinessCollaborations.payoutAddressSnapshot`。
+
+### 6.4 Admin Web：新增“定向合作活动”Tab
 
 在 Admin Web 新增一级 Tab **定向合作活动**，作为 TCC 的唯一运营入口；不要把它混入 Nacos 公开活动配置页。该 Tab 至少包含：
 
-1. **活动列表**：显示名称、绑定项目 X、状态、起止时间、资金池/已锁定/可领取/已支付金额、名额、已分配管理者与更新时间；支持按项目 X、状态和管理者筛选。
+1. **活动列表**：显示名称、绑定项目 X、状态、起止时间、资金池/已预留/已锁定/可领取/已支付金额、名额、已分配管理者与更新时间；支持按项目 X、状态和管理者筛选。
 2. **创建与编辑**：必须选择或录入项目 X 配置，并填写名称、简介、资金池与币种、起止时间、名额、审核方、启停状态。项目 X 变更须记录审计；已有邀约后不能直接覆盖历史快照。
 3. **活动授权**：按认证中心用户分配 `project_manager` / `agency_manager`，可撤销或暂停授权；授权变更立即影响 API 可见性，且必须留下操作人、原因和时间。
-4. **进度与处置**：查看该 TCC 的邀约、已确认合作、审核轮次、逐人金额、账本和审计；运营可执行权限、人工审核和地址异常的受控处理。
+4. **进度与处置**：查看该 TCC 的邀约、已确认合作、审核轮次、逐人金额、账本和审计；运营可执行权限、人工审核、地址异常和活动结束后的批量发放审核。
 5. **删除规则**：从未发送邀约的草稿 TCC 可删除；存在邀约、合作或账本后只允许归档/停用，保留所有历史记录和审计，避免破坏金额对账。
 
 该 Tab 应受独立后台权限（建议 `business_collaboration_manage`）保护。所有写操作要求后台管理员身份和审计日志；前端按钮隐藏不能替代后端权限校验。
-
-### 6.2 必须保存的邀约快照
-
-邀约不得在后续编辑活动或商务资料后改变历史含义。`BusinessCollaborationInvitations` 至少固化：活动/项目展示信息、内容形式、内容数量、内容语言、完整 Brief、邀约信息、固定报价和币种、KOL 名称/handle/Twitter ID、报价来源（KOL 资料或人工输入）、发送时的活动时间和审核方。项目方确认后，再把实际使用的收款地址复制到 `BusinessCollaborations.payoutAddressSnapshot`。
 
 ## 7. 状态机与强约束
 
 ### 7.1 活动可报名状态
 
 ```text
-scheduled -> open -> closed
-                    \-> execution_only
+scheduled -> open -> closed_for_new_invitations
+                           \-> execution_only
 ```
 
-- `scheduled`：未到开始时间，不能邀约或确认。
-- `open`：在起止时间内、活动启用、可用预算大于零且未满名额；可邀约和确认。
-- `closed`：到期、预算用尽、名额用尽或运营停用；停止新邀约与新确认。
-- `execution_only` 不是独立存储状态，而是对已确认合作的行为结果：即使活动关闭，草稿、审核、发布、领取仍继续。
+- `scheduled`：未到开始时间，不能发送或接受邀约。
+- `open`：在活动时间内、活动启用且未满名额；可发送和接受邀约。单笔接受时再按实际报价判断可用预算。
+- `closed_for_new_invitations`：活动时间结束、名额用尽或运营停止招募；只停止**发送邀约和接受邀约**。既有已接受邀约仍可由项目方确认，已确认合作仍可交付、审核和提交发布链接。
+- `execution_only` 不是独立存储状态，而是对已确认合作的行为结果：即使活动已停止招募，草稿、审核、发布和后续后台发放审核仍可继续。
 
 ### 7.2 邀约与合作状态
 
 ```text
-draft -> sent -> interested -> confirmed -> executing
-                  |              |             |
+draft -> sent -> accepted -> confirmed -> executing
+                  |             |             |
                   +-> kol_declined              +-> draft_submitted
                   +-> project_declined                         -> ai_rejected
-                  +-> expired                                    -> human_review
+                  +-> reservation_expired                        -> human_review
                                                             -> human_changes
                                                             -> approved_for_publish
                                                             -> published_submitted
@@ -171,21 +180,36 @@ draft -> sent -> interested -> confirmed -> executing
 
 实现时应区分“邀约状态”和“合作执行状态”：
 
-- `sent/interested/kol_declined/project_declined/expired` 是邀约处理，不占预算。
-- `confirmed` 是事务成功、名额与预算已锁定且地址已快照的结果。
+- `sent/kol_declined/project_declined/reservation_expired` 是未形成合作的邀约处理；`accepted` 是 KOL 成功接受且金额、名额已预留的状态。
+- `confirmed` 是事务成功、预留金额/名额已转为锁定且地址已快照的结果。
 - 草稿重提后的 `ai_rejected`、`human_changes` 不是终态，必须回到同一合作并新增审核轮次。
 - `published_submitted` 不等于可领取；只有活动结束时间到达、审核通过、正式链接和有效地址齐全，才转换为 `claimable`。
 - `payout_processing` 和 `paid_completed` 是支付渠道接入后的后续状态；本期不进入这两个状态。任何未来重试均按幂等键处理，绝不重复支付。
 
-### 7.3 确认合作的原子事务
+### 7.3 KOL 接受邀约：预算预留的原子事务
+
+“接受成功”必须代表该 KOL 已获得这笔预算和名额，不能只在前端检查一次余额。因此，`POST /invitations/:id/accept` 必须在一个 PostgreSQL 事务内对活动和邀约行加锁：
+
+1. 从认证中心 token 取得当前 KOL 的 Twitter ID，并校验其是该邀约收件人；不能使用请求体传入的 KOL 身份。
+2. 锁定活动后重新校验 `startAt <= now < endAt`、活动启用且状态为 `open`；结束瞬间（`now >= endAt`）即拒绝，不存在前端时钟宽限。
+3. 锁定邀约，要求状态为 `sent`、报价和币种已在邀约快照中固定、且 KOL 有有效默认收款地址。重复请求使用同一幂等键时返回已有接受结果，不重复预留。
+4. 计算 `availableAmount = fundingPoolAmount - reservedAmount - lockedAmount` 与 `availableSeats = seatLimit - reservedSeatCount - confirmedSeatCount`。任一不足即不改变任何数据并返回明确业务错误：`ACTIVITY_BUDGET_INSUFFICIENT` 或 `ACTIVITY_SEATS_FULL`。
+5. 写入 KOL 当前地址快照、`acceptedAt` 和 `reservationExpiresAt`；写一条 `reserve` 账本，原子增加 `reservedAmount` 与 `reservedSeatCount`，再把邀约更新为 `accepted`。
+6. 写审计和通知事件后提交。任何并发接受都由活动行锁串行化，因此不可能预留超额。
+
+接受前活动未开始返回 `ACTIVITY_NOT_STARTED`，活动结束返回 `ACTIVITY_ENDED`，被停用/归档返回 `ACTIVITY_NOT_OPEN`，邀约已失效返回 `INVITATION_NOT_ACCEPTABLE`。这些是前端应直接展示的业务失败，不应显示为“接受成功后再失败”。
+
+预留不是无限期占款：`reservationExpiresAt` 默认为活动模板配置的确认时限。KOL 拒绝、项目方拒绝、项目方未在时限内确认或运营明确取消邀约时，后台定时任务和后续写请求都必须在事务内将邀约置为 `reservation_expired`（或相应拒绝状态）、写 `release` 账本并释放金额和名额。**活动时间结束本身不释放已接受邀约，也不阻止项目方确认、KOL 交付或审核。**运营停止招募只阻止新的发送/接受；若要取消既有预留，必须显式执行带原因和审计的取消操作。
+
+### 7.4 确认合作的原子事务
 
 确认 API 必须在一个 PostgreSQL 事务内执行，并对活动行使用 `SELECT ... FOR UPDATE` 或等效 Sequelize 行锁：
 
 1. 校验调用人拥有该活动的有效项目方/Agency 管理权限。
-2. 锁定活动行，重新计算活动是否仍可确认、可用预算、已确认名额。
-3. 锁定邀约行，要求状态是 `interested` 且尚未生成合作。
-4. 校验 KOL 地址仍有效；把地址写入合作快照。
-5. 创建合作、写一条 `lock` 账本、原子增加 `lockedAmount`、更新邀约为 `confirmed`。
+2. 锁定活动行，要求活动未归档且这笔已预留金额和名额仍存在；活动时间结束不阻止确认。
+3. 锁定邀约行，要求状态是 `accepted`、预留未到期且尚未生成合作。
+4. 使用接受时的地址快照；不得在确认时读取或覆盖 KOL 已变化的默认地址。
+5. 创建合作、写一条 `lock` 账本、原子减少 `reservedAmount`/`reservedSeatCount` 并增加 `lockedAmount`/已确认名额、更新邀约为 `confirmed`。
 6. 写审计和 outbox 通知事件后提交。
 
 禁止仅依赖前端余额、Redis 锁或“先查再写”。活动预算不足、重复确认、并发确认时应返回可识别的业务错误而不是 500。
@@ -197,9 +221,9 @@ draft -> sent -> interested -> confirmed -> executing
 | API | 调用方 | 核心行为 |
 | --- | --- | --- |
 | `GET /business-collaboration/activities/available` | 项目方/Agency | 仅返回当前账号被明确授权、且可用于发邀约的 TCC；无授权时返回空数组，不泄露其他项目活动。 |
-| `POST /business-collaboration/invitations` | 项目方/Agency | 批量创建邀约；每位 KOL 独立金额和快照，任何无效项应返回逐项错误或采用显式 all-or-nothing 策略。 |
+| `POST /business-collaboration/invitations` | 项目方/Agency | 选择一场已分配的 TCC 后批量创建邀约；服务端载入活动默认模板，允许字段才可覆盖，并为每位 KOL 固化独立金额和快照。任何无效项应返回逐项错误或采用显式 all-or-nothing 策略。 |
 | `GET /business-collaboration/activities/:id` | 项目方/Agency/运营 | 返回活动预算、候选人、邀约、合作、已提交内容；按角色脱敏。 |
-| `POST /business-collaboration/invitations/:id/interest` | KOL | 校验邀请归属与当前默认地址；将地址快照写入邀约，状态改为 `interested`。 |
+| `POST /business-collaboration/invitations/:id/accept` | KOL | 校验邀请归属、活动时间、可用预算/名额和当前默认地址；原子写地址快照并预留金额/名额，状态改为 `accepted`。 |
 | `POST /business-collaboration/invitations/:id/decline` | KOL | 记录 KOL 拒绝。 |
 | `POST /business-collaboration/invitations/:id/confirm` | 项目方/Agency | 执行上述原子锁资流程。 |
 | `POST /business-collaboration/invitations/:id/decline-by-project` | 项目方/Agency | 记录本次不合作，不能伪装为已确认。 |
@@ -223,7 +247,7 @@ draft -> sent -> interested -> confirmed -> executing
 | 查看 KOL Match 并发邀约 | 不适用 | KOL Match 可照常搜索；仅拥有活动授权且 TCC 为 open 时可进入邀约 | 可按运营权限查看 |
 | 在个人页看到 TCC 和进度 | 仅收到邀约或存在合作时 | 仅被分配为该 TCC 管理者时 | 可按运营权限查看 |
 | 查看完整 Brief | 仅已确认的本人合作 | 自己管理活动 | 可查看 |
-| 表达兴趣/拒绝/提交内容/领取 | 仅邀约或合作归属本人 | 不可代替 KOL | 异常处理时可代操作并审计 |
+| 接受/拒绝邀约、提交内容/领取 | 仅邀约或合作归属本人 | 不可代替 KOL | 异常处理时可代操作并审计 |
 | 确认合作/锁资/项目方人工审核 | 不可 | 仅该活动授权且审核方为项目方 | 可按治理权限处理 |
 | EchoHunt 人工审核 | 不可 | 仅查看结果 | 仅审核方为 EchoHunt 的活动 |
 | 创建活动、分配授权、人工改地址、付款处理 | 不可 | 不可 | 仅后台权限允许的运营角色 |
@@ -236,12 +260,12 @@ draft -> sent -> interested -> confirmed -> executing
 
 以下约定已由产品确认，优先级高于本文先前的开放问题：
 
-1. 后端必须记录每位 KOL 在每个已确认合作中的金额；金额不能只存在邀约表单、前端状态或支付备注中。
-2. 领取最早只能在活动 `endAt` 到达后开放；不再额外默认等待七天。活动未结束时，无论预算是否充足、稿件是否审核通过，均不得领取。
+1. Agency 的 `offerAmount`、活动预算预留和锁定仅是后台内部的邀约/预算承诺，不是发放记录，也不作为 KOL 的可领取金额展示。
+2. 所有实际发放金额、系统发放账本和 KOL 可见的可领取金额，都只能在活动 `endAt` 到达后，由管理后台的发放审核明确批准后创建；系统不得在活动结束时自动生成。
 3. 真正的领取链路将采用“EVM 钱包验证在前、X 身份认证在后”的顺序，但本期不接入钱包签名、X 重认证、链上合约或付款渠道。前端保留领取入口，点击处理函数明确标注 `TODO` 且不发起请求；后端也不得把该操作误记为领取成功、付款处理中或已付款。
 4. Google Docs 草稿在发起 AI 审核前必须由后端进行匿名可读性预检。不可读取时，前端显示后端返回的明确错误并提示 KOL 将文件共享为“持有链接的任何人可查看”；不把访问失败伪装成 AI 审核失败。
 
-金额采用 `NUMERIC(20, 2)` 加显式币种存储。确认合作时把 `offerAmount` 写入合作快照及不可变 `lock` 账本；满足“活动已结束、人工审核通过、正式 X 链接已提交、地址快照有效”后，在一个事务内将该笔金额写入 `claimableAmount` 和 `claimable` 账本。活动汇总的 `lockedAmount`、`claimableAmount`、`paidAmount` 只是读性能用聚合，逐人合作记录和账本才是对账事实来源。
+金额采用 `NUMERIC(20, 2)` 加显式币种存储。`reserved`（KOL 已接受，待项目方确认）和 `locked`（已确认，待交付）是后台内部预算承诺，不能在 KOL 端作为发放/可领取金额展示；其聚合值用于防止超额邀约。活动结束后，运营在后台查看合作、交付和审核情况，批量选择记录并批准实际 `grantAmount`（默认建议等于邀约 `offerAmount`；若调整必须填写原因）。只有这一刻才创建 `BusinessCollaborationGrant`、写 `grant` 账本并增加 `claimableAmount`；KOL 才能看到该金额和未来的领取入口。`availableAmount = fundingPoolAmount - reservedAmount - lockedAmount - claimableAmount - paidAmount`，任何金额转换或批准均必须在同一事务中完成。活动汇总字段仅用于读取性能，逐人合作、发放审批和账本才是对账事实来源。
 
 一期暂不创建真实 payout，也不允许运营或前端手工把合作置为 `paid_completed`。待支付渠道、网络、验签和到账回执确定后，再用幂等 payout 请求承接该状态转换。
 
@@ -255,9 +279,9 @@ AI 通过后，根据活动 `reviewerMode` 进入项目方审核队列或 EchoHu
 
 ### 10.2 领取与真实支付
 
-领取开放条件应由服务端计算：`now >= activity.endAt`、人工已通过、正式链接存在、合作地址快照有效、尚未 paid。预算提前耗尽不能提前开放领取。条件首次成立时，服务端在事务中写入 KOL 对应的 `claimableAmount`；重复计算必须按合作 ID 幂等，不能重复累计活动的可领取汇总。
+活动结束后，系统**不自动**生成可领取金额，也不因为任务仍在提交/审核而阻断后续流程。运营在管理后台的“批量发放审核”中选择合作记录，查看邀约快照、交付链接、审核状态和内部报价后，逐条批准或拒绝。批准操作必须校验 `now >= activity.endAt`、合作尚未已有已批准发放记录且地址快照有效；默认要求交付审核通过和正式链接存在，若运营要对例外记录发放，必须填写 override 原因并审计。批准成功后才创建唯一的 grant、写入 `claimableAmount`；重复提交按合作 ID/幂等键返回同一 grant，绝不重复发放。
 
-本期领取按钮是无副作用占位入口，代码需保留 `TODO(payment-claim)`，不得调用 claim API。后续支付需要先确认一种正式渠道：运营手工转账录入、托管支付 API，或链上合约；届时再实现“EVM 钱包验证 -> X 身份认证 -> 创建/复用幂等 payout 请求”。收到可信支付回执/链上确认后才将 payout 和合作更新为 `paid_completed`，同时写 `paid` 账本。若采用人工付款，后台必须要求交易哈希或凭证、经办人和时间，且与合作/地址快照绑定。
+KOL 端在 grant 批准前不返回 `claimableAmount`、发放账本或领取入口；邀约 DTO 也不返回 Agency 的内部 `offerAmount`。本期 grant 批准后的领取按钮仍是无副作用占位入口，代码需保留 `TODO(payment-claim)`，不得调用 claim API。后续支付需要先确认一种正式渠道：运营手工转账录入、托管支付 API，或链上合约；届时再实现“EVM 钱包验证 -> X 身份认证 -> 创建/复用幂等 payout 请求”。收到可信支付回执/链上确认后才将 payout 和合作更新为 `paid_completed`，同时写 `paid` 账本。若采用人工付款，后台必须要求交易哈希或凭证、经办人和时间，且与合作/地址快照绑定。
 
 ### 10.3 地址、身份与一致性防线
 
@@ -275,7 +299,7 @@ AI 通过后，根据活动 `reviewerMode` 进入项目方审核队列或 EchoHu
 2. 搜索结果增加可选状态和选择篮；只允许 `acceptingNewInvitations === true` 的 KOL 进入批量邀约。详情抽屉展示报价与接单状态，并提供加入选择篮。
 3. 邀约页每次重新拉取活动，不恢复上次表单。活动固定信息只读；内容形式、数量、语言、Brief、邀约信息必填。金额逐人输入，默认带入匹配的报价；低于 100 USD 立即报错并禁用发送。
 4. “我的账户”沿用一个账号体系：KOL 在没有邀约/合作时不显示任务模块，收到邀约后才显示“定向合作任务”中的邀约、进行中和已完成；拥有 TCC 管理权限时才额外显示“我的定向合作活动”。不以页面切换修改身份或权限。
-5. KOL 商务资料页补充默认 EVM 地址与变更流程。表达兴趣缺少有效地址时，跳转设置后带回原邀约；已确认合作展示地址快照而非可编辑的当前默认地址。
+5. KOL 商务资料页补充默认 EVM 地址与变更流程。接受邀约缺少有效地址时，跳转设置后带回原邀约；已确认合作展示地址快照而非可编辑的当前默认地址。
 6. 活动详情以列表展示邀约、待确认、执行进度、审核、已提交内容和预算；按角色展示操作按钮。
 7. 草稿提交失败并收到 `GOOGLE_DOC_NOT_ACCESSIBLE` 时，原地显示“无法访问该 Google Docs，请将文件权限调整为‘持有链接的任何人可查看’后重试”；不创建审核记录。领取入口本期仅保留视觉占位和 `TODO(payment-claim)` 无操作处理。
 
@@ -287,7 +311,7 @@ AI 通过后，根据活动 `reviewerMode` 进入项目方审核队列或 EchoHu
 
 1. ~~确认资金的真实支付渠道、币种/网络、付款发起人与到账确认来源。~~ 本期明确不执行支付；只落库逐人可领取金额和账本，领取入口为 TODO 占位。
 2. 确认报价是否仅有 USD/USDT，活动币种是否固定，以及汇率是否允许存在。
-3. 确认名额满时的规则、活动被运营暂停后的已锁资金处理、项目方撤销合作是否允许及退款策略。
+3. ~~确认名额满时的规则、活动被运营暂停后的已锁资金处理、项目方撤销合作是否允许及退款策略。~~ 名额在 KOL 接受时预留；项目方拒绝、确认超时或运营显式取消时释放未确认预留。活动结束只停止发送/接受，不中断已接受或已确认合作。项目方撤销已确认合作及退款策略仍待确认。
 4. ~~确认 AI 审核模型、访问 Google Docs 的授权方案。~~ 本期使用匿名 Google Docs 可读性预检；AI 模型、数据保留期和人工审核 SLA 仍待确认。
 5. ~~确认地址变更的 X 再验证实现方式、旧地址无法签名时的人工审批材料和权限。~~ 采用当前 X token + 旧/新地址签名，旧地址不可签名时走运营人工审批并审计。
 
@@ -309,36 +333,37 @@ AI 通过后，根据活动 `reviewerMode` 进入项目方审核队列或 EchoHu
 2. 扩展 KOL Match 返回 DTO，稳定展示报价与明确接单状态；保持搜索侧只读。
 3. 增加 KOL Match 多选、选择篮、活动选择及批量邀约页面。
 4. 实现发送邀约 API，服务端校验授权、活动状态、KOL 接单状态、价格下限、去重与快照完整性。
-5. 实现 KOL 邀约列表与表达兴趣/拒绝接口；表达兴趣时固化地址快照。
+5. 实现 KOL 邀约列表与接受/拒绝接口；接受时固化地址快照并原子预留金额和名额，活动结束、已满额或预算不足时必须明确拒绝。
 
-验收：发送邀约不扣预算；同活动同 KOL 不能重复发送；后续邀约不会覆盖历史内容要求。
+验收：发送邀约不扣预算；KOL 接受后准确预留一笔金额和一个名额；同活动同 KOL 不能重复发送；后续邀约不会覆盖历史内容要求。
 
-### 阶段 3：确认合作和预算
+### 阶段 3：接受邀约、确认合作和预算
 
-1. 实现项目方确认/不合作 API 和事务级锁资。
-2. 实现账本、活动预算聚合、名额校验、并发重复确认防护和失败错误码。
-3. 实现项目方“我的活动”与活动详情，显示可用、已锁定、可领取和已支付金额。
-4. 实现 KOL “商务合作”的邀约/进行中/已完成视图和只读 Brief。
+1. 实现 KOL 接受/拒绝 API、预留到期释放任务和事务级预算/名额预留。
+2. 实现项目方确认/不合作 API，将预留原子转为锁资。
+3. 实现账本、活动预算聚合、名额校验、并发重复接受/确认防护和失败错误码。
+4. 实现项目方“我的活动”与活动详情，显示可用、已预留、已锁定、可领取和已支付金额。
+5. 实现 KOL “商务合作”的邀约/进行中/已完成视图和只读 Brief。
 
-验收：两个项目方并发确认同一活动时绝不超额锁资；活动关闭后不能新增邀约或确认，但已确认合作仍可执行。
+验收：多个 KOL 并发接受同一活动时绝不超额预留；项目方确认只可消耗其已接受邀约的预留；活动关闭后不能新增邀约、接受或确认，但已确认合作仍可执行。
 
 ### 阶段 4：审核和交付
 
 1. 接入草稿 URL 提交、审核轮次、AI 审核队列和结构化 AI 结果。
 2. 实现根据 `reviewerMode` 路由的人工审核队列与通过/退回操作。
 3. 实现审核历史、项目方/运营已提交内容入口、正式 X 链接提交和状态限制。
-4. 增加通知：邀约、兴趣、确认、AI 结果、人工结果、领取开放和支付结果。
+4. 增加通知：邀约、接受成功/失败、预留即将到期、确认、AI 结果、人工结果、后台批准发放和支付结果。
 
 验收：AI 失败不能进入人工审核或正式链接提交；人工退回后的重新提交必经新的 AI 初审；历史意见可回溯。
 
 ### 阶段 5：领取资格与后续支付、运营收口
 
-1. 本期实现服务端领取资格计算、逐人 `claimableAmount` 及领取页面倒计时/开放时间；领取点击保留无操作 TODO。
+1. 本期实现活动结束后的后台批量发放审核、唯一 grant、逐人 `claimableAmount` 及 KOL 领取入口；领取点击保留无操作 TODO。
 2. 在支付渠道确定后，接入确认后的支付渠道或后台人工付款流程，落实幂等、回执/交易哈希和失败重试。
 3. 在支付渠道接入后，实现到账后的合作完成、预算已支付更新、运营异常工作台。
-4. 加入到期扫描、领取开放扫描；支付接入后再增加失败支付告警和对账报表。
+4. 加入预留到期扫描和活动结束后的待发放审核提醒；支付接入后再增加失败支付告警和对账报表。
 
-验收（本期）：活动结束前不能进入可领取状态；每位 KOL 的可领取金额只记一次，领取点击不改变任何状态。验收（支付接入后）：同一合作重复点击只产生一笔 payout；只有可靠支付成功回执使合作完成。
+验收（本期）：活动结束前不能批准发放或进入可领取状态；每位 KOL 的可领取金额只在后台批准后记一次，领取点击不改变任何状态。验收（支付接入后）：同一合作重复点击只产生一笔 payout；只有可靠支付成功回执使合作完成。
 
 ### 阶段 6：质量、灰度与上线
 
@@ -353,25 +378,38 @@ AI 通过后，根据活动 `reviewerMode` 进入项目方审核队列或 EchoHu
 | 场景 | 期望结果 |
 | --- | --- |
 | 同活动对同一 Twitter ID 再次发送邀约 | 返回明确重复错误，不创建第二条邀约。 |
-| KOL 暂停接单或没有有效地址 | 不可邀约或不可表达兴趣；页面给出设置引导。 |
+| KOL 暂停接单或没有有效地址 | 暂停接单时不可邀约；没有有效地址时不可接受邀约，页面给出设置引导。 |
 | 邀约金额为 99.99 | 前后端均拒绝发送。 |
-| 两个确认请求同时竞争最后 100 USDT | 至多一个成功锁资，另一个得到预算不足。 |
-| 到期或预算用尽后发送/确认 | 拒绝；既有合作仍可提交和审核。 |
+| 两个 KOL 接受请求同时竞争最后 100 USDT | 至多一个成功预留，另一个得到 `ACTIVITY_BUDGET_INSUFFICIENT`。 |
+| 活动结束、名额已满或预算不足时接受邀约 | 拒绝且不写地址快照、不记预留；既有已确认合作仍可提交和审核。 |
 | AI 初审失败后人工点击通过 | 服务端拒绝该状态跃迁。 |
 | 人工退回后重提草稿 | 创建新轮，重新走 AI 再到人工。 |
 | 同一合作重复领取/支付回调重复 | 只创建或确认一笔支付，不重复记账。 |
-| 默认地址在表达兴趣后变更 | 旧合作地址快照不变化；未付款合作的活动级变更按已确认流程处理。 |
+| 默认地址在接受邀约后变更 | 预留/已确认合作的地址快照不变化；未付款合作的活动级变更按已确认流程处理。 |
 | 已支付合作修改地址 | 拒绝对历史付款快照的修改，并留审计记录。 |
 
-## 14. 风险与待确认项
+## 14. 风险、已定规则与待确认项
 
-1. **支付定义未定**：PRD 规定“到账才完成”，但没有定义谁付款、通过何种通道、如何确认到账。这个问题不能用前端“领取成功”文案替代。
-2. **Google Docs 审核可访问性**：仅保存 URL 时，AI 未必有读取权限。需要决定 OAuth 授权、共享权限要求，或仅由 KOL 提交内容文本/导出文件。
-3. **地址变更安全性**：普通资料 PUT 不能覆盖地址；必须有短期 nonce、签名用途绑定、一次性消费、审计和人工例外路径。
-4. **身份覆盖问题**：搜索画像以 Twitter ID 为中心，但 KOL 未必已注册 EchoHunt。邀约应先以 Twitter ID 作为收件人稳定键，登录后再绑定 `authCenterUserId`，不要以空用户 ID 阻塞邀约。
-5. **数据一致性**：`XHuntKolCollaborations` 同步到 `dev.kol_marketing_profile` 是跨库非原子操作，适合搜索展示，不可作为合作、预算或支付的真实来源。
-6. **原型与生产差异**：原型的 Web Lock/localStorage 能演示并发和流程，但生产必须使用 PostgreSQL 事务、唯一索引、审计和后端权限。
+### 14.1 已确定，实施时不得回退
+
+1. **可见性与授权**：TCC 默认对全部 EchoHunt 用户不可见；项目方/Agency 必须由后台按活动分配。项目 X 账号只是归属，不等于自动授权。
+2. **活动结束边界**：活动结束只拦截发送邀约和接受邀约；既有已接受邀约可继续确认，既有合作可继续提交、审核和发布。活动结束不自动释放预留、不自动生成发放金额。
+3. **预算、发放与金额可见性**：KOL 接受邀约时原子预留，项目方确认时转为锁定；预算不足、名额已满、活动未开始/结束/停用时接受失败。预留超时、拒绝或运营显式取消才释放。`reserved`/`locked` 是后台内部承诺，只有活动结束后管理后台批准 grant，才创建发放账本和 KOL 可见的 `claimableAmount`。
+4. **Google Docs**：仅接受公开可读的 Google Docs；后端匿名预检失败时返回 `GOOGLE_DOC_NOT_ACCESSIBLE`，不创建审核轮次或 AI 任务。
+5. **地址与身份**：普通资料更新不能覆盖收款地址；接受时固化地址快照；后续改地址不影响已有预留/合作。所有授权以认证中心 token 和数据库关联为准，不信任客户端传入身份或角色。
+6. **原型隔离**：localStorage、模拟金额和前端状态机不进入生产事实链路；生产使用 PostgreSQL 事务、唯一约束、审计和 feature flag。
+
+### 14.2 上线前仍需产品确认的事项
+
+1. **实际支付方案（后续阶段）**：本期在后台批准后只记录 `claimableAmount`，领取按钮无操作。接入支付前仍需确定付款主体、币种/链与网络、人工还是自动支付、可信到账回执和失败重试责任；数据模型保留 `currency`，但不能先假设支付渠道。
+2. **资金池的业务含义与调整权**：需确认资金池是运营承诺额度还是已实际入金/托管的余额。技术默认只允许增加；减少时不得低于 `reserved + locked + claimable + paid`，必须审计。已发送邀约后不能改币种，项目 X 变更只能归档后新建。
+3. **已确认合作的撤销/违约规则**：活动结束后的流程可继续已定；但项目方撤销已确认合作、KOL 违约、人工豁免及是否释放/补偿内部锁定金额仍需明确，不能由运营直接删除记录。
+4. **授权撤销后的存量邀约**：技术建议撤销 Agency 授权立即禁止其新建；该 Agency 发出的未确认邀约及预留由运营选择“转交另一管理者”或“取消并释放”，两种操作都需要审计。需确认是否接受这个运营动作。
+5. **审核运营规则**：Google Docs 的公开访问策略已确定；仍需确定 AI 模型/版本、审核材料保留期、人工审核 SLA，以及 AI 服务不可用时是阻止提交还是进入待处理队列。
+6. **邀约报价是否对 KOL 可见**：当前按“金额仅在后台批准后向 KOL 展示”的要求，KOL 邀约 DTO 不返回 `offerAmount`。若产品希望 KOL 在接受前看到“拟定报价”，需明确它只是不可领取的邀约条款，且不应被误展示为已发放金额。
+
+通知渠道、文案语言和提醒频率不阻塞领域建模，可在前端和通知阶段按产品运营策略补充。
 
 ## 15. 建议的首个开发切片
 
-优先做“运营配置活动和授权 -> 项目方发邀约 -> KOL 表达兴趣 -> 项目方确认锁资 -> 双方查看状态”。这是最小但真实的商业闭环，能先验证权限、地址快照、去重和预算原子性四个最高风险点。AI 审核与支付在该基础稳定后接入，避免在没有可靠合作主记录和账本的情况下先做页面或模拟到账。
+优先做“运营配置 TCC、项目 X 和授权 -> 项目方选择活动并按默认模板发邀约 -> KOL 接受并预留预算 -> 项目方确认锁资 -> 双方查看状态”。这是最小但真实的商业闭环，能先验证权限、地址快照、去重和预算原子性四个最高风险点。AI 审核与支付在该基础稳定后接入，避免在没有可靠合作主记录和账本的情况下先做页面或模拟到账。
