@@ -21,7 +21,7 @@ module.exports = (sequelize) =>
       seatLimit: { type: DataTypes.INTEGER, allowNull: false },
       startAt: { type: DataTypes.DATE, allowNull: false },
       endAt: { type: DataTypes.DATE, allowNull: false },
-      reviewerMode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: "echohunt" },
+      reviewerMode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: "project" },
       status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: "draft" },
       invitationTemplate: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
     },

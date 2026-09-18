@@ -1,4 +1,6 @@
 const express = require("express");
+const axios = require("axios");
+const { Op } = require("sequelize");
 const { requirePermission } = require("../middleware/adminAuth");
 const {
   BusinessCollaborationActivity,
@@ -15,6 +17,7 @@ const ACTIVITY_STATUSES = new Set(["draft", "open", "paused", "archived"]);
 const ACCESS_ROLES = new Set(["project_manager", "agency_manager"]);
 const ACCESS_STATUSES = new Set(["active", "paused", "revoked"]);
 const REVIEWER_MODES = new Set(["echohunt", "project"]);
+const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
 
 router.use(express.json({ limit: "1mb" }));
 router.use(requirePermission(MANAGE_PERMISSION));
@@ -70,6 +73,40 @@ function object(value, field) {
   return value;
 }
 
+function normalizeTwitterHandle(value) {
+  const raw = text(value, 512);
+  if (!raw) return null;
+  const withoutUrl = raw.replace(/^https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\//i, "").split(/[/?#]/)[0];
+  const handle = withoutUrl.replace(/^@+/, "").trim();
+  if (!/^[A-Za-z0-9_]{1,128}$/.test(handle)) throw publicError("请输入有效的项目 X Handle");
+  return handle;
+}
+
+function normalizeTwitterAccount(payload) {
+  const source = payload?.data?.data || payload?.data?.user || payload?.data || payload?.user || payload?.result || payload;
+  if (!source || typeof source !== "object") return null;
+  const profile = source.profile && typeof source.profile === "object" ? source.profile : {};
+  const handle = normalizeTwitterHandle(source.handle || source.username || source.username_raw || source.screen_name || source.userName || profile.username || profile.username_raw);
+  const twitterId = text(source.twitterId || source.twitter_id || source.id || source.userId || profile.id, 64);
+  if (!handle || !twitterId) return null;
+  return {
+    twitterId,
+    handle,
+    displayName: text(source.name || source.displayName || source.display_name || profile.name || handle, 256),
+    avatar: text(source.avatar || source.profile_image_url || source.profileImageUrl || profile.profile_image_url, 2048),
+    followers: Number(source.followers || source.followers_count || profile.followers_count || 0) || 0,
+  };
+}
+
+function normalizeAccessAssignments(value) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw publicError("项目方人员必须是列表");
+  const ids = value.map((item) => text(item, 64)).filter(Boolean);
+  if (ids.length !== value.length || new Set(ids).size !== ids.length) throw publicError("项目方人员包含无效或重复用户");
+  if (ids.length > 50) throw publicError("一次最多分配 50 位项目方人员");
+  return ids;
+}
+
 function normalizeActivityPayload(payload, { partial = false } = {}) {
   const next = {};
   const has = (key) => Object.prototype.hasOwnProperty.call(payload, key);
@@ -96,7 +133,7 @@ function normalizeActivityPayload(payload, { partial = false } = {}) {
   if (!partial || has("startAt")) next.startAt = date(payload.startAt, "开始时间");
   if (!partial || has("endAt")) next.endAt = date(payload.endAt, "结束时间");
   if (has("reviewerMode") || !partial) {
-    const value = text(payload.reviewerMode || "echohunt", 32);
+    const value = text(payload.reviewerMode || "project", 32);
     if (!REVIEWER_MODES.has(value)) throw publicError("审核方只能是 echohunt 或 project");
     next.reviewerMode = value;
   }
@@ -107,6 +144,24 @@ function normalizeActivityPayload(payload, { partial = false } = {}) {
   }
   if (has("invitationTemplate") || !partial) next.invitationTemplate = object(payload.invitationTemplate || {}, "邀约默认模板");
   return next;
+}
+
+async function createProjectManagerAccesses(activityId, authCenterUserIds, req, transaction) {
+  if (!authCenterUserIds.length) return;
+  const users = await AuthCenterXhuntUser.findAll({
+    where: { id: { [Op.in]: authCenterUserIds }, status: "active" },
+    include: [{ model: AuthCenterXhuntIdentity, as: "identities", where: { provider: "twitter" }, required: false, attributes: ["providerSubject"] }],
+    transaction,
+  });
+  if (users.length !== authCenterUserIds.length) throw publicError("所选项目方人员不存在或已不可用", 404, "AUTH_CENTER_USER_NOT_FOUND");
+  await BusinessCollaborationActivityAccess.bulkCreate(users.map((user) => ({
+    activityId,
+    authCenterUserId: user.id,
+    twitterId: user.identities?.[0]?.providerSubject || user.primaryTwitterId || null,
+    role: "project_manager",
+    status: "active",
+    assignedByAdminId: req.adminUser?.id || null,
+  })), { transaction });
 }
 
 function validateActivityDates(next, existing = null) {
@@ -176,11 +231,65 @@ router.get("/activities", async (req, res) => {
   }
 });
 
+router.get("/project-account", async (req, res) => {
+  try {
+    const handle = normalizeTwitterHandle(req.query.handle);
+    if (!handle) throw publicError("请输入项目 X Handle");
+    const response = await axios.get(TWITTER_USER_LOOKUP_URL, { params: { username: handle }, timeout: 8000 });
+    const account = normalizeTwitterAccount(response.data);
+    if (!account) throw publicError("未找到该项目 X 账号，请检查 Handle", 404, "PROJECT_ACCOUNT_NOT_FOUND");
+    return res.json({ success: true, data: account });
+  } catch (error) {
+    if (error.response?.status === 404) return res.status(404).json({ success: false, error: "PROJECT_ACCOUNT_NOT_FOUND" });
+    return res.status(error.status || 503).json({ success: false, error: error.code || error.message || "PROJECT_ACCOUNT_LOOKUP_FAILED" });
+  }
+});
+
+router.get("/assignees", async (req, res) => {
+  try {
+    const query = text(req.query.q, 128) || "";
+    const like = `%${query}%`;
+    const twitterHandleLike = `%${query.replace(/^@+/, "")}%`;
+    const users = await AuthCenterXhuntUser.findAll({
+      where: {
+        status: "active",
+        ...(query ? { [Op.or]: [
+          { accountName: { [Op.iLike]: like } },
+          { displayName: { [Op.iLike]: like } },
+          { primaryGoogleEmail: { [Op.iLike]: like } },
+          { "$identities.username$": { [Op.iLike]: twitterHandleLike } },
+        ] } : {}),
+      },
+      include: [{ model: AuthCenterXhuntIdentity, as: "identities", where: { provider: "twitter" }, required: false, attributes: ["username", "displayName"] }],
+      attributes: ["id", "accountName", "displayName", "primaryTwitterId", "primaryGoogleEmail"],
+      order: [["updatedAt", "DESC"]],
+      limit: 20,
+      subQuery: false,
+    });
+    return res.json({ success: true, data: users.map((user) => ({
+      id: user.id,
+      accountName: user.accountName,
+      displayName: user.displayName,
+      primaryTwitterId: user.primaryTwitterId,
+      primaryGoogleEmail: user.primaryGoogleEmail,
+      twitterHandle: user.identities?.[0]?.username || null,
+      twitterDisplayName: user.identities?.[0]?.displayName || null,
+    })) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
+  }
+});
+
 router.post("/activities", async (req, res) => {
   try {
     const payload = normalizeActivityPayload(req.body || {});
+    const authCenterUserIds = normalizeAccessAssignments(req.body?.authCenterUserIds);
     validateActivityDates(payload);
-    const activity = await BusinessCollaborationActivity.create({ ...payload, status: payload.status || "draft" });
+    const activity = await pgInstance.transaction(async (transaction) => {
+      const created = await BusinessCollaborationActivity.create({ ...payload, status: payload.status || "draft" }, { transaction });
+      await createProjectManagerAccesses(created.id, authCenterUserIds, req, transaction);
+      return loadActivity(created.id, { transaction });
+    });
     await logAdminAction(req, { action: "business-collaboration-activity-create", success: true, message: `activityId=${activity.id};projectTwitterId=${activity.projectTwitterId}` });
     return res.status(201).json({ success: true, data: serializeActivity(activity) });
   } catch (error) {
