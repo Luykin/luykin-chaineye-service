@@ -307,6 +307,24 @@ KOL 端在 grant 批准前不返回 `claimableAmount`、发放账本或领取入
 
 ## 12. 分阶段实施步骤
 
+### 实施进度（2026-09-18）
+
+| 范围 | 状态 | 记录 |
+| --- | --- | --- |
+| PostgreSQL 活动与活动级授权底座 | 已完成 | 已新增 `BusinessCollaborationActivities`、`BusinessCollaborationActivityAccesses` 迁移、Sequelize 模型与关联。 |
+| Admin API：定向合作活动 | 已完成 | 已挂载 `/api/admin/business-collaboration/activities`，支持活动列表、创建、详情、修改及仅 draft 无金额承诺时删除。 |
+| Admin API：活动授权 | 已完成 | 已支持按 Auth Center 用户授予/更新 `project_manager`、`agency_manager` 访问权；全程需 `business_collaboration_manage` 权限并写管理审计。 |
+| Admin Web“定向合作活动”Tab | 未开始 | 本轮按要求仅实施后端；Tab 可直接基于上述 Admin API 接入。 |
+| 项目方/Agency 邀约与 KOL 任务前端/API | 未开始 | 仍不对 EchoHunt 用户开放，避免领域底座未完整时出现前端可见入口。 |
+| 结束后的批量发放审核、grant、领取 | 未开始 | 依赖合作、交付和审核模型；本轮未实现，KOL 侧没有领取入口。 |
+
+当前 Admin API 端点：
+
+- `GET|POST /api/admin/business-collaboration/activities`
+- `GET|PATCH|DELETE /api/admin/business-collaboration/activities/:activityId`
+- `GET|POST /api/admin/business-collaboration/activities/:activityId/accesses`
+- `PATCH /api/admin/business-collaboration/activities/:activityId/accesses/:accessId`
+
 ### 阶段 0：确认不可自行假设的业务决策
 
 1. ~~确认资金的真实支付渠道、币种/网络、付款发起人与到账确认来源。~~ 本期明确不执行支付；只落库逐人可领取金额和账本，领取入口为 TODO 占位。

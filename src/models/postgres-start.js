@@ -33,6 +33,8 @@ const XHuntBinanceSquareBindingModel = require("../xhunt/models/XHuntBinanceSqua
 const XHuntBinanceSquareBindingChallengeModel = require("../xhunt/models/XHuntBinanceSquareBindingChallenge");
 const XHuntBinanceSquareBindingEventModel = require("../xhunt/models/XHuntBinanceSquareBindingEvent");
 const XHuntKolCollaborationModel = require("../xhunt/models/XHuntKolCollaboration");
+const BusinessCollaborationActivityModel = require("../xhunt/models/BusinessCollaborationActivity");
+const BusinessCollaborationActivityAccessModel = require("../xhunt/models/BusinessCollaborationActivityAccess");
 const AuthCenterXhuntUserModel = require("../xhunt/auth-center/models/AuthCenterXhuntUser");
 const AuthCenterXhuntIdentityModel = require("../xhunt/auth-center/models/AuthCenterXhuntIdentity");
 const AuthCenterXhuntPasswordCredentialModel = require("../xhunt/auth-center/models/AuthCenterXhuntPasswordCredential");
@@ -123,6 +125,8 @@ const XHuntBinanceSquareBinding = XHuntBinanceSquareBindingModel(pgInstance);
 const XHuntBinanceSquareBindingChallenge = XHuntBinanceSquareBindingChallengeModel(pgInstance);
 const XHuntBinanceSquareBindingEvent = XHuntBinanceSquareBindingEventModel(pgInstance);
 const XHuntKolCollaboration = XHuntKolCollaborationModel(pgInstance);
+const BusinessCollaborationActivity = BusinessCollaborationActivityModel(pgInstance);
+const BusinessCollaborationActivityAccess = BusinessCollaborationActivityAccessModel(pgInstance);
 const AuthCenterXhuntUser = AuthCenterXhuntUserModel(pgInstance);
 const AuthCenterXhuntIdentity = AuthCenterXhuntIdentityModel(pgInstance);
 const AuthCenterXhuntPasswordCredential = AuthCenterXhuntPasswordCredentialModel(pgInstance);
@@ -402,6 +406,23 @@ XHuntKolCollaboration.belongsTo(XHuntUser, {
   as: "xhuntUser",
 });
 
+BusinessCollaborationActivity.hasMany(BusinessCollaborationActivityAccess, {
+  foreignKey: "activityId",
+  as: "accesses",
+});
+BusinessCollaborationActivityAccess.belongsTo(BusinessCollaborationActivity, {
+  foreignKey: "activityId",
+  as: "activity",
+});
+AuthCenterXhuntUser.hasMany(BusinessCollaborationActivityAccess, {
+  foreignKey: "authCenterUserId",
+  as: "businessCollaborationAccesses",
+});
+BusinessCollaborationActivityAccess.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "authCenterUserId",
+  as: "authCenterUser",
+});
+
 // EchoHunt Social Listening 关系
 EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningPost, {
   foreignKey: "boardId",
@@ -535,6 +556,8 @@ module.exports = {
   XHuntBinanceSquareBindingChallenge,
   XHuntBinanceSquareBindingEvent,
   XHuntKolCollaboration,
+  BusinessCollaborationActivity,
+  BusinessCollaborationActivityAccess,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
   AuthCenterXhuntPasswordCredential,

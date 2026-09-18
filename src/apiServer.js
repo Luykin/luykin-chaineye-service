@@ -247,6 +247,7 @@ const adminReviewsRoutes = require("./admin/api/reviews");
 const adminLlmTestRoutes = require("./admin/api/llm-test");
 const adminTampermonkeyRoutes = require("./admin/api/tampermonkey");
 const adminKolMarketingRoutes = require("./admin/api/kol-marketing");
+const adminBusinessCollaborationRoutes = require("./admin/api/business-collaboration");
 const adminSocialListeningRoutes = require("./xhunt/social-listening/api/admin");
 const binanceSquareRoutes = require("./binance-square/api/binance-square");
 const xHuntSSERoutes = require("./xhunt/api/sse");
@@ -704,6 +705,9 @@ async function initializeAndStartServer() {
 
   // 管理后台 - KOL Marketing 只读状态（供 KOL Match 配置页展示）
   app.use("/api/admin/kol-marketing", adminAuth, adminKolMarketingRoutes);
+
+  // 管理后台 - 定向合作活动
+  app.use("/api/admin/business-collaboration", adminAuth, adminBusinessCollaborationRoutes);
 
   // 管理后台 - EchoHunt Social Listening
   app.use("/api/admin/social-listening", adminAuth, adminSocialListeningRoutes);
