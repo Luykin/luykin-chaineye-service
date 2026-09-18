@@ -5,6 +5,8 @@ const { requirePermission } = require("../middleware/adminAuth");
 const {
   BusinessCollaborationActivity,
   BusinessCollaborationActivityAccess,
+  BusinessCollaborationInvitation,
+  BusinessCollaboration,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
   XhuntVipTestUser,
@@ -192,7 +194,53 @@ function serializeAccess(row) {
   };
 }
 
-function serializeActivity(row) {
+function emptyActivityStats(seatLimit = 0) {
+  return {
+    invitations: { total: 0, pendingResponse: 0, accepted: 0, confirmed: 0, kolDeclined: 0, projectDeclined: 0, reservationExpired: 0 },
+    collaborations: { confirmed: 0 },
+    kolProgress: { seatLimit: Number(seatLimit || 0), reserved: 0, confirmed: 0, percent: 0 },
+  };
+}
+
+function buildActivityStats(activity, invitations = [], collaborations = []) {
+  const stats = emptyActivityStats(activity.seatLimit);
+  stats.invitations.total = invitations.length;
+  invitations.forEach((item) => {
+    if (item.status === "sent") stats.invitations.pendingResponse += 1;
+    else if (item.status === "accepted") stats.invitations.accepted += 1;
+    else if (item.status === "confirmed") stats.invitations.confirmed += 1;
+    else if (item.status === "kol_declined") stats.invitations.kolDeclined += 1;
+    else if (item.status === "project_declined") stats.invitations.projectDeclined += 1;
+    else if (item.status === "reservation_expired") stats.invitations.reservationExpired += 1;
+  });
+  stats.collaborations.confirmed = collaborations.filter((item) => item.status === "confirmed").length;
+  stats.kolProgress.reserved = Number(activity.reservedSeatCount || 0);
+  stats.kolProgress.confirmed = Number(activity.confirmedSeatCount || stats.collaborations.confirmed || 0);
+  stats.kolProgress.percent = stats.kolProgress.seatLimit ? Math.min(100, Math.round((stats.kolProgress.confirmed / stats.kolProgress.seatLimit) * 100)) : 0;
+  return stats;
+}
+
+async function loadActivityStats(activities) {
+  const ids = activities.map((item) => String(item.id)).filter(Boolean);
+  if (!ids.length) return new Map();
+  const [invitations, collaborations] = await Promise.all([
+    BusinessCollaborationInvitation.findAll({ where: { activityId: { [Op.in]: ids } }, attributes: ["activityId", "status"] }),
+    BusinessCollaboration.findAll({ where: { activityId: { [Op.in]: ids } }, attributes: ["activityId", "status"] }),
+  ]);
+  const invitationsByActivity = new Map();
+  const collaborationsByActivity = new Map();
+  invitations.forEach((item) => {
+    const key = String(item.activityId);
+    invitationsByActivity.set(key, [...(invitationsByActivity.get(key) || []), item]);
+  });
+  collaborations.forEach((item) => {
+    const key = String(item.activityId);
+    collaborationsByActivity.set(key, [...(collaborationsByActivity.get(key) || []), item]);
+  });
+  return new Map(activities.map((activity) => [String(activity.id), buildActivityStats(activity, invitationsByActivity.get(String(activity.id)) || [], collaborationsByActivity.get(String(activity.id)) || [])]));
+}
+
+function serializeActivity(row, stats) {
   const item = row.toJSON ? row.toJSON() : row;
   const totalCommitted = [item.reservedAmount, item.lockedAmount, item.claimableAmount, item.paidAmount]
     .reduce((sum, value) => sum + decimalToCents(value || "0.00", "金额", { allowZero: true }), 0n);
@@ -200,7 +248,26 @@ function serializeActivity(row) {
   return {
     ...item,
     availableAmount: formatCents(availableAmount > 0n ? availableAmount : 0n),
+    stats: stats || emptyActivityStats(item.seatLimit),
     accesses: Array.isArray(item.accesses) ? item.accesses.map(serializeAccess) : undefined,
+  };
+}
+
+function serializeInvitationOverview(row) {
+  const item = row.toJSON ? row.toJSON() : row;
+  const snapshot = item.invitationSnapshot || {};
+  return {
+    id: item.id,
+    kol: { twitterId: item.kolTwitterId, username: snapshot.kol?.username || null, displayName: snapshot.kol?.displayName || null },
+    offerAmount: String(item.offerAmount),
+    currency: item.currency,
+    status: item.status,
+    acceptedAt: item.acceptedAt || null,
+    reservationExpiresAt: item.reservationExpiresAt || null,
+    declineReason: item.declineReason || null,
+    collaboration: item.collaboration ? { id: item.collaboration.id, status: item.collaboration.status, lockedAmount: String(item.collaboration.lockedAmount), confirmedAt: item.collaboration.confirmedAt } : null,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
   };
 }
 
@@ -233,7 +300,24 @@ router.get("/activities", async (req, res) => {
       include: [{ model: BusinessCollaborationActivityAccess, as: "accesses", include: [{ model: AuthCenterXhuntUser, as: "authCenterUser", attributes: ["id", "accountName", "displayName", "primaryTwitterId"] }] }],
       order: [["updatedAt", "DESC"]],
     });
-    return res.json({ success: true, data: activities.map(serializeActivity) });
+    const statsByActivity = await loadActivityStats(activities);
+    return res.json({ success: true, data: activities.map((activity) => serializeActivity(activity, statsByActivity.get(String(activity.id)))) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
+  }
+});
+
+router.get("/activities/:activityId/overview", async (req, res) => {
+  try {
+    const activity = await loadActivity(req.params.activityId);
+    const invitations = await BusinessCollaborationInvitation.findAll({
+      where: { activityId: activity.id },
+      include: [{ model: BusinessCollaboration, as: "collaboration" }],
+      order: [["updatedAt", "DESC"]],
+    });
+    const collaborations = invitations.map((item) => item.collaboration).filter(Boolean);
+    const stats = buildActivityStats(activity, invitations, collaborations);
+    return res.json({ success: true, data: { activity: serializeActivity(activity, stats), invitations: invitations.map(serializeInvitationOverview) } });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
   }
