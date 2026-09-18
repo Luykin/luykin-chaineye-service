@@ -266,13 +266,17 @@ router.get("/internal-test-users", async (req, res) => {
       include: [{ model: AuthCenterXhuntUser, as: "user", required: true, where: { status: "active" }, attributes: ["id"] }],
       attributes: ["providerSubject", "username"],
     }) : [];
+    const usersByPrimaryTwitterId = new Map((twitterIds.length ? await AuthCenterXhuntUser.findAll({
+      where: { status: "active", primaryTwitterId: { [Op.in]: twitterIds } },
+      attributes: ["id", "primaryTwitterId"],
+    }) : []).map((user) => [String(user.primaryTwitterId), user]));
     const identityByTwitterId = new Map(identities.map((identity) => [String(identity.providerSubject), identity]));
     const identityByUsername = new Map(identities.filter((identity) => identity.username).map((identity) => [String(identity.username).toLowerCase(), identity]));
-    const data = internalTestUsers.flatMap((item) => {
+    const data = internalTestUsers.map((item) => {
       const username = String(item.username || "").trim();
       const identity = (item.twitterId && identityByTwitterId.get(String(item.twitterId))) || identityByUsername.get(username.toLowerCase());
-      if (!identity?.user) return [];
-      return [{ id: identity.user.id, username, twitterId: item.twitterId || identity.providerSubject || null }];
+      const user = identity?.user || (item.twitterId ? usersByPrimaryTwitterId.get(String(item.twitterId)) : null);
+      return { authCenterUserId: user?.id || null, username, twitterId: item.twitterId || identity?.providerSubject || null };
     });
     return res.json({ success: true, data });
   } catch (error) {

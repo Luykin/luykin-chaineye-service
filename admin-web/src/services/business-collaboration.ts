@@ -4,7 +4,7 @@ export type CollaborationActivityStatus = "draft" | "open" | "paused" | "archive
 export interface CollaborationAccess { id: string; authCenterUserId: string; twitterId?: string | null; role: "project_manager" | "agency_manager"; status: "active" | "paused" | "revoked"; reason?: string | null; user?: { accountName?: string | null; displayName?: string | null; primaryTwitterId?: string | null } | null; }
 export interface CollaborationActivity { id: string; name: string; description?: string | null; projectTwitterId: string; projectTwitterHandle?: string | null; projectDisplayName?: string | null; fundingPoolAmount: string; currency: string; availableAmount: string; reservedAmount: string; lockedAmount: string; claimableAmount: string; paidAmount: string; seatLimit: number; startAt: string; endAt: string; reviewerMode: "echohunt" | "project"; status: CollaborationActivityStatus; invitationTemplate: Record<string, unknown>; accesses?: CollaborationAccess[]; }
 export interface CollaborationProjectAccount { twitterId: string; handle: string; displayName?: string | null; avatar?: string | null; followers?: number; }
-export interface CollaborationInternalTestUser { id: string; username: string; twitterId?: string | null; }
+export interface CollaborationInternalTestUser { authCenterUserId?: string | null; username: string; twitterId?: string | null; }
 
 const apiBase = "/api/admin/business-collaboration";
 const base = `${apiBase}/activities`;

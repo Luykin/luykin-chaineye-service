@@ -179,6 +179,11 @@ function snapshotField(value, field, max, required = false) {
   return text(value, field, max, { required });
 }
 
+function snapshotMultiSelectField(value, field, max) {
+  if (Array.isArray(value)) return stringList(value, field, { maxItems: 10, maxItemLength: max }).join("、");
+  return snapshotField(value, field, max);
+}
+
 function normalizeInvitationSnapshot(template, invitation, activity) {
   const base = template && typeof template === "object" && !Array.isArray(template) ? template : {};
   const overrides = invitation?.overrides && typeof invitation.overrides === "object" && !Array.isArray(invitation.overrides)
@@ -194,8 +199,8 @@ function normalizeInvitationSnapshot(template, invitation, activity) {
   const title = snapshotField(value("title"), "邀约标题", 200) || activity.name;
   const message = snapshotField(value("message"), "邀约说明", 5000);
   const brief = snapshotField(value("brief"), "合作 Brief", 10000);
-  const contentFormat = snapshotField(value("contentFormat"), "内容形式", 128);
-  const language = snapshotField(value("language"), "内容语言", 64);
+  const contentFormat = snapshotMultiSelectField(value("contentFormat"), "内容形式", 128);
+  const language = snapshotMultiSelectField(value("language"), "内容语言", 64);
   const requiredPoints = stringList(value("requiredPoints"), "必须表达事项");
   const rawContentCount = value("contentCount");
   const contentCount = rawContentCount === undefined || rawContentCount === null || rawContentCount === ""
