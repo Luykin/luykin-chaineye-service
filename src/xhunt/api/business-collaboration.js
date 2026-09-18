@@ -10,6 +10,7 @@ const {
   BusinessCollaborationBudgetLedger,
   BusinessCollaborationAuditLog,
   XHuntKolCollaboration,
+  XAccount,
 } = require("../../models/postgres-start");
 const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth");
 const { PROVIDERS } = require("../auth-center/services/auth");
@@ -161,7 +162,30 @@ async function loadManagerActivityStats(activities) {
   return statsByActivity;
 }
 
-function serializeActivityForManager(activity, access, stats = null) {
+async function loadProjectAvatarFallbacks(activities) {
+  const missing = activities.filter((activity) => activity && !activity.projectTwitterAvatarUrl);
+  if (!missing.length) return new Map();
+  const twitterIds = [...new Set(missing.map((activity) => String(activity.projectTwitterId || "").trim()).filter(Boolean))];
+  const handles = [...new Set(missing.map((activity) => String(activity.projectTwitterHandle || "").trim()).filter(Boolean))];
+  if (!twitterIds.length && !handles.length) return new Map();
+  const accounts = await XAccount.findAll({
+    where: {
+      [Op.or]: [
+        ...(twitterIds.length ? [{ xId: { [Op.in]: twitterIds } }] : []),
+        ...(handles.length ? [{ handle: { [Op.in]: handles } }] : []),
+      ],
+    },
+    attributes: ["xId", "handle", "avatar"],
+  });
+  const byTwitterId = new Map(accounts.filter((account) => account.xId && account.avatar).map((account) => [String(account.xId), account.avatar]));
+  const byHandle = new Map(accounts.filter((account) => account.handle && account.avatar).map((account) => [String(account.handle).toLowerCase(), account.avatar]));
+  return new Map(missing.map((activity) => [
+    String(activity.id),
+    byTwitterId.get(String(activity.projectTwitterId)) || byHandle.get(String(activity.projectTwitterHandle || "").toLowerCase()) || null,
+  ]).filter(([, avatar]) => Boolean(avatar)));
+}
+
+function serializeActivityForManager(activity, access, stats = null, fallbackAvatarUrl = null) {
   const item = activity.toJSON ? activity.toJSON() : activity;
   const available = getAvailableAmountCents(item);
   return {
@@ -172,6 +196,8 @@ function serializeActivityForManager(activity, access, stats = null) {
       twitterId: item.projectTwitterId,
       twitterHandle: item.projectTwitterHandle || null,
       displayName: item.projectDisplayName || null,
+      avatarUrl: item.projectTwitterAvatarUrl || fallbackAvatarUrl || null,
+      bannerUrl: item.projectTwitterBannerUrl || null,
     },
     currency: item.currency,
     budget: {
@@ -395,9 +421,9 @@ router.get("/activities/available", async (req, res) => {
       include: [{ model: BusinessCollaborationActivity, as: "activity" }],
       order: [[{ model: BusinessCollaborationActivity, as: "activity" }, "endAt", "ASC"]],
     });
-    const data = accesses
-      .filter((access) => access.activity && recruitmentState(access.activity) === "open")
-      .map((access) => serializeActivityForManager(access.activity, access));
+    const availableAccesses = accesses.filter((access) => access.activity && recruitmentState(access.activity) === "open");
+    const avatarFallbacks = await loadProjectAvatarFallbacks(availableAccesses.map((access) => access.activity));
+    const data = availableAccesses.map((access) => serializeActivityForManager(access.activity, access, null, avatarFallbacks.get(String(access.activity.id)) || null));
     res.set("Cache-Control", "no-store");
     return res.json({ success: true, data });
   } catch (error) {
@@ -424,12 +450,15 @@ router.get("/me", async (req, res) => {
       }) : Promise.resolve([]),
     ]);
     const managedActivityRows = accesses.filter((access) => access.activity);
-    const managerStatsByActivity = await loadManagerActivityStats(managedActivityRows.map((access) => access.activity));
+    const [managerStatsByActivity, avatarFallbacks] = await Promise.all([
+      loadManagerActivityStats(managedActivityRows.map((access) => access.activity)),
+      loadProjectAvatarFallbacks(managedActivityRows.map((access) => access.activity)),
+    ]);
     res.set("Cache-Control", "no-store");
     return res.json({
       success: true,
       data: {
-        managedActivities: managedActivityRows.map((access) => serializeActivityForManager(access.activity, access, managerStatsByActivity.get(String(access.activity.id)))),
+        managedActivities: managedActivityRows.map((access) => serializeActivityForManager(access.activity, access, managerStatsByActivity.get(String(access.activity.id)), avatarFallbacks.get(String(access.activity.id)) || null)),
         kolTasks: invitations.map(serializeKolInvitation),
       },
     });
