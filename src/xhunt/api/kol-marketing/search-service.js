@@ -45,6 +45,7 @@ const ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS = getPositiveIntegerEnv(
   12000,
   { min: 1000, max: 30000 }
 );
+const DB_SEARCH_FINAL_RETRY_DELAY_MS = 250;
 
 const FILTER_PATCH_KEYS = [
   "language",
@@ -1470,11 +1471,51 @@ async function searchKolMarketingProfiles(params = {}) {
     message: "正在检索 KOL 候选集",
   });
   throwIfSearchAborted(isAborted);
-  const searchResult = await queryKolMarketingProfilesByEmbedding({
+  const dbSearchStartedAt = Date.now();
+  const dbSearchParams = {
     embedding: embeddingResult.embedding,
     filters: searchPlan.effectiveFilters,
     limit: params.limit,
-  });
+  };
+  let searchResult;
+  let finalRetry = null;
+  try {
+    searchResult = await queryKolMarketingProfilesByEmbedding(dbSearchParams);
+  } catch (error) {
+    // queryKolMarketingProfilesByEmbedding 已在 activityDays 的首次超时时提升
+    // statement_timeout 重跑一次。若两次仍因 PG 超时失败，再复用当前 embedding
+    // 进行一次短暂退避后的最终重试；不会重复请求 LLM/Embedding，也不会影响额度。
+    if (!isStatementTimeoutError(error)) throw error;
+
+    finalRetry = {
+      reason: "statement_timeout",
+      delayMs: DB_SEARCH_FINAL_RETRY_DELAY_MS,
+      firstAttemptCostMs: Date.now() - dbSearchStartedAt,
+    };
+    console.warn("[KOL Marketing Search] db query timed out after transaction retry, retry once", {
+      filters: searchPlan.effectiveFilters,
+      limit: params.limit,
+      ...finalRetry,
+    });
+    await emitSearchProgress(params.onProgress, {
+      stage: "db_search",
+      status: "running",
+      message: "候选检索短暂超时，正在自动重试一次",
+    });
+    await new Promise((resolve) => setTimeout(resolve, DB_SEARCH_FINAL_RETRY_DELAY_MS));
+    throwIfSearchAborted(isAborted);
+    searchResult = await queryKolMarketingProfilesByEmbedding(dbSearchParams);
+  }
+  if (finalRetry) {
+    searchResult = {
+      ...searchResult,
+      dbCostMs: Date.now() - dbSearchStartedAt,
+      retryInfo: {
+        ...(searchResult.retryInfo || {}),
+        finalRetry,
+      },
+    };
+  }
   await emitSearchProgress(params.onProgress, {
     stage: "db_search",
     status: "done",
