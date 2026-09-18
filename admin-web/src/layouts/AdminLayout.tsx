@@ -5,6 +5,7 @@ import {
   CaretRightOutlined,
   CheckCircleFilled,
   CodeOutlined,
+  LockOutlined,
   LogoutOutlined,
   MenuOutlined,
   MonitorOutlined,
