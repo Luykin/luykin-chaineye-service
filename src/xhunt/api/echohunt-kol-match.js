@@ -51,6 +51,8 @@ const {
   INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS,
   INTERNAL_TWITTER_USER_LOOKUP_URL,
   QUOTA_TIMEZONE,
+  RESULT_CACHE_PREFIX,
+  RESULT_TTL_SECONDS,
   SENSITIVE_OUTPUT_PATTERNS,
   STRATEGY_CACHE_PREFIX,
   STRATEGY_TTL_SECONDS,
@@ -308,6 +310,26 @@ function getIdempotencyRedisKey(userId, bucket, key, reqOrConfig) {
   const routeVariant = String(meta.routeVariant || "default").replace(/[^a-zA-Z0-9:_-]/g, "");
   const configVersion = crypto.createHash("sha256").update(String(meta.configVersion || "defaults")).digest("hex").slice(0, 16);
   return `${IDEMPOTENCY_CACHE_PREFIX}:${userId}:${bucket}:${appEnv}:${routeVariant}:${configVersion}:${hash}`;
+}
+
+function normalizeResultId(value) {
+  const normalized = String(value || "").trim();
+  return /^kmr_[a-zA-Z0-9_-]{16,64}$/.test(normalized) ? normalized : "";
+}
+
+function getResultRedisKey(userId, resultId) {
+  return `${RESULT_CACHE_PREFIX}:${userId}:${resultId}`;
+}
+
+async function writeSavedMatchResult(req, data) {
+  const resultId = `kmr_${crypto.randomBytes(18).toString("base64url")}`;
+  const redis = requireRedis(req);
+  await redis.setEx(
+    getResultRedisKey(getAuthCenterUserId(req), resultId),
+    RESULT_TTL_SECONDS,
+    JSON.stringify({ ...data, resultId })
+  );
+  return resultId;
 }
 
 async function readIdempotentResult(req, bucket, idempotencyKey) {
@@ -1028,11 +1050,15 @@ async function generateKolMatchStrategy(params, req) {
   const hardFilters = normalizeProductHardFilters(params.hardFilters || params.filters || {});
   const requestXProfile = normalizeProjectXProfile(params.xProfile || params.projectAccount || params.projectAccountSnapshot);
   let xProfile = requestXProfile;
+  let verifiedProjectTwitterId = null;
   if (projectHandle) {
     const lookedUpProfile = await lookupProjectAccount(projectHandle, {
       failOnUpstreamError: false,
     }).catch(() => null);
-    if (lookedUpProfile) xProfile = mergeProjectXProfiles(lookedUpProfile, requestXProfile);
+    if (lookedUpProfile) {
+      xProfile = mergeProjectXProfiles(lookedUpProfile, requestXProfile);
+      verifiedProjectTwitterId = normalizeTwitterUserId(lookedUpProfile.twitterId);
+    }
   }
   const fallbackStrategy = buildFallbackStrategy({ scope, projectHandle, hardFilters, lang });
   let strategy = fallbackStrategy;
@@ -1071,6 +1097,9 @@ async function generateKolMatchStrategy(params, req) {
     lang,
     scope,
     projectHandle,
+    // Only this server-resolved identifier may authorize an invitation activity.
+    // xProfile can include a client-provided fallback and is never a trust boundary.
+    verifiedProjectTwitterId: verifiedProjectTwitterId || null,
     xProfile: hasUsefulXProfile(xProfile) ? xProfile : null,
     profileContext: buildStrategyProfileContext(xProfile, lang),
     projectBrief: scope.safeBrief,
@@ -2460,6 +2489,18 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
         quotaCharged: false,
       });
     }
+    const verifiedProjectTwitterId = normalizeTwitterUserId(projectAccount.twitterId);
+    if (!verifiedProjectTwitterId) {
+      throw publicError("PROJECT_ACCOUNT_INVALID", 503, "项目 X 账号缺少有效身份信息，请稍后重试。", {
+        quotaCharged: false,
+      });
+    }
+    strategy.verifiedProjectTwitterId = verifiedProjectTwitterId;
+    await requireRedis(req).setEx(
+      `${STRATEGY_CACHE_PREFIX}:${getAuthCenterUserId(req)}:${strategy.strategyId}`,
+      STRATEGY_TTL_SECONDS,
+      JSON.stringify(strategy)
+    );
     throwIfClientClosed(isClientClosed);
     await emitProgress?.({
       stage: "twitter_user_lookup",
@@ -2632,6 +2673,12 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   const data = {
     mode: "ai",
     strategyId: strategy.strategyId,
+    matchContext: {
+      domain: filters.domains?.[0] || "Web3",
+      market: filters.language || "GLOBAL",
+      projectHandle: strategy.projectHandle || projectHandle,
+      projectBrief: strategy.projectBrief || "",
+    },
     projectAccount,
     projectUnderstanding: strategy.projectUnderstanding,
     semanticQuery: searchResult.semanticQuery,
@@ -2665,6 +2712,14 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   };
 
   throwIfClientClosed(isClientClosed);
+  data.resultId = await writeSavedMatchResult(req, data);
+  // Keep the verified strategy context for as long as its saved result remains
+  // available, so a restored shortlist can still proceed to invitation checks.
+  await requireRedis(req).setEx(
+    `${STRATEGY_CACHE_PREFIX}:${getAuthCenterUserId(req)}:${strategy.strategyId}`,
+    RESULT_TTL_SECONDS,
+    JSON.stringify(strategy)
+  );
   await writeIdempotentResult(req, AI_QUOTA_BUCKET, idempotencyKey, data);
   return data;
 }
@@ -2844,6 +2899,29 @@ const aiSearchStreamHandler = async (req, res) => {
   }
 };
 
+const savedResultHandler = async (req, res) => {
+  try {
+    const resultId = normalizeResultId(req.params.resultId);
+    if (!resultId) throw publicError("KOL_MATCH_RESULT_INVALID", 400, "匹配结果链接无效。", { quotaCharged: false });
+    const cached = await requireRedis(req).get(getResultRedisKey(getAuthCenterUserId(req), resultId)).catch(() => null);
+    if (!cached) throw publicError("KOL_MATCH_RESULT_EXPIRED", 404, "这份匹配结果已失效，请重新匹配。", { quotaCharged: false });
+    let data;
+    try {
+      data = JSON.parse(cached);
+    } catch {
+      throw publicError("KOL_MATCH_RESULT_INVALID", 409, "这份匹配结果无法恢复，请重新匹配。", { quotaCharged: false });
+    }
+    const meta = getKolMatchRuntimeMeta(req);
+    if (data?.meta?.appEnv && data.meta.appEnv !== meta.appEnv) {
+      throw publicError("KOL_MATCH_RESULT_INVALID", 404, "这份匹配结果不可用于当前环境。", { quotaCharged: false });
+    }
+    res.set("Cache-Control", "no-store");
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "KOL_MATCH_RESULT_LOAD_FAILED");
+  }
+};
+
 const filterSearchHandler = async (req, res) => {
   const configError = getPgServiceConfigError();
   if (configError) {
@@ -2984,6 +3062,7 @@ router.get("/project-account/lookup", dispatchByEchohuntEnv("project-account-loo
 router.post("/strategy", dispatchByEchohuntEnv("strategy", strategyHandler));
 router.post("/ai-search", dispatchByEchohuntEnv("ai-search", aiSearchHandler));
 router.post("/ai-search/stream", dispatchByEchohuntEnv("ai-search-stream", aiSearchStreamHandler));
+router.get("/results/:resultId", dispatchByEchohuntEnv("saved-result", savedResultHandler));
 router.post("/filter-search", dispatchByEchohuntEnv("filter-search", filterSearchHandler));
 router.get("/kols/lookup", dispatchByEchohuntEnv("kols-lookup", kolsLookupHandler));
 router.get("/kols/:twitterUserId", dispatchByEchohuntEnv("kols-detail", kolsDetailHandler));

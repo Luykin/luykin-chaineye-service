@@ -2,8 +2,10 @@ const QUOTA_TIMEZONE = "Asia/Shanghai";
 const AI_QUOTA_BUCKET = "aiMatch";
 const FILTER_QUOTA_BUCKET = "filterSearch";
 const STRATEGY_CACHE_PREFIX = "echohunt:kol-match:strategy";
+const RESULT_CACHE_PREFIX = "echohunt:kol-match:result";
 const IDEMPOTENCY_CACHE_PREFIX = "echohunt:kol-match:idempotency";
 const STRATEGY_TTL_SECONDS = 30 * 60;
+const RESULT_TTL_SECONDS = 7 * 24 * 60 * 60;
 const INTERNAL_TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
 const INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS = 7000;
 const DEFAULT_AI_DAILY_LIMIT = 3;
@@ -129,6 +131,8 @@ module.exports = {
   INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS,
   INTERNAL_TWITTER_USER_LOOKUP_URL,
   QUOTA_TIMEZONE,
+  RESULT_CACHE_PREFIX,
+  RESULT_TTL_SECONDS,
   SENSITIVE_OUTPUT_PATTERNS,
   STRATEGY_CACHE_PREFIX,
   STRATEGY_TTL_SECONDS,

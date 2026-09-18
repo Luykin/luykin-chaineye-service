@@ -16,6 +16,7 @@ const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth"
 const { PROVIDERS } = require("../auth-center/services/auth");
 const { extractEvm40Address } = require("../auth-center/services/utils");
 const { decimalToCents, formatCents, sumMoney } = require("../business-collaboration/money");
+const { STRATEGY_CACHE_PREFIX } = require("./echohunt-kol-match/constants");
 
 const router = express.Router();
 const ACCESS_ROLES = new Set(["project_manager", "agency_manager"]);
@@ -369,6 +370,36 @@ async function loadActivityForUpdate(activityId, transaction) {
   return activity;
 }
 
+async function assertKolMatchProjectContext(req, activity, strategyId) {
+  const normalizedStrategyId = String(strategyId || "").trim();
+  if (!/^[a-zA-Z0-9_-]{8,80}$/.test(normalizedStrategyId)) {
+    throw publicError("请从 AI 精准匹配结果页发起邀约", 400, "KOL_MATCH_CONTEXT_REQUIRED");
+  }
+  if (!req.redisClient || typeof req.redisClient.get !== "function") {
+    throw publicError("KOL Match 上下文暂不可用，请稍后重试", 503, "KOL_MATCH_CONTEXT_UNAVAILABLE");
+  }
+
+  const cacheKey = `${STRATEGY_CACHE_PREFIX}:${req.authCenter.user.id}:${normalizedStrategyId}`;
+  const cached = await req.redisClient.get(cacheKey).catch(() => null);
+  if (!cached) {
+    throw publicError("本次 KOL 匹配已失效，请重新分析项目账号后再邀约", 409, "KOL_MATCH_CONTEXT_EXPIRED");
+  }
+
+  let strategy;
+  try {
+    strategy = JSON.parse(cached);
+  } catch {
+    throw publicError("本次 KOL 匹配上下文无效，请重新分析项目账号后再邀约", 409, "KOL_MATCH_CONTEXT_INVALID");
+  }
+  // Do not trust xProfile here: it may contain UI fallback data. This value is
+  // written only after the KOL Match service resolves the X account itself.
+  const matchedProjectTwitterId = String(strategy?.verifiedProjectTwitterId || "").trim();
+  const activityProjectTwitterId = String(activity.projectTwitterId || "").trim();
+  if (!matchedProjectTwitterId || !activityProjectTwitterId || matchedProjectTwitterId !== activityProjectTwitterId) {
+    throw publicError("只能使用与当前 KOL 匹配项目账号一致的活动发起邀约", 403, "KOL_MATCH_PROJECT_MISMATCH");
+  }
+}
+
 async function audit({ transaction, req, activityId = null, invitationId = null, collaborationId = null, action, actorType, metadata = null }) {
   await BusinessCollaborationAuditLog.create({
     activityId,
@@ -639,6 +670,7 @@ router.post("/invitations", async (req, res) => {
   try {
     const idempotencyKey = getIdempotencyKey(req);
     const activityId = text(req.body?.activityId, "活动 ID", 64, { required: true });
+    const kolMatchStrategyId = req.body?.kolMatchStrategyId;
     const invitations = req.body?.invitations;
     if (!Array.isArray(invitations) || !invitations.length || invitations.length > 100) {
       throw publicError("邀约对象必须为 1-100 人", 400, "INVALID_INVITATION_BATCH");
@@ -646,6 +678,7 @@ router.post("/invitations", async (req, res) => {
     const data = await pgInstance.transaction(async (transaction) => {
       const access = await loadActiveAccess(activityId, req.authCenter.user.id, transaction, { lock: true });
       const activity = await loadActivityForUpdate(activityId, transaction);
+      await assertKolMatchProjectContext(req, activity, kolMatchStrategyId);
       const replayed = await BusinessCollaborationInvitation.findAll({
         where: { activityId, inviterAccessId: access.id, createIdempotencyKey: idempotencyKey },
         transaction,
