@@ -1312,7 +1312,9 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
       rows = await queryWithOptionalStatementTimeout(db, sql, queryOptions);
     } catch (error) {
       const timeoutDetails = errorDetails(error);
-      const canRetryActivityTimeout = filters.activityDays !== undefined &&
+      // 活跃度后置筛选会先执行一次较大的向量 recall；虽然其主查询已移除
+      // activityDays，带有其他硬过滤时仍可能因精确向量排序超过只读库默认超时。
+      const canRetryActivityTimeout = (filters.activityDays !== undefined || params.retryWithActivityTimeout === true) &&
         isStatementTimeoutError(error) &&
         ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS > 0;
 
@@ -1320,7 +1322,9 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
 
       const retryStartedAt = Date.now();
       retryInfo = {
-        reason: "activityDays_statement_timeout",
+        reason: params.retryWithActivityTimeout === true
+          ? "activity_post_filter_statement_timeout"
+          : "activityDays_statement_timeout",
         retryStatementTimeoutMs: ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS,
         firstCostMs: retryStartedAt - startedAt,
       };
@@ -1597,13 +1601,14 @@ async function searchKolMarketingProfiles(params = {}) {
     // 再按 1,000 条一批筛选近期原创推文。
     limit: useActivityPostFilter ? getActivityPostFilterCandidateLimit(requestedLimit) : requestedLimit,
     includeLastActive: !useActivityPostFilter,
+    retryWithActivityTimeout: useActivityPostFilter,
   };
   let searchResult;
   let finalRetry = null;
   try {
     searchResult = await queryKolMarketingProfilesByEmbedding(dbSearchParams);
   } catch (error) {
-    // queryKolMarketingProfilesByEmbedding 已在 activityDays 的首次超时时提升
+    // 直接 activityDays 筛选或活跃度后置 recall 的首次超时，都会提升
     // statement_timeout 重跑一次。若两次仍因 PG 超时失败，再复用当前 embedding
     // 进行一次短暂退避后的最终重试；不会重复请求 LLM/Embedding，也不会影响额度。
     if (!isStatementTimeoutError(error)) throw error;
