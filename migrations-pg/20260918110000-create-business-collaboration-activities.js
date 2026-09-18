@@ -38,7 +38,7 @@ module.exports = {
       twitterId: { type: Sequelize.STRING(64), allowNull: true },
       role: { type: Sequelize.STRING(32), allowNull: false },
       status: { type: Sequelize.STRING(32), allowNull: false, defaultValue: "active" },
-      assignedByAdminId: { type: Sequelize.UUID, allowNull: true },
+      assignedByAdminId: { type: Sequelize.INTEGER, allowNull: true, references: { model: "xhunt_admin_managers", key: "id" }, onUpdate: "CASCADE", onDelete: "SET NULL" },
       reason: { type: Sequelize.STRING(500), allowNull: true },
       createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.fn("NOW") },
       updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.fn("NOW") },

@@ -33,12 +33,24 @@ function text(value, max = 0) {
   return result || null;
 }
 
-function decimal(value, field) {
+function decimalToCents(value, field, { allowZero = false } = {}) {
   const raw = text(value, 32);
-  if (!raw || !/^\d+(?:\.\d{1,2})?$/.test(raw) || Number(raw) <= 0) {
+  if (!raw || !/^\d{1,18}(?:\.\d{1,2})?$/.test(raw)) {
     throw publicError(`${field} 必须是大于 0 且最多两位小数的金额`);
   }
-  return raw;
+  const [integer, fraction = ""] = raw.split(".");
+  const cents = BigInt(integer) * 100n + BigInt(fraction.padEnd(2, "0"));
+  if (cents < 0n || (!allowZero && cents === 0n)) throw publicError(`${field} 必须是大于 0 且最多两位小数的金额`);
+  return cents;
+}
+
+function formatCents(cents) {
+  const normalized = BigInt(cents);
+  return `${normalized / 100n}.${String(normalized % 100n).padStart(2, "0")}`;
+}
+
+function decimal(value, field) {
+  return formatCents(decimalToCents(value, field));
 }
 
 function positiveInt(value, field) {
@@ -127,10 +139,11 @@ function serializeAccess(row) {
 function serializeActivity(row) {
   const item = row.toJSON ? row.toJSON() : row;
   const totalCommitted = [item.reservedAmount, item.lockedAmount, item.claimableAmount, item.paidAmount]
-    .reduce((sum, value) => sum + Number(value || 0), 0);
+    .reduce((sum, value) => sum + decimalToCents(value || "0.00", "金额", { allowZero: true }), 0n);
+  const availableAmount = decimalToCents(item.fundingPoolAmount, "资金池金额") - totalCommitted;
   return {
     ...item,
-    availableAmount: Math.max(0, Number(item.fundingPoolAmount || 0) - totalCommitted).toFixed(2),
+    availableAmount: formatCents(availableAmount > 0n ? availableAmount : 0n),
     accesses: Array.isArray(item.accesses) ? item.accesses.map(serializeAccess) : undefined,
   };
 }
@@ -190,9 +203,9 @@ router.patch("/activities/:activityId", async (req, res) => {
       const current = await loadActivity(req.params.activityId, { transaction, lock: true });
       const payload = normalizeActivityPayload(req.body || {}, { partial: true });
       validateActivityDates(payload, current);
-      const committed = [current.reservedAmount, current.lockedAmount, current.claimableAmount, current.paidAmount].reduce((sum, value) => sum + Number(value || 0), 0);
-      if (payload.fundingPoolAmount && Number(payload.fundingPoolAmount) < committed) throw publicError("资金池不能低于已预留、锁定、可领取和已支付金额总和");
-      if (committed > 0 && (payload.currency || payload.projectTwitterId)) throw publicError("已有金额承诺后不能修改币种或项目 X 账号，请归档后新建活动");
+      const committed = [current.reservedAmount, current.lockedAmount, current.claimableAmount, current.paidAmount].reduce((sum, value) => sum + decimalToCents(value || "0.00", "金额", { allowZero: true }), 0n);
+      if (payload.fundingPoolAmount && decimalToCents(payload.fundingPoolAmount, "资金池金额") < committed) throw publicError("资金池不能低于已预留、锁定、可领取和已支付金额总和");
+      if (committed > 0n && (payload.currency || payload.projectTwitterId)) throw publicError("已有金额承诺后不能修改币种或项目 X 账号，请归档后新建活动");
       await current.update(payload, { transaction });
       return loadActivity(current.id, { transaction });
     });

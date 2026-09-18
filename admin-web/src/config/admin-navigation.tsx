@@ -38,6 +38,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/vip-management", icon: <LegacySidebarIcon name="user" />, label: "VIP 管理", permission: "vip-management", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-messages", icon: <LegacySidebarIcon name="megaphone" />, label: "公告配置", permission: "nacos-messages", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-campaigns", icon: <LegacySidebarIcon name="target" />, label: "活动配置", permission: "nacos_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
+  { key: "/business-collaboration", icon: <LegacySidebarIcon name="users" />, label: "定向合作活动", permission: "business_collaboration_manage", group: "main", sidebarGroup: "echohunt", implemented: true, section: "primary" },
   { key: "/nacos-tags", icon: <LegacySidebarIcon name="tag" />, label: "标签配置", permission: "nacos-tags", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-i18n", icon: <LegacySidebarIcon name="file-text" />, label: "翻译配置", permission: "nacos-i18n", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/cleaner-config", icon: <LegacySidebarIcon name="shield" />, label: "净化规则配置", permission: "cleaner-config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },

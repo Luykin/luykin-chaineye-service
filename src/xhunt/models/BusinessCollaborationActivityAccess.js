@@ -10,7 +10,7 @@ module.exports = (sequelize) =>
       twitterId: { type: DataTypes.STRING(64), allowNull: true },
       role: { type: DataTypes.STRING(32), allowNull: false },
       status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: "active" },
-      assignedByAdminId: { type: DataTypes.UUID, allowNull: true },
+      assignedByAdminId: { type: DataTypes.INTEGER, allowNull: true },
       reason: { type: DataTypes.STRING(500), allowNull: true },
     },
     {

@@ -45,6 +45,7 @@ import { AuthCenterTestPage } from "@/pages/AuthCenterTestPage";
 import { KolMatchConfigPage } from "@/pages/KolMatchConfigPage";
 import { SocialListeningPage } from "@/pages/SocialListeningPage";
 import { DbAdminPage } from "@/features/db-admin/DbAdminPage";
+import { BusinessCollaborationPage } from "@/pages/BusinessCollaborationPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -91,6 +92,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "kol-match-config": <KolMatchConfigPage />,
   "social-listening": <SocialListeningPage />,
   "db-admin": <DbAdminPage />,
+  "business-collaboration": <BusinessCollaborationPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {
