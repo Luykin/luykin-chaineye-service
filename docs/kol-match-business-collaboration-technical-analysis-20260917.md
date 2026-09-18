@@ -315,9 +315,12 @@ KOL 端在 grant 批准前不返回 `claimableAmount`、发放账本或领取入
 | Admin API：定向合作活动 | 已完成 | 已挂载 `/api/admin/business-collaboration/activities`，支持活动列表、创建、详情、修改及仅 draft 无金额承诺时删除。 |
 | Admin API：活动授权 | 已完成 | 已支持按 Auth Center 用户授予/更新 `project_manager`、`agency_manager` 访问权；全程需 `business_collaboration_manage` 权限并写管理审计。 |
 | Admin Web“定向合作活动”Tab | 已完成 | 已接入导航、路由与 `business_collaboration_manage` Gate；支持活动列表、新建、编辑、删除 draft 活动以及项目方/Agency 授权和撤销。 |
-| 项目方/Agency 邀约与 KOL 任务前端/API | 未开始 | 仍不对 EchoHunt 用户开放，避免领域底座未完整时出现前端可见入口。 |
+| 项目方/Agency 邀约与 KOL 任务 API | 已完成（前端未开始） | 已挂载 `/api/xhunt/echohunt/business-collaboration`：活动范围可见性、批量发邀约、KOL 接受/拒绝、项目方确认/取消、我的活动/任务查询均由认证中心 token 与活动级授权校验；KOL DTO 不返回内部报价或预留/锁定金额。 |
+| 收款地址验证与合作事实底座 | 已完成 | 已新增邀约、已确认合作、预算账本、业务审计迁移与 Sequelize 模型；默认 EVM 收款地址通过当前 X 登录 + 新地址签名（变更时还要求旧地址签名）独立设置，接受时固定地址快照。 |
+| EchoHunt 项目方/KOL 前端 | 已完成（首个闭环） | KOL Match 仅在当前账号有可用 TCC 时显示候选选择篮和 Ant Design 邀约抽屉；账户“商务合作”页按接口结果显示项目方活动进度、KOL 任务、接受/拒绝/确认操作和默认 EVM 地址验证。未获邀的 KOL 不显示任务模块。 |
 | 结束后的批量发放审核、grant、领取 | 未开始 | 依赖合作、交付和审核模型；本轮未实现，KOL 侧没有领取入口。 |
 | CR 修复：授权操作人、金额精度、权限可分配 | 已完成 | 操作人字段使用管理员 INTEGER 外键；金额改为分单位 `BigInt` 精确计算并限制 `DECIMAL(20,2)`；权限已加入管理员权限配置。 |
+| CR 修复：有承诺活动的普通编辑 | 已完成 | 已允许表单回传与当前值相同的项目 X/币种，仍禁止在存在金额承诺后实际变更这两个字段；删除校验同样使用精确金额计算。 |
 
 当前 Admin API 端点：
 
@@ -325,6 +328,16 @@ KOL 端在 grant 批准前不返回 `claimableAmount`、发放账本或领取入
 - `GET|PATCH|DELETE /api/admin/business-collaboration/activities/:activityId`
 - `GET|POST /api/admin/business-collaboration/activities/:activityId/accesses`
 - `PATCH /api/admin/business-collaboration/activities/:activityId/accesses/:accessId`
+
+当前 EchoHunt 用户 API 端点（所有写请求需携带 `Idempotency-Key`）：
+
+- `GET /api/xhunt/echohunt/business-collaboration/activities/available`
+- `GET /api/xhunt/echohunt/business-collaboration/activities/:activityId`
+- `GET /api/xhunt/echohunt/business-collaboration/me`
+- `POST /api/xhunt/echohunt/business-collaboration/invitations`
+- `POST /api/xhunt/echohunt/business-collaboration/invitations/:invitationId/accept|decline|confirm|decline-by-project`
+- `GET /api/xhunt/echohunt/business-collaboration/me/payout-address`
+- `POST /api/xhunt/echohunt/business-collaboration/me/payout-address/change/challenge|verify`
 
 ### 阶段 0：确认不可自行假设的业务决策
 

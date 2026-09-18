@@ -68,6 +68,14 @@ module.exports = (sequelize) => {
         defaultValue: "USDT",
         comment: "长推 / Thread 报价币种：USDT/USD",
       },
+      defaultPayoutAddress: {
+        type: DataTypes.STRING(42),
+        allowNull: true,
+        comment: "经 EVM 签名验证的默认收款地址；普通资料更新不可覆盖",
+      },
+      payoutAddressUpdatedAt: { type: DataTypes.DATE, allowNull: true },
+      payoutAddressVerifiedAt: { type: DataTypes.DATE, allowNull: true },
+      payoutAddressVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       metadata: {
         type: DataTypes.JSONB,
         allowNull: true,

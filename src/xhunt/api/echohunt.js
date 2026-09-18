@@ -72,10 +72,12 @@ const {
   syncKolCollaborationToMarketingProfile,
 } = require("../services/kolMarketingProfileCollaborationSync");
 const echohuntKolMatchRoutes = require("./echohunt-kol-match");
+const businessCollaborationRoutes = require("./business-collaboration");
 const socialListeningPublicRoutes = require("../social-listening/api/public");
 const router = express.Router();
 
 router.use("/kol-match", echohuntKolMatchRoutes);
+router.use("/business-collaboration", businessCollaborationRoutes);
 router.use("/social-listening", socialListeningPublicRoutes);
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";

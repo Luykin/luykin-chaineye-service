@@ -205,7 +205,13 @@ router.patch("/activities/:activityId", async (req, res) => {
       validateActivityDates(payload, current);
       const committed = [current.reservedAmount, current.lockedAmount, current.claimableAmount, current.paidAmount].reduce((sum, value) => sum + decimalToCents(value || "0.00", "金额", { allowZero: true }), 0n);
       if (payload.fundingPoolAmount && decimalToCents(payload.fundingPoolAmount, "资金池金额") < committed) throw publicError("资金池不能低于已预留、锁定、可领取和已支付金额总和");
-      if (committed > 0n && (payload.currency || payload.projectTwitterId)) throw publicError("已有金额承诺后不能修改币种或项目 X 账号，请归档后新建活动");
+      if (
+        committed > 0n &&
+        ((payload.currency && payload.currency !== current.currency) ||
+          (payload.projectTwitterId && payload.projectTwitterId !== current.projectTwitterId))
+      ) {
+        throw publicError("已有金额承诺后不能修改币种或项目 X 账号，请归档后新建活动");
+      }
       await current.update(payload, { transaction });
       return loadActivity(current.id, { transaction });
     });
@@ -221,7 +227,8 @@ router.delete("/activities/:activityId", async (req, res) => {
   try {
     await pgInstance.transaction(async (transaction) => {
       const activity = await loadActivity(req.params.activityId, { transaction, lock: true });
-      const committed = [activity.reservedAmount, activity.lockedAmount, activity.claimableAmount, activity.paidAmount].some((value) => Number(value || 0) > 0);
+      const committed = [activity.reservedAmount, activity.lockedAmount, activity.claimableAmount, activity.paidAmount]
+        .some((value) => decimalToCents(value || "0.00", "金额", { allowZero: true }) > 0n);
       if (activity.status !== "draft" || committed) throw publicError("只有没有金额承诺的 draft 活动可以删除；其他活动请归档", 409, "ACTIVITY_DELETE_FORBIDDEN");
       await activity.destroy({ transaction });
     });

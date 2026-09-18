@@ -35,6 +35,10 @@ const XHuntBinanceSquareBindingEventModel = require("../xhunt/models/XHuntBinanc
 const XHuntKolCollaborationModel = require("../xhunt/models/XHuntKolCollaboration");
 const BusinessCollaborationActivityModel = require("../xhunt/models/BusinessCollaborationActivity");
 const BusinessCollaborationActivityAccessModel = require("../xhunt/models/BusinessCollaborationActivityAccess");
+const BusinessCollaborationInvitationModel = require("../xhunt/models/BusinessCollaborationInvitation");
+const BusinessCollaborationModel = require("../xhunt/models/BusinessCollaboration");
+const BusinessCollaborationBudgetLedgerModel = require("../xhunt/models/BusinessCollaborationBudgetLedger");
+const BusinessCollaborationAuditLogModel = require("../xhunt/models/BusinessCollaborationAuditLog");
 const AuthCenterXhuntUserModel = require("../xhunt/auth-center/models/AuthCenterXhuntUser");
 const AuthCenterXhuntIdentityModel = require("../xhunt/auth-center/models/AuthCenterXhuntIdentity");
 const AuthCenterXhuntPasswordCredentialModel = require("../xhunt/auth-center/models/AuthCenterXhuntPasswordCredential");
@@ -127,6 +131,10 @@ const XHuntBinanceSquareBindingEvent = XHuntBinanceSquareBindingEventModel(pgIns
 const XHuntKolCollaboration = XHuntKolCollaborationModel(pgInstance);
 const BusinessCollaborationActivity = BusinessCollaborationActivityModel(pgInstance);
 const BusinessCollaborationActivityAccess = BusinessCollaborationActivityAccessModel(pgInstance);
+const BusinessCollaborationInvitation = BusinessCollaborationInvitationModel(pgInstance);
+const BusinessCollaboration = BusinessCollaborationModel(pgInstance);
+const BusinessCollaborationBudgetLedger = BusinessCollaborationBudgetLedgerModel(pgInstance);
+const BusinessCollaborationAuditLog = BusinessCollaborationAuditLogModel(pgInstance);
 const AuthCenterXhuntUser = AuthCenterXhuntUserModel(pgInstance);
 const AuthCenterXhuntIdentity = AuthCenterXhuntIdentityModel(pgInstance);
 const AuthCenterXhuntPasswordCredential = AuthCenterXhuntPasswordCredentialModel(pgInstance);
@@ -422,6 +430,70 @@ BusinessCollaborationActivityAccess.belongsTo(AuthCenterXhuntUser, {
   foreignKey: "authCenterUserId",
   as: "authCenterUser",
 });
+BusinessCollaborationActivity.hasMany(BusinessCollaborationInvitation, {
+  foreignKey: "activityId",
+  as: "invitations",
+});
+BusinessCollaborationInvitation.belongsTo(BusinessCollaborationActivity, {
+  foreignKey: "activityId",
+  as: "activity",
+});
+BusinessCollaborationActivityAccess.hasMany(BusinessCollaborationInvitation, {
+  foreignKey: "inviterAccessId",
+  as: "sentInvitations",
+});
+BusinessCollaborationInvitation.belongsTo(BusinessCollaborationActivityAccess, {
+  foreignKey: "inviterAccessId",
+  as: "inviterAccess",
+});
+AuthCenterXhuntUser.hasMany(BusinessCollaborationInvitation, {
+  foreignKey: "kolAuthCenterUserId",
+  as: "businessCollaborationInvitations",
+});
+BusinessCollaborationInvitation.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "kolAuthCenterUserId",
+  as: "kolAuthCenterUser",
+});
+BusinessCollaborationInvitation.hasOne(BusinessCollaboration, {
+  foreignKey: "invitationId",
+  as: "collaboration",
+});
+BusinessCollaboration.belongsTo(BusinessCollaborationInvitation, {
+  foreignKey: "invitationId",
+  as: "invitation",
+});
+BusinessCollaborationActivity.hasMany(BusinessCollaboration, {
+  foreignKey: "activityId",
+  as: "collaborations",
+});
+BusinessCollaboration.belongsTo(BusinessCollaborationActivity, {
+  foreignKey: "activityId",
+  as: "activity",
+});
+BusinessCollaborationActivity.hasMany(BusinessCollaborationBudgetLedger, {
+  foreignKey: "activityId",
+  as: "budgetLedgers",
+});
+BusinessCollaborationBudgetLedger.belongsTo(BusinessCollaborationActivity, {
+  foreignKey: "activityId",
+  as: "activity",
+});
+BusinessCollaborationInvitation.hasMany(BusinessCollaborationBudgetLedger, {
+  foreignKey: "invitationId",
+  as: "budgetLedgers",
+});
+BusinessCollaborationBudgetLedger.belongsTo(BusinessCollaborationInvitation, {
+  foreignKey: "invitationId",
+  as: "invitation",
+});
+BusinessCollaboration.hasMany(BusinessCollaborationBudgetLedger, {
+  foreignKey: "collaborationId",
+  as: "budgetLedgers",
+});
+BusinessCollaborationBudgetLedger.belongsTo(BusinessCollaboration, {
+  foreignKey: "collaborationId",
+  as: "collaboration",
+});
 
 // EchoHunt Social Listening 关系
 EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningPost, {
@@ -558,6 +630,10 @@ module.exports = {
   XHuntKolCollaboration,
   BusinessCollaborationActivity,
   BusinessCollaborationActivityAccess,
+  BusinessCollaborationInvitation,
+  BusinessCollaboration,
+  BusinessCollaborationBudgetLedger,
+  BusinessCollaborationAuditLog,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
   AuthCenterXhuntPasswordCredential,
