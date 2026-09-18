@@ -38,10 +38,11 @@ const FILTER_LLM_DEFAULT_CACHE_TTL_SECONDS = 3600;
 const FILTER_LLM_MIN_CONFIDENCE_FOR_FILTERS = 0.35;
 const FILTER_LLM_MIN_CONFIDENCE_FOR_SEMANTIC_QUERY = 0.35;
 // 只读库默认 statement_timeout 偏保守（线上默认 1500ms）。
-// activityDays 会额外查最近发帖时间，偶发略超时；只在这类超时时用更长的事务级 timeout 重试一次。
+// activityDays 会额外查询近期原创推文；只在这类超时时用更长的事务级 timeout 重试一次。
+// 默认 12s 能覆盖只读库的短暂负载波动，且仍受 30s 的配置上限保护。
 const ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS = getPositiveIntegerEnv(
   ["KOL_MARKETING_ACTIVITY_QUERY_RETRY_TIMEOUT_MS", "KOL_MARKETING_ACTIVITY_RETRY_STATEMENT_TIMEOUT_MS"],
-  6000,
+  12000,
   { min: 1000, max: 30000 }
 );
 
@@ -1024,7 +1025,18 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
   }
 
   if (filters.activityDays !== undefined) {
-    clauses.push("activity.last_active_at >= now() - make_interval(days => $activityDays::integer)");
+    // 活跃度只用于判定候选是否存在近期原创推文。不要在全部筛选画像上
+    // 先查出“最新一条”推文：AI Match 一次最多精确排序 800 个候选，原实现会
+    // 对所有硬筛命中的宽画像执行 LATERAL + ORDER BY，再物化并排序，容易超过
+    // 只读库的 statement_timeout。最终结果的最新活跃时间会在选出 Top K 后补齐。
+    clauses.push(`EXISTS (
+      SELECT 1
+      FROM dev.tweet activity_tweet
+      WHERE activity_tweet.twitter_user_id = p.twitter_user_id
+        AND activity_tweet.id = activity_tweet.conversation_id
+        AND activity_tweet.retweet_id IS NULL
+        AND activity_tweet.create_time >= now() - make_interval(days => $activityDays::integer)
+    )`);
     bind.activityDays = filters.activityDays;
   }
 
@@ -1084,110 +1096,78 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       WITH filtered_profiles AS MATERIALIZED (
         SELECT
           p.twitter_user_id,
-          p.handle,
-          coalesce(p.name, u.name::text, u.profile ->> 'name') as name,
-          u.profile ->> 'profile_image_url' as avatar,
-          p.language,
-          p.domains,
-          p.followers,
-          p.ai_rank_global,
-          p.ai_rank_cn,
-          p.web3_rank_global,
-          p.web3_rank_cn,
-          p.main_tweet_view_median,
-          p.reply_tweet_view_median,
-          p.main_metrics_window_days,
-          p.reply_metrics_window_days,
-          p.soul_score,
-          p.marketing_summary_cn,
-          p.marketing_summary_en,
-          p.keywords,
-          p.keywords_en,
-          p.cooperation_types,
-          p.marketing_goals,
-          p.marketing_goals_en,
-          p.project_stages,
-          p.ai_abilities,
-          p.web3_abilities,
-          p.willingness_level,
-          p.willingness_score,
-          p.willingness_reason,
-          p.willingness_confidence,
-          p.willingness_evidence,
-          p.identity_tier,
-          p.collaboration_accepting_new_invitations,
-          p.collaboration_updated_at,
-          p.collaboration_synced_at,
-          p.collaboration_source,
-          p.updated_at,
-          p.metrics_calculated_at,
-          activity.last_active_at,
-          p.embedding_model,
-          p.embedding_version,
-          p.embedding_generated_at,
           p.marketing_profile_embedding
         FROM dev.kol_marketing_profile p
-        LEFT JOIN dev.twitter_user u ON u.id = p.twitter_user_id
-        LEFT JOIN LATERAL (
-          SELECT t.create_time AS last_active_at
-          FROM dev.tweet t
-          WHERE t.twitter_user_id = p.twitter_user_id
-            AND t.id = t.conversation_id
-            AND t.retweet_id IS NULL
-          ORDER BY t.create_time DESC
-          LIMIT 1
-        ) activity ON true
         WHERE ${clauses.join(" AND ")}
+      ),
+      ranked_profiles AS MATERIALIZED (
+        SELECT
+          fp.twitter_user_id,
+          fp.marketing_profile_embedding,
+          count(*) OVER()::integer AS candidate_total
+        FROM filtered_profiles fp
+        ORDER BY fp.marketing_profile_embedding <=> $embedding::vector
+        LIMIT $limit
       )
       SELECT
-        fp.twitter_user_id AS "twitterUserId",
-        fp.handle,
-        fp.name,
-        fp.avatar,
-        fp.language,
-        fp.domains,
-        fp.followers::double precision AS followers,
-        fp.ai_rank_global AS "aiRankGlobal",
-        fp.ai_rank_cn AS "aiRankCn",
-        fp.web3_rank_global AS "web3RankGlobal",
-        fp.web3_rank_cn AS "web3RankCn",
-        fp.main_tweet_view_median::double precision AS "mainTweetViewMedian",
-        fp.reply_tweet_view_median::double precision AS "replyTweetViewMedian",
-        fp.main_metrics_window_days::double precision AS "mainMetricsWindowDays",
-        fp.reply_metrics_window_days::double precision AS "replyMetricsWindowDays",
-        fp.soul_score::double precision AS "soulScore",
-        fp.marketing_summary_cn AS "marketingSummaryCn",
-        fp.marketing_summary_en AS "marketingSummaryEn",
-        fp.keywords,
-        fp.keywords_en AS "keywordsEn",
-        fp.cooperation_types AS "cooperationTypes",
-        fp.marketing_goals AS "marketingGoals",
-        fp.marketing_goals_en AS "marketingGoalsEn",
-        fp.project_stages AS "projectStages",
-        fp.ai_abilities AS "aiAbilities",
-        fp.web3_abilities AS "web3Abilities",
-        fp.willingness_level AS "willingnessLevel",
-        fp.willingness_score::double precision AS "willingnessScore",
-        fp.willingness_reason AS "willingnessReason",
-        fp.willingness_confidence::double precision AS "willingnessConfidence",
-        fp.willingness_evidence AS "willingnessEvidence",
-        fp.identity_tier AS "identityTier",
-        fp.collaboration_accepting_new_invitations AS "collaborationAcceptingNewInvitations",
-        fp.collaboration_updated_at AS "collaborationUpdatedAt",
-        fp.collaboration_synced_at AS "collaborationSyncedAt",
-        fp.collaboration_source AS "collaborationSource",
-        fp.updated_at AS "updatedAt",
-        fp.metrics_calculated_at AS "metricsCalculatedAt",
-        fp.last_active_at AS "lastActiveAt",
-        fp.embedding_model AS "embeddingModel",
-        fp.embedding_version AS "embeddingVersion",
-        fp.embedding_generated_at AS "embeddingGeneratedAt",
-        count(*) over()::integer AS "candidateTotal",
+        p.twitter_user_id AS "twitterUserId",
+        p.handle,
+        coalesce(p.name, u.name::text, u.profile ->> 'name') AS name,
+        u.profile ->> 'profile_image_url' AS avatar,
+        p.language,
+        p.domains,
+        p.followers::double precision AS followers,
+        p.ai_rank_global AS "aiRankGlobal",
+        p.ai_rank_cn AS "aiRankCn",
+        p.web3_rank_global AS "web3RankGlobal",
+        p.web3_rank_cn AS "web3RankCn",
+        p.main_tweet_view_median::double precision AS "mainTweetViewMedian",
+        p.reply_tweet_view_median::double precision AS "replyTweetViewMedian",
+        p.main_metrics_window_days::double precision AS "mainMetricsWindowDays",
+        p.reply_metrics_window_days::double precision AS "replyMetricsWindowDays",
+        p.soul_score::double precision AS "soulScore",
+        p.marketing_summary_cn AS "marketingSummaryCn",
+        p.marketing_summary_en AS "marketingSummaryEn",
+        p.keywords,
+        p.keywords_en AS "keywordsEn",
+        p.cooperation_types AS "cooperationTypes",
+        p.marketing_goals AS "marketingGoals",
+        p.marketing_goals_en AS "marketingGoalsEn",
+        p.project_stages AS "projectStages",
+        p.ai_abilities AS "aiAbilities",
+        p.web3_abilities AS "web3Abilities",
+        p.willingness_level AS "willingnessLevel",
+        p.willingness_score::double precision AS "willingnessScore",
+        p.willingness_reason AS "willingnessReason",
+        p.willingness_confidence::double precision AS "willingnessConfidence",
+        p.willingness_evidence AS "willingnessEvidence",
+        p.identity_tier AS "identityTier",
+        p.collaboration_accepting_new_invitations AS "collaborationAcceptingNewInvitations",
+        p.collaboration_updated_at AS "collaborationUpdatedAt",
+        p.collaboration_synced_at AS "collaborationSyncedAt",
+        p.collaboration_source AS "collaborationSource",
+        p.updated_at AS "updatedAt",
+        p.metrics_calculated_at AS "metricsCalculatedAt",
+        activity.last_active_at AS "lastActiveAt",
+        p.embedding_model AS "embeddingModel",
+        p.embedding_version AS "embeddingVersion",
+        p.embedding_generated_at AS "embeddingGeneratedAt",
+        ranked.candidate_total AS "candidateTotal",
         -- pgvector cosine distance：距离越小越相似；这里转成 similarity，越接近 1 越相似。
-        1 - (fp.marketing_profile_embedding <=> $embedding::vector) AS similarity
-      FROM filtered_profiles fp
-      ORDER BY fp.marketing_profile_embedding <=> $embedding::vector
-      LIMIT $limit
+        1 - (ranked.marketing_profile_embedding <=> $embedding::vector) AS similarity
+      FROM ranked_profiles ranked
+      JOIN dev.kol_marketing_profile p ON p.twitter_user_id = ranked.twitter_user_id
+      LEFT JOIN dev.twitter_user u ON u.id = p.twitter_user_id
+      LEFT JOIN LATERAL (
+        SELECT t.create_time AS last_active_at
+        FROM dev.tweet t
+        WHERE t.twitter_user_id = p.twitter_user_id
+          AND t.id = t.conversation_id
+          AND t.retweet_id IS NULL
+        ORDER BY t.create_time DESC
+        LIMIT 1
+      ) activity ON true
+      ORDER BY ranked.marketing_profile_embedding <=> $embedding::vector
     `;
 
     return { sql, bind, searchMode: "exact_filtered" };
