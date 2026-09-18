@@ -46,6 +46,8 @@ const ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS = getPositiveIntegerEnv(
   { min: 1000, max: 30000 }
 );
 const DB_SEARCH_FINAL_RETRY_DELAY_MS = 250;
+const ACTIVITY_POST_FILTER_BATCH_SIZE = 1000;
+const ACTIVITY_POST_FILTER_MAX_CANDIDATES = 2000;
 
 const FILTER_PATCH_KEYS = [
   "language",
@@ -1026,18 +1028,9 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
   }
 
   if (filters.activityDays !== undefined) {
-    // 活跃度只用于判定候选是否存在近期原创推文。不要在全部筛选画像上
-    // 先查出“最新一条”推文：AI Match 一次最多精确排序 800 个候选，原实现会
-    // 对所有硬筛命中的宽画像执行 LATERAL + ORDER BY，再物化并排序，容易超过
-    // 只读库的 statement_timeout。最终结果的最新活跃时间会在选出 Top K 后补齐。
-    clauses.push(`EXISTS (
-      SELECT 1
-      FROM dev.tweet activity_tweet
-      WHERE activity_tweet.twitter_user_id = p.twitter_user_id
-        AND activity_tweet.id = activity_tweet.conversation_id
-        AND activity_tweet.retweet_id IS NULL
-        AND activity_tweet.create_time >= now() - make_interval(days => $activityDays::integer)
-    )`);
+    // 生产库现有的 (twitter_user_id, create_time) 访问路径更适合 LATERAL latest
+    // lookup；相关 EXISTS 会退化成对 tweet 的大范围重复扫描。
+    clauses.push("activity.last_active_at >= now() - make_interval(days => $activityDays::integer)");
     bind.activityDays = filters.activityDays;
   }
 
@@ -1097,13 +1090,24 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       WITH filtered_profiles AS MATERIALIZED (
         SELECT
           p.twitter_user_id,
+          activity.last_active_at,
           p.marketing_profile_embedding
         FROM dev.kol_marketing_profile p
+        LEFT JOIN LATERAL (
+          SELECT t.create_time AS last_active_at
+          FROM dev.tweet t
+          WHERE t.twitter_user_id = p.twitter_user_id
+            AND t.id = t.conversation_id
+            AND t.retweet_id IS NULL
+          ORDER BY t.create_time DESC
+          LIMIT 1
+        ) activity ON true
         WHERE ${clauses.join(" AND ")}
       ),
       ranked_profiles AS MATERIALIZED (
         SELECT
           fp.twitter_user_id,
+          fp.last_active_at,
           fp.marketing_profile_embedding,
           count(*) OVER()::integer AS candidate_total
         FROM filtered_profiles fp
@@ -1149,7 +1153,7 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
         p.collaboration_source AS "collaborationSource",
         p.updated_at AS "updatedAt",
         p.metrics_calculated_at AS "metricsCalculatedAt",
-        activity.last_active_at AS "lastActiveAt",
+        ranked.last_active_at AS "lastActiveAt",
         p.embedding_model AS "embeddingModel",
         p.embedding_version AS "embeddingVersion",
         p.embedding_generated_at AS "embeddingGeneratedAt",
@@ -1159,15 +1163,6 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       FROM ranked_profiles ranked
       JOIN dev.kol_marketing_profile p ON p.twitter_user_id = ranked.twitter_user_id
       LEFT JOIN dev.twitter_user u ON u.id = p.twitter_user_id
-      LEFT JOIN LATERAL (
-        SELECT t.create_time AS last_active_at
-        FROM dev.tweet t
-        WHERE t.twitter_user_id = p.twitter_user_id
-          AND t.id = t.conversation_id
-          AND t.retweet_id IS NULL
-        ORDER BY t.create_time DESC
-        LIMIT 1
-      ) activity ON true
       ORDER BY ranked.marketing_profile_embedding <=> $embedding::vector
     `;
 
@@ -1382,6 +1377,118 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
   }
 }
 
+function getActivityPostFilterCandidateLimit(requestedLimit) {
+  // 先给活跃度筛选预留两批候选；最终仍只返回调用方请求的数量。
+  return Math.min(
+    ACTIVITY_POST_FILTER_MAX_CANDIDATES,
+    Math.max(ACTIVITY_POST_FILTER_BATCH_SIZE * 2, requestedLimit * 2)
+  );
+}
+
+async function queryRecentOriginalTweetActivity(twitterUserIds, activityDays) {
+  const ids = [...new Set((twitterUserIds || []).map((value) => String(value || "").trim()).filter(Boolean))];
+  if (!ids.length) return new Map();
+
+  const db = getPostgresReadOnlyInstance();
+  // 先用画像表把 text bind 还原为 twitter_user_id 的原始类型，再与 tweet 直接等值关联。
+  // 这样不会对 t.twitter_user_id 做 ::text 转换，保留数据库现有的按账号查推文访问路径。
+  const sql = `
+    WITH requested_profiles AS MATERIALIZED (
+      SELECT p.twitter_user_id
+      FROM dev.kol_marketing_profile p
+      WHERE p.twitter_user_id::text = ANY($twitterUserIds::text[])
+    )
+    SELECT
+      requested.twitter_user_id::text AS "twitterUserId",
+      activity.last_active_at AS "lastActiveAt"
+    FROM requested_profiles requested
+    JOIN LATERAL (
+      SELECT t.create_time AS last_active_at
+      FROM dev.tweet t
+      WHERE t.twitter_user_id = requested.twitter_user_id
+        AND t.id = t.conversation_id
+        AND t.retweet_id IS NULL
+        AND t.create_time >= now() - make_interval(days => $activityDays::integer)
+      ORDER BY t.create_time DESC
+      LIMIT 1
+    ) activity ON true
+  `;
+  const queryOptions = {
+    bind: {
+      twitterUserIds: ids,
+      activityDays,
+    },
+    type: QueryTypes.SELECT,
+  };
+  let rows;
+  try {
+    rows = await queryWithOptionalStatementTimeout(
+      db,
+      sql,
+      queryOptions,
+      ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS
+    );
+  } catch (error) {
+    if (!isStatementTimeoutError(error)) throw error;
+    console.warn("[KOL Marketing Search] activity batch query timed out, retry once", {
+      candidateCount: ids.length,
+      activityDays,
+      retryStatementTimeoutMs: ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS,
+    });
+    await new Promise((resolve) => setTimeout(resolve, DB_SEARCH_FINAL_RETRY_DELAY_MS));
+    rows = await queryWithOptionalStatementTimeout(
+      db,
+      sql,
+      queryOptions,
+      ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS
+    );
+  }
+  return new Map(rows.map((row) => [String(row.twitterUserId), row.lastActiveAt]));
+}
+
+async function applyActivityPostFilter(rows, options = {}) {
+  const requestedLimit = options.requestedLimit;
+  const activityDays = options.activityDays;
+  const isAborted = options.isAborted;
+  const onProgress = options.onProgress;
+  const activeRows = [];
+  let scannedCount = 0;
+  let batchesQueried = 0;
+
+  for (let offset = 0; offset < rows.length && activeRows.length < requestedLimit; offset += ACTIVITY_POST_FILTER_BATCH_SIZE) {
+    throwIfSearchAborted(isAborted);
+    const batch = rows.slice(offset, offset + ACTIVITY_POST_FILTER_BATCH_SIZE);
+    if (!batch.length) break;
+    batchesQueried += 1;
+    scannedCount += batch.length;
+    await emitSearchProgress(onProgress, {
+      stage: "db_search",
+      status: "running",
+      message: `正在检查第 ${batchesQueried} 批候选的近期活跃度`,
+      activityBatch: batchesQueried,
+      activityScanned: scannedCount,
+    });
+    const activityByTwitterUserId = await queryRecentOriginalTweetActivity(
+      batch.map((row) => row.twitterUserId),
+      activityDays
+    );
+    for (const row of batch) {
+      const lastActiveAt = activityByTwitterUserId.get(String(row.twitterUserId));
+      if (!lastActiveAt) continue;
+      activeRows.push({ ...row, lastActiveAt });
+      if (activeRows.length >= requestedLimit) break;
+    }
+  }
+
+  const candidateTotal = activeRows.length;
+  return {
+    items: activeRows.map((row) => ({ ...row, candidateTotal })),
+    candidateTotal,
+    scannedCount,
+    batchesQueried,
+  };
+}
+
 async function emitSearchProgress(callback, event) {
   if (typeof callback !== "function") return;
   try {
@@ -1472,10 +1579,21 @@ async function searchKolMarketingProfiles(params = {}) {
   });
   throwIfSearchAborted(isAborted);
   const dbSearchStartedAt = Date.now();
+  const requestedLimit = clampLimit(params.limit, {
+    defaultLimit: DEFAULT_LIMIT,
+    maxLimit: MAX_LIMIT,
+  });
+  const activityDays = searchPlan.effectiveFilters.activityDays;
+  const useActivityPostFilter = activityDays !== undefined;
+  const primaryFilters = useActivityPostFilter
+    ? Object.fromEntries(Object.entries(searchPlan.effectiveFilters).filter(([key]) => key !== "activityDays"))
+    : searchPlan.effectiveFilters;
   const dbSearchParams = {
     embedding: embeddingResult.embedding,
-    filters: searchPlan.effectiveFilters,
-    limit: params.limit,
+    filters: primaryFilters,
+    // 活跃度不参与全量画像的 tweet 关联；先做至多 2,000 条纯向量召回，
+    // 再按 1,000 条一批筛选近期原创推文。
+    limit: useActivityPostFilter ? getActivityPostFilterCandidateLimit(requestedLimit) : requestedLimit,
   };
   let searchResult;
   let finalRetry = null;
@@ -1513,6 +1631,27 @@ async function searchKolMarketingProfiles(params = {}) {
       retryInfo: {
         ...(searchResult.retryInfo || {}),
         finalRetry,
+      },
+    };
+  }
+  if (useActivityPostFilter) {
+    const activityResult = await applyActivityPostFilter(searchResult.items, {
+      requestedLimit,
+      activityDays,
+      isAborted,
+      onProgress: params.onProgress,
+    });
+    searchResult = {
+      ...searchResult,
+      items: activityResult.items,
+      filters: searchPlan.effectiveFilters,
+      searchMode: `${searchResult.searchMode}_activity_post_filter`,
+      dbCostMs: Date.now() - dbSearchStartedAt,
+      activityPostFilter: {
+        candidateLimit: dbSearchParams.limit,
+        scannedCount: activityResult.scannedCount,
+        batchesQueried: activityResult.batchesQueried,
+        candidateTotal: activityResult.candidateTotal,
       },
     };
   }
