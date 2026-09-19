@@ -220,6 +220,7 @@ const proxyRoutes = require("./routes/proxy");
 const newsRoutes = require("./routes/ex-news");
 const generalRoutes = require("./routes/general");
 const rootdataTampermonkeyRoutes = require("./routes/rootdata-tampermonkey");
+const socialListeningInternalRoutes = require("./routes/social-listening-internal");
 const xHuntAuthRoutes = require("./xhunt/api/auth");
 const xHuntWebAuthRoutes = require("./xhunt/api/web-auth");
 const xHuntAuthCenterRoutes = require("./xhunt/auth-center/api/auth-center");
@@ -690,6 +691,9 @@ async function initializeAndStartServer() {
 
   // RootData Fundraising Tampermonkey 采集入口（独立 token 校验，不使用 admin JWT）
   app.use("/api/internal/rootdata/fundraising", rootdataTampermonkeyRoutes);
+
+  // Social Listening 爬虫补充搜索关键词（公开只读接口）
+  app.use("/api/internal/social-listening", socialListeningInternalRoutes);
 
   // 管理后台（登录、会话、管理员基础配置）
   app.use("/admin", adminRoutes);

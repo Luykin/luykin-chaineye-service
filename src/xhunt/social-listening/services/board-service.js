@@ -641,6 +641,9 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
       recallExcludeKeywords: normalizeKeywords(inputMetadata.recallExcludeKeywords || input.recallExcludeKeywords || []),
       recallExcludeAuthorHandles,
       wordCloudExcludeKeywords: normalizeKeywords(inputMetadata.wordCloudExcludeKeywords || input.wordCloudExcludeKeywords || []),
+      crawlerSupplementKeywords: normalizeKeywords(
+        inputMetadata.crawlerSupplementKeywords || input.crawlerSupplementKeywords || []
+      ),
       aiRuntime: {
         contentEnabled: false,
         projectAttitudeEnabled: false,
@@ -963,6 +966,25 @@ async function listMonitoredAccounts(query = {}) {
   };
 }
 
+async function getCrawlerSupplementSearchKeywords() {
+  const rows = await EchohuntSocialListeningBoard.findAll({
+    attributes: ["officialHandle", "status", "metadata"],
+    where: {
+      status: { [Op.notIn]: [BOARD_STATUSES.PAUSED, BOARD_STATUSES.DELETING, BOARD_STATUSES.DELETED] },
+    },
+    order: [["officialHandle", "ASC"], ["id", "ASC"]],
+    raw: true,
+  });
+
+  return rows.reduce((result, row) => {
+    const handle = normalizeTwitterHandle(row.officialHandle);
+    if (!handle) return result;
+    const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+    result[handle] = normalizeKeywords(metadata.crawlerSupplementKeywords || []);
+    return result;
+  }, {});
+}
+
 async function updateBoard(boardId, input = {}, adminId = null) {
   const board = await EchohuntSocialListeningBoard.findByPk(boardId);
   if (!board || board.status === BOARD_STATUSES.DELETED) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
@@ -993,6 +1015,11 @@ async function updateBoard(boardId, input = {}, adminId = null) {
   if (Array.isArray(inputMetadata.recallExcludeAuthorHandles) || Array.isArray(input.recallExcludeAuthorHandles)) {
     patch.metadata.recallExcludeAuthorHandles = normalizeRecallExcludeAuthorHandles(
       inputMetadata.recallExcludeAuthorHandles || input.recallExcludeAuthorHandles || []
+    );
+  }
+  if (Array.isArray(inputMetadata.crawlerSupplementKeywords) || Array.isArray(input.crawlerSupplementKeywords)) {
+    patch.metadata.crawlerSupplementKeywords = normalizeKeywords(
+      inputMetadata.crawlerSupplementKeywords || input.crawlerSupplementKeywords || []
     );
   }
   if (input.status && Object.values(BOARD_STATUSES).includes(input.status)) patch.status = input.status;
@@ -1221,6 +1248,7 @@ module.exports = {
   resumeBoard,
   recoverStaleJob,
   listMonitoredAccounts,
+  getCrawlerSupplementSearchKeywords,
   updateBoard,
   grantBoardAccess,
   revokeBoardAccess,

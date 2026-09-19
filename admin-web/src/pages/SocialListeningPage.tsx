@@ -616,6 +616,7 @@ function boardFormInitialValues(board?: SocialListeningBoard | null) {
     recallExcludeKeywords: Array.isArray(metadata.recallExcludeKeywords) ? metadata.recallExcludeKeywords.join("\n") : "",
     recallExcludeAuthorHandles: Array.isArray(metadata.recallExcludeAuthorHandles) ? metadata.recallExcludeAuthorHandles.join("\n") : "",
     wordCloudExcludeKeywords: Array.isArray(metadata.wordCloudExcludeKeywords) ? metadata.wordCloudExcludeKeywords.join("\n") : "",
+    crawlerSupplementKeywords: Array.isArray(metadata.crawlerSupplementKeywords) ? metadata.crawlerSupplementKeywords.join("\n") : "",
     token: typeof metadata.token === "string" ? metadata.token : "",
     followSources: Array.isArray(metadata.followSources) ? metadata.followSources : ["twitter_user_follow", "twitter_user_unfollow", "project_follow"],
     allowUnresolved: false,
@@ -628,6 +629,7 @@ function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedT
     recallExcludeKeywords: splitTextarea(String(values.recallExcludeKeywords || "")),
     recallExcludeAuthorHandles: splitTextarea(String(values.recallExcludeAuthorHandles || "")),
     wordCloudExcludeKeywords: splitTextarea(String(values.wordCloudExcludeKeywords || "")),
+    crawlerSupplementKeywords: splitTextarea(String(values.crawlerSupplementKeywords || "")),
     followSources: values.followSources || [],
   };
   return {
@@ -2963,6 +2965,9 @@ export function SocialListeningPage() {
               </Form.Item>
               <Form.Item name="wordCloudExcludeKeywords" label="词云排除词（每行一个）" extra="只影响词云展示，不影响推文召回和 AI 分析。适合填品牌词、官方账号、ticker、容易刷屏但没有信息量的词。">
                 <TextArea rows={3} placeholder={"binance\nbnb\ncz_binance"} />
+              </Form.Item>
+              <Form.Item name="crawlerSupplementKeywords" label="爬虫补充搜索关键词（每行一个）" extra="仅供其他系统的爬虫任务读取，不参与 Social Listening 推文召回；暂停的被监控账号不会出现在内部关键词接口中。">
+                <TextArea rows={4} placeholder={"例如：\nBinance Labs\nCZ\nBNB Chain"} />
               </Form.Item>
             </Form>
           </Col>
