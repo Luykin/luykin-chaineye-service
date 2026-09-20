@@ -639,6 +639,7 @@ router.post(
             timeout: 10000,
             headers: {
               "X-API-KEY": PRO_API_CONFIG.apiKey,
+              "X-Crawler-Pool": "general",
               "Content-Type": "application/json",
             },
           }
@@ -1082,6 +1083,7 @@ router.post(
           timeout: 30000, // 30秒超时
           headers: {
             "X-API-KEY": PRO_API_CONFIG.apiKey,
+            "X-Crawler-Pool": "general",
             "Content-Type": "application/json",
           },
         }
@@ -1139,6 +1141,7 @@ async function verifyEmptyUserWithSecondApi(user_id, logCtx = {}) {
         timeout: 15000, // 15秒超时
         headers: {
           "X-API-KEY": PRO_API_CONFIG.apiKey,
+          "X-Crawler-Pool": "general",
           "Content-Type": "application/json",
         },
       }
@@ -1226,6 +1229,7 @@ async function checkUserProtectedStatus(user_id, logCtx = {}) {
         timeout: 10000, // 10秒超时
         headers: {
           "X-API-KEY": PRO_API_CONFIG.apiKey,
+          "X-Crawler-Pool": "general",
           "Content-Type": "application/json",
         },
       }
