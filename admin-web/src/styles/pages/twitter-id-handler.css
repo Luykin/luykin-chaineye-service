@@ -1,0 +1,80 @@
+.twitter-lookup-page {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.twitter-lookup-intro-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, var(--admin-primary-soft), var(--admin-surface));
+  border: 1px solid var(--admin-border);
+}
+
+.twitter-lookup-intro-icon {
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--admin-primary);
+  color: var(--admin-on-primary);
+  font-size: 20px;
+}
+
+.twitter-lookup-form-card,
+.twitter-lookup-result-card {
+  border: 1px solid var(--admin-border);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.twitter-lookup-form-card {
+  margin-bottom: 16px;
+}
+
+.twitter-lookup-input-prefix {
+  color: var(--admin-text-muted);
+  font-size: 16px;
+}
+
+.twitter-lookup-result-heading,
+.twitter-lookup-result-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.twitter-lookup-result-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.twitter-lookup-result-value {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.twitter-lookup-result-footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--admin-border);
+}
+
+@media (max-width: 640px) {
+  .twitter-lookup-intro-card,
+  .twitter-lookup-result-heading,
+  .twitter-lookup-result-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .twitter-lookup-result-footer {
+    gap: 12px;
+  }
+}

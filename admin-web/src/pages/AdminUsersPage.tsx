@@ -31,6 +31,7 @@ const PERMISSION_OPTIONS = [
   { label: "通用统计", value: "generic-stats" },
   { label: "安全违规", value: "security-violations" },
   { label: "站内消息", value: "messages" },
+  { label: "Twitter ID转换", value: "twitter-id-handler" },
   { label: "点评管理", value: "reviews-management" },
   { label: "舆论监控", value: "social-listening" },
   { label: "性能监控", value: "perf-monitor" },

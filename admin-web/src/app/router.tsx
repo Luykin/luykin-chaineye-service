@@ -47,6 +47,7 @@ import { SocialListeningPage } from "@/pages/SocialListeningPage";
 import { DbAdminPage } from "@/features/db-admin/DbAdminPage";
 import { BusinessCollaborationPage } from "@/pages/BusinessCollaborationPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
+import { TwitterIdHandlerPage } from "@/pages/TwitterIdHandlerPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
 const implementedRouteElements: Record<string, ReactNode> = {
@@ -93,6 +94,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "social-listening": <SocialListeningPage />,
   "db-admin": <DbAdminPage />,
   "business-collaboration": <BusinessCollaborationPage />,
+  "twitter-id-handler": <TwitterIdHandlerPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {
