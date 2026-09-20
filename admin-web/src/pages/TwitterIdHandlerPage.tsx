@@ -34,7 +34,6 @@ type LookupMode = "twitterId" | "handler";
 const LOOKUP_PERMISSION = "twitter-id-handler";
 
 function ResultField({ label, value, copyable = true, onCopy }: { label: string; value: string; copyable?: boolean; onCopy: (label: string, value: string) => void }) {
-
   return (
     <div className="twitter-lookup-result-field">
       <Typography.Text type="secondary">{label}</Typography.Text>
@@ -97,6 +96,7 @@ export function TwitterIdHandlerPage() {
 
   const submit = async () => {
     const values = await form.validateFields();
+    mutation.reset();
     mutation.mutate(values.value.trim());
   };
 
@@ -110,21 +110,27 @@ export function TwitterIdHandlerPage() {
     <PermissionGuard permission={LOOKUP_PERMISSION}>
       {contextHolder}
       <PageSection
-        title="Twitter ID ↔ Handler"
-        description="在 Twitter 数字 ID 和 X/Twitter 用户名之间相互查询。"
+        title="Twitter ID 转换"
+        description="调试工具 · 通过外部 Twitter profile 服务查询账号标识。"
       >
         <div className="twitter-lookup-page">
           <Card className="twitter-lookup-intro-card" bordered={false}>
             <div className="twitter-lookup-intro-icon"><SwapOutlined /></div>
-            <div>
-              <Typography.Title level={4} style={{ margin: 0 }}>账号标识转换工具</Typography.Title>
-              <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-                输入一项即可查询另一项。支持粘贴带 @ 的 handler 或 X/Twitter 主页链接。
+            <div className="twitter-lookup-intro-copy">
+              <Typography.Text className="twitter-lookup-eyebrow">DEVELOPER TOOL / READ ONLY</Typography.Text>
+              <Typography.Title level={2} className="twitter-lookup-intro-title">Twitter ID ↔ Handler</Typography.Title>
+              <Typography.Paragraph type="secondary" className="twitter-lookup-intro-description">
+                输入任意一项，快速获取对应的账号标识。支持带 @ 的 handler 或 X/Twitter 主页链接。
               </Typography.Paragraph>
             </div>
+            <Tag color="blue" className="twitter-lookup-readonly-tag">只读查询</Tag>
           </Card>
 
           <Card className="twitter-lookup-form-card" bordered={false}>
+            <div className="twitter-lookup-section-heading">
+              <Typography.Text strong>选择查询方向</Typography.Text>
+              <Typography.Text type="secondary">结果来自外部 Twitter profile 服务</Typography.Text>
+            </div>
             <Space direction="vertical" size={18} style={{ width: "100%" }}>
               <Segmented
                 block
@@ -135,7 +141,7 @@ export function TwitterIdHandlerPage() {
                   { label: "Handler → Twitter ID", value: "handler" },
                 ]}
               />
-              <Form form={form} layout="vertical" onFinish={() => void submit()}>
+              <Form form={form} layout="vertical" className="twitter-lookup-form" onFinish={() => void submit()}>
                 <Form.Item
                   name="value"
                   label={mode === "twitterId" ? "Twitter ID" : "Handler"}
@@ -159,9 +165,16 @@ export function TwitterIdHandlerPage() {
             </Space>
           </Card>
 
-          {mutation.data?.data ? <LookupResult data={mutation.data.data} onCopy={(label, value) => void copyValue(label, value)} /> : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="提交查询后，结果会显示在这里" />
-          )}
+          <div className="twitter-lookup-result-section" aria-live="polite">
+            {mutation.data?.data ? <LookupResult data={mutation.data.data} onCopy={(label, value) => void copyValue(label, value)} /> : (
+              <div className="twitter-lookup-empty">
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={mutation.isError ? (mutation.error instanceof Error ? mutation.error.message : "查询失败，请稍后重试") : "提交查询后，结果会显示在这里"}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </PageSection>
     </PermissionGuard>
