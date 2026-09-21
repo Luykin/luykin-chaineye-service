@@ -182,7 +182,43 @@ function sanitizeJsonStringsDeep(input, keyHint = '') {
 	return input;
 }
 
+
+const VOTE_TITLE_XSS_OPTIONS = {
+	whiteList: {
+		span: ['class'],
+		strong: ['class'],
+		b: [],
+		em: [],
+		i: [],
+		img: ['src', 'alt', 'class', 'width', 'height']
+	},
+	stripIgnoreTag: true,
+	stripIgnoreTagBody: ['script', 'style', 'iframe', 'textarea'],
+	onTagAttr: (tag, name, value) => {
+		if (tag === 'img' && name === 'src') {
+			const trimmed = String(value || '').trim();
+			if (!/^https?:\/\//i.test(trimmed)) return '';
+			return `src="${xss.escapeAttrValue(trimmed)}"`;
+		}
+		if (name === 'class') {
+			const safeClass = String(value || '')
+				.replace(/[^a-zA-Z0-9_\-\s]/g, '')
+				.trim();
+			return safeClass ? `class="${xss.escapeAttrValue(safeClass)}"` : '';
+		}
+		return undefined;
+	}
+};
+
+function sanitizeVoteTitleHtml(html, maxLength = 1000) {
+	if (html == null) return '';
+	const normalized = String(html).trim().substring(0, maxLength);
+	if (!normalized) return '';
+	return xss(normalized, VOTE_TITLE_XSS_OPTIONS);
+}
+
 module.exports = {
+	sanitizeVoteTitleHtml,
 	isValidTag,
 	sanitizeNote,
 	sanitizeComment,

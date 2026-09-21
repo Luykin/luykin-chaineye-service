@@ -471,6 +471,21 @@ const fingerprintLimiter = rateLimit({
   },
 });
 
+// 热点投票 IP 级限流：单 IP 每分钟 30 次
+const voteRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      error: "VOTE_RATE_LIMITED",
+      message: "投票请求过于频繁，请稍后再试",
+    });
+  },
+});
+
 const SECURITY_TIME_WINDOW_MS = 30 * 60 * 1000; // 30分钟窗口，需与 requestId 去重保持一致
 const V2_SIGNATURE_VERSION = "v2";
 const V2_SECURITY_TIME_WINDOW_MS = 5 * 60 * 1000;
@@ -2092,6 +2107,7 @@ const createIpBlocker = (blockedIps = [], options = {}) => {
 module.exports = {
   rateLimiter,
   fingerprintLimiter,
+  voteRateLimiter,
   securityMiddleware,
   sseSecurityMiddleware,
   browserOnlyMiddleware,

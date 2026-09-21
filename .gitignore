@@ -24,3 +24,4 @@ packages/xhunt-auth-client/release
 
 # CodeGraph local index
 .codegraph/
+.DS_Store
