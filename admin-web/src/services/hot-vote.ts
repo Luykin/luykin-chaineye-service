@@ -6,6 +6,8 @@ export type HotVoteTopicType = "person_pk" | "general_topic";
 export interface HotVoteOption {
   id: string;
   name: string;
+  nameEn?: string;
+  nameI18n?: { zh?: string; en?: string };
   avatar?: string;
   twitterHandle?: string;
   color?: string;
@@ -15,8 +17,12 @@ export interface HotVoteOption {
 export interface HotVoteTopic {
   id: string;
   title: string;
+  titleEn?: string;
+  titleI18n?: { zh?: string; en?: string };
   titleHtml?: string | null;
   summary: string;
+  summaryEn?: string;
+  summaryI18n?: { zh?: string; en?: string };
   topicType: HotVoteTopicType;
   options: HotVoteOption[];
   displayDomains: string[];

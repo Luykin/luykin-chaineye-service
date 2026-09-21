@@ -62,6 +62,27 @@ function isHotVoteTester(testList, { username, twitterId }) {
   return testList.some((item) => identifiers.includes(normalizeTesterIdentifier(item)));
 }
 
+/**
+ * 多语言文案选择：优先请求语言，其次中文，最后回退到兼容旧字段
+ */
+function pickI18nText(i18n, lang, fallback) {
+  if (i18n && typeof i18n === "object") {
+    if (lang && i18n[lang]) return i18n[lang];
+    if (i18n.zh) return i18n.zh;
+  }
+  return fallback || "";
+}
+
+/**
+ * 按请求语言本地化议题选项名称（name 为中文兼容值，nameI18n 为多语言内容）
+ */
+function localizeVoteOptions(optionsList, lang) {
+  return optionsList.map((opt) => ({
+    ...opt,
+    name: pickI18nText(opt.nameI18n, lang, opt.name),
+  }));
+}
+
 async function getTopicVoteDistribution(topicId, optionsList, redisClient) {
   const cacheKey = `hotvote:counts:${topicId}`;
   let participants = 0;
@@ -251,11 +272,11 @@ router.get(
         data: {
           topic: {
             id: activeTopic.id,
-            title: activeTopic.title,
+            title: pickI18nText(activeTopic.titleI18n, lang, activeTopic.title),
             titleHtml: activeTopic.titleHtml || null,
-            summary: activeTopic.summary,
+            summary: pickI18nText(activeTopic.summaryI18n, lang, activeTopic.summary),
             topicType: activeTopic.topicType,
-            options: activeTopic.options,
+            options: localizeVoteOptions(Array.isArray(activeTopic.options) ? activeTopic.options : [], lang),
             maxRevotes: activeTopic.maxRevotes,
           },
           userState,

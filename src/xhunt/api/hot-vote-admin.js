@@ -21,16 +21,22 @@ const OPTION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/;
 /**
  * 清洗选项数组；自动补默认"吃个瓜"选项。
  * 选项 id 不符合字符集要求时返回 null
+ * name 为中文名（兼容旧字段），nameEn 可选，二者合并为 nameI18n 供多语言展示
  */
 function buildCleanOptions(options) {
-  const cleanOptions = options.map((opt, idx) => ({
-    id: String(opt.id || `opt_${idx + 1}`).trim().substring(0, 32),
-    name: sanitizePlainText(opt.name || "", 30),
-    avatar: opt.avatar ? sanitizeSafeUrl(opt.avatar, 512) : "",
-    twitterHandle: opt.twitterHandle ? sanitizePlainText(opt.twitterHandle, 50).replace(/^@/, "") : "",
-    color: opt.color ? sanitizePlainText(opt.color, 20) : "",
-    isGua: !!opt.isGua,
-  }));
+  const cleanOptions = options.map((opt, idx) => {
+    const name = sanitizePlainText(opt.name || "", 30);
+    const nameEn = opt.nameEn ? sanitizePlainText(opt.nameEn, 60) : "";
+    return {
+      id: String(opt.id || `opt_${idx + 1}`).trim().substring(0, 32),
+      name,
+      nameI18n: nameEn ? { zh: name, en: nameEn } : { zh: name },
+      avatar: opt.avatar ? sanitizeSafeUrl(opt.avatar, 512) : "",
+      twitterHandle: opt.twitterHandle ? sanitizePlainText(opt.twitterHandle, 50).replace(/^@/, "") : "",
+      color: opt.color ? sanitizePlainText(opt.color, 20) : "",
+      isGua: !!opt.isGua,
+    };
+  });
 
   if (cleanOptions.some((o) => !OPTION_ID_PATTERN.test(o.id))) {
     return null;
@@ -41,6 +47,7 @@ function buildCleanOptions(options) {
     cleanOptions.push({
       id: "opt_gua",
       name: "吃个瓜",
+      nameI18n: { zh: "吃个瓜", en: "Just watching" },
       avatar: "",
       twitterHandle: "",
       color: "#94a3b8",
@@ -49,6 +56,28 @@ function buildCleanOptions(options) {
   }
 
   return cleanOptions;
+}
+
+/**
+ * 组装多语言字段：zh 必填（同时写入兼容旧字段），en 为空时省略
+ */
+function buildI18nField(zhValue, enValue) {
+  const i18n = { zh: zhValue };
+  if (enValue) i18n.en = enValue;
+  return i18n;
+}
+
+/**
+ * 更新场景下合并多语言字段：基于已有 i18n，应用新的 zh / en 值（en 传空字符串表示清除英文文案）
+ */
+function mergeI18nField(existingI18n, zhValue, enValue) {
+  const i18n = { ...(existingI18n || {}) };
+  if (zhValue !== undefined) i18n.zh = zhValue;
+  if (enValue !== undefined) {
+    if (enValue) i18n.en = enValue;
+    else delete i18n.en;
+  }
+  return i18n;
 }
 
 async function recordAdminAudit(req, action, targetId, details = null) {
@@ -172,8 +201,10 @@ router.post(
   "/topics",
   [
     body("title").trim().isLength({ min: 1, max: 100 }).withMessage("标题必须在 1-100 字之间"),
+    body("titleEn").optional().trim().isLength({ max: 100 }).withMessage("英文标题不能超过 100 字"),
     body("titleHtml").optional().trim().isLength({ max: 1000 }).withMessage("富文本标题不能超过 1000 字符"),
     body("summary").trim().isLength({ min: 1, max: 100 }).withMessage("核心冲突介绍必须在 1-100 字之间"),
+    body("summaryEn").optional().trim().isLength({ max: 100 }).withMessage("英文核心冲突介绍不能超过 100 字"),
     body("topicType").isIn(["person_pk", "general_topic"]).withMessage("议题形式不合法"),
     body("options").isArray({ min: 2, max: 6 }).withMessage("选项数量必须在 2 ~ 6 个之间"),
     body("displayDomains").isArray({ min: 1 }).withMessage("展示领域必须至少选一项"),
@@ -189,8 +220,10 @@ router.post(
     try {
       const {
         title,
+        titleEn,
         titleHtml,
         summary,
+        summaryEn,
         topicType,
         options,
         displayDomains,
@@ -206,8 +239,10 @@ router.post(
 
       // XSS 安全清洗
       const cleanTitle = sanitizePlainText(title, 100);
+      const cleanTitleEn = titleEn ? sanitizePlainText(titleEn, 100) : "";
       const cleanTitleHtml = titleHtml ? sanitizeVoteTitleHtml(titleHtml, 1000) : null;
       const cleanSummary = sanitizePlainText(summary, 100);
+      const cleanSummaryEn = summaryEn ? sanitizePlainText(summaryEn, 100) : "";
 
       // 清洗选项（含 id 字符集校验与自动补吃瓜选项）
       const cleanOptions = buildCleanOptions(options);
@@ -221,8 +256,10 @@ router.post(
 
       const topic = await XHuntHotVoteTopic.create({
         title: cleanTitle,
+        titleI18n: buildI18nField(cleanTitle, cleanTitleEn),
         titleHtml: cleanTitleHtml,
         summary: cleanSummary,
+        summaryI18n: buildI18nField(cleanSummary, cleanSummaryEn),
         topicType,
         options: cleanOptions,
         displayDomains,
@@ -255,8 +292,10 @@ router.put(
   [
     param("id").isUUID().withMessage("无效的议题ID"),
     body("title").optional().trim().isLength({ min: 1, max: 100 }),
+    body("titleEn").optional().trim().isLength({ max: 100 }),
     body("titleHtml").optional().trim().isLength({ max: 1000 }),
     body("summary").optional().trim().isLength({ min: 1, max: 100 }),
+    body("summaryEn").optional().trim().isLength({ max: 100 }),
     body("topicType").optional().isIn(["person_pk", "general_topic"]),
     body("options").optional().isArray({ min: 2, max: 6 }),
     body("displayDomains").optional().isArray({ min: 1 }),
@@ -276,9 +315,19 @@ router.put(
       }
 
       const updates = {};
-      if (req.body.title !== undefined) updates.title = sanitizePlainText(req.body.title, 100);
+      if (req.body.title !== undefined || req.body.titleEn !== undefined) {
+        const cleanTitle = req.body.title !== undefined ? sanitizePlainText(req.body.title, 100) : undefined;
+        const cleanTitleEn = req.body.titleEn !== undefined ? sanitizePlainText(req.body.titleEn, 100) : undefined;
+        if (cleanTitle !== undefined) updates.title = cleanTitle;
+        updates.titleI18n = mergeI18nField(topic.titleI18n || { zh: topic.title }, cleanTitle, cleanTitleEn);
+      }
       if (req.body.titleHtml !== undefined) updates.titleHtml = sanitizeVoteTitleHtml(req.body.titleHtml, 1000);
-      if (req.body.summary !== undefined) updates.summary = sanitizePlainText(req.body.summary, 100);
+      if (req.body.summary !== undefined || req.body.summaryEn !== undefined) {
+        const cleanSummary = req.body.summary !== undefined ? sanitizePlainText(req.body.summary, 100) : undefined;
+        const cleanSummaryEn = req.body.summaryEn !== undefined ? sanitizePlainText(req.body.summaryEn, 100) : undefined;
+        if (cleanSummary !== undefined) updates.summary = cleanSummary;
+        updates.summaryI18n = mergeI18nField(topic.summaryI18n || { zh: topic.summary }, cleanSummary, cleanSummaryEn);
+      }
       if (req.body.topicType !== undefined) updates.topicType = req.body.topicType;
       if (req.body.options !== undefined) {
         const cleanOptions = buildCleanOptions(req.body.options);

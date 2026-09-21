@@ -80,7 +80,15 @@ export function HotVotePage() {
     setEditing(item || null);
     setEditorOpen(true);
     form.setFieldsValue(item
-      ? { ...item, titleHtml: item.titleHtml || "", startTime: toLocalInput(item.startTime), endTime: toLocalInput(item.endTime) }
+      ? {
+          ...item,
+          titleEn: item.titleI18n?.en || "",
+          summaryEn: item.summaryI18n?.en || "",
+          options: (item.options || []).map((opt) => ({ ...opt, nameEn: opt.nameI18n?.en || "" })),
+          titleHtml: item.titleHtml || "",
+          startTime: toLocalInput(item.startTime),
+          endTime: toLocalInput(item.endTime),
+        }
       : {
           topicType: "person_pk",
           status: "draft",
@@ -111,6 +119,7 @@ export function HotVotePage() {
       title: "议题", key: "title", width: 260,
       render: (_: unknown, row: HotVoteTopic) => <>
         <Typography.Text strong>{row.title}</Typography.Text>
+        {row.titleI18n?.en && <><br /><Typography.Text type="secondary" ellipsis={{ tooltip: row.titleI18n.en }}>{row.titleI18n.en}</Typography.Text></>}
         <br />
         <Typography.Text type="secondary" ellipsis={{ tooltip: row.summary }}>{row.summary}</Typography.Text>
       </>,
@@ -176,14 +185,16 @@ export function HotVotePage() {
   </Card>
   <Modal open={editorOpen} title={editing ? "编辑议题" : "新建议题"} width={880} onCancel={() => { setEditorOpen(false); setEditing(null); }} onOk={() => form.submit()} confirmLoading={save.isPending} destroyOnClose>
     <Form form={form} layout="vertical" onFinish={submit}><Row gutter={20}>
-      <Col span={24}><Form.Item name="title" label={<InfoLabel label="议题标题" info="用户看到的纯文本标题，限 100 字。" />} rules={[{ required: true, message: "请输入议题标题" }, { max: 100 }]}><Input placeholder="例如：CZ 与 SBF 谁对行业影响更大？" maxLength={100} showCount /></Form.Item></Col>
+      <Col span={24}><Form.Item name="title" label={<InfoLabel label="议题标题（中文）" info="用户看到的中文标题，限 100 字。" />} rules={[{ required: true, message: "请输入议题标题" }, { max: 100 }]}><Input placeholder="例如：CZ 与 SBF 谁对行业影响更大？" maxLength={100} showCount /></Form.Item></Col>
+      <Col span={24}><Form.Item name="titleEn" label={<InfoLabel label="议题标题（English）" info="英文界面用户看到的标题，限 100 字；留空则英文界面也展示中文标题。" />} rules={[{ max: 100 }]}><Input placeholder="e.g. Who has shaped the industry more: CZ or SBF?" maxLength={100} showCount /></Form.Item></Col>
       <Col span={24}><Form.Item name="titleHtml" label={<InfoLabel label="富文本标题（可选）" info="支持白名单 HTML 标签的富文本标题，限 1000 字符；留空则使用纯文本标题。" />} rules={[{ max: 1000 }]}><Input.TextArea rows={2} placeholder="留空则使用纯文本标题" /></Form.Item></Col>
-      <Col span={24}><Form.Item name="summary" label={<InfoLabel label="核心冲突介绍" info="一句话说明议题的核心冲突，限 100 字。" />} rules={[{ required: true, message: "请输入核心冲突介绍" }, { max: 100 }]}><Input.TextArea rows={2} maxLength={100} showCount placeholder="一句话介绍这个议题的争议点" /></Form.Item></Col>
+      <Col span={24}><Form.Item name="summary" label={<InfoLabel label="核心冲突介绍（中文）" info="一句话说明议题的核心冲突，限 100 字。" />} rules={[{ required: true, message: "请输入核心冲突介绍" }, { max: 100 }]}><Input.TextArea rows={2} maxLength={100} showCount placeholder="一句话介绍这个议题的争议点" /></Form.Item></Col>
+      <Col span={24}><Form.Item name="summaryEn" label={<InfoLabel label="核心冲突介绍（English）" info="英文界面用户看到的简介，限 100 字；留空则英文界面也展示中文简介。" />} rules={[{ max: 100 }]}><Input.TextArea rows={2} maxLength={100} showCount placeholder="One-line summary of the debate for English UI" /></Form.Item></Col>
       <Col xs={24} md={8}><Form.Item name="topicType" label={<InfoLabel label="议题形式" info="人物 PK 强调候选人对抗；普通议题为一般观点投票。" />} rules={[{ required: true }]}><Select options={TOPIC_TYPE_OPTIONS} /></Form.Item></Col>
       <Col xs={24} md={8}><Form.Item name="status" label={<InfoLabel label="状态" info="仅「已发布」的议题对用户可见；结束后用户不能再投票。" />} rules={[{ required: true }]}><Select options={STATUS_OPTIONS} /></Form.Item></Col>
       <Col xs={24} md={8}><Form.Item name="sortWeight" label={<InfoLabel label="排序权重" info="数值大者优先展示。" />}><InputNumber style={{ width: "100%" }} /></Form.Item></Col>
       <Col span={24}>
-        <Form.Item label={<InfoLabel label="投票选项" info="2 ~ 6 个选项；ID 仅支持字母、数字、下划线和中划线。若未包含「吃瓜」选项，系统会自动追加。已有投票的议题不能删除产生过票数的选项。" />} required>
+        <Form.Item label={<InfoLabel label="投票选项" info="2 ~ 6 个选项；ID 仅支持字母、数字、下划线和中划线。名称支持中英文分别配置，英文名留空时英文界面展示中文名。若未包含「吃瓜」选项，系统会自动追加。已有投票的议题不能删除产生过票数的选项。" />} required>
           <Form.List name="options" rules={[{
             validator: async (_, value) => {
               if (!Array.isArray(value) || value.length < 2) throw new Error("至少需要 2 个选项");
@@ -194,7 +205,8 @@ export function HotVotePage() {
               {fields.map((field) => <Card key={field.key} size="small" style={{ marginBottom: 10 }} extra={fields.length > 2 && <Button size="small" type="text" danger icon={<MinusCircleOutlined />} onClick={() => remove(field.name)}>移除</Button>}>
                 <Row gutter={12}>
                   <Col xs={24} md={6}><Form.Item name={[field.name, "id"]} label="选项 ID" rules={[{ required: true, message: "必填" }, { pattern: /^[a-zA-Z0-9_-]{1,32}$/, message: "仅字母/数字/_/-，1-32 字符" }]}><Input placeholder="opt_1" /></Form.Item></Col>
-                  <Col xs={24} md={6}><Form.Item name={[field.name, "name"]} label="显示名称" rules={[{ required: true, message: "必填" }, { max: 30 }]}><Input placeholder="选项名称" /></Form.Item></Col>
+                  <Col xs={24} md={6}><Form.Item name={[field.name, "name"]} label="名称（中文）" rules={[{ required: true, message: "必填" }, { max: 30 }]}><Input placeholder="选项名称" /></Form.Item></Col>
+                  <Col xs={24} md={6}><Form.Item name={[field.name, "nameEn"]} label="名称（English，可选）" rules={[{ max: 60 }]}><Input placeholder="留空则英文界面展示中文名" /></Form.Item></Col>
                   <Col xs={24} md={6}><Form.Item name={[field.name, "twitterHandle"]} label="X Handle（可选）"><Input placeholder="不带 @" /></Form.Item></Col>
                   <Col xs={24} md={6}><Form.Item name={[field.name, "avatar"]} label="头像 URL（可选）"><Input placeholder="https://…" /></Form.Item></Col>
                   <Col xs={24} md={6}><Form.Item name={[field.name, "color"]} label="颜色（可选）"><Input placeholder="#f0b90b" /></Form.Item></Col>

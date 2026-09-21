@@ -17,7 +17,12 @@ module.exports = (sequelize) => {
       title: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        comment: "纯文本标题 (限100字)",
+        comment: "纯文本标题 (限100字，兼容旧字段，展示优先使用titleI18n)",
+      },
+      titleI18n: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: "标题多语言内容，例如 { zh, en }",
       },
       titleHtml: {
         type: DataTypes.TEXT,
@@ -27,7 +32,12 @@ module.exports = (sequelize) => {
       summary: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        comment: "一句话核心冲突介绍 (限100字)",
+        comment: "一句话核心冲突介绍 (限100字，兼容旧字段，展示优先使用summaryI18n)",
+      },
+      summaryI18n: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: "核心冲突介绍多语言内容，例如 { zh, en }",
       },
       topicType: {
         type: DataTypes.ENUM("person_pk", "general_topic"),
@@ -38,7 +48,7 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB,
         allowNull: false,
         defaultValue: [],
-        comment: "选项定义: [{ id, name, avatar, twitterHandle, color, isGua }]",
+        comment: "选项定义: [{ id, name, nameI18n: { zh, en }, avatar, twitterHandle, color, isGua }]",
       },
       displayDomains: {
         type: DataTypes.ARRAY(DataTypes.STRING),
