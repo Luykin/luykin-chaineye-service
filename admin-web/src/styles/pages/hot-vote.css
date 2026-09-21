@@ -1,0 +1,274 @@
+/* ==========================================================================
+   热点投票（Hot Vote）与富文本标题编辑器样式
+   ========================================================================== */
+
+/* ---------- 富文本标题编辑器整体容器 ---------- */
+.rich-title-editor-wrapper {
+  border: 1px solid var(--admin-border, #d9d9d9);
+  border-radius: 6px;
+  background: var(--admin-surface, #ffffff);
+  transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+  overflow: hidden;
+}
+
+.rich-title-editor-wrapper:hover {
+  border-color: var(--admin-primary, #4096ff);
+}
+
+.rich-title-editor-wrapper:focus-within {
+  border-color: var(--admin-primary, #1677ff);
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+}
+
+/* ---------- 工具栏样式适配 ---------- */
+.rich-title-toolbar.ql-toolbar.ql-snow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--admin-surface-soft, #fafafa);
+  border: none;
+  border-bottom: 1px solid var(--admin-border, #f0f0f0);
+  font-family: inherit;
+}
+
+.rich-title-toolbar .ql-formats {
+  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rich-title-toolbar button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: var(--admin-text, #333333);
+  transition: all 0.15s ease;
+}
+
+.rich-title-toolbar button:hover {
+  background: var(--admin-surface-hover, #e6f4ff);
+  color: var(--admin-primary, #1677ff);
+}
+
+.rich-title-toolbar button.ql-active {
+  background: #e6f4ff;
+  color: #1677ff;
+  border-color: #91caff;
+}
+
+/* 自定义图标按钮 */
+.rich-title-custom-btn {
+  width: auto !important;
+  padding: 0 8px !important;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rich-title-btn-text {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* 工具栏右侧操作与计数 */
+.rich-title-toolbar-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rich-title-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--admin-border, #d9d9d9);
+  background: var(--admin-surface, #ffffff);
+  color: var(--admin-text-muted, #666666);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rich-title-preview-toggle:hover {
+  color: var(--admin-primary, #1677ff);
+  border-color: var(--admin-primary, #1677ff);
+}
+
+.rich-title-preview-toggle.active {
+  background: #e6f4ff;
+  color: #1677ff;
+  border-color: #91caff;
+}
+
+.rich-title-counter {
+  font-size: 11px;
+  color: var(--admin-text-muted, #8c8c8c);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.rich-title-counter.warn {
+  color: #faad14;
+  font-weight: 500;
+}
+
+.rich-title-counter.over {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
+/* ---------- 编辑区域样式 ---------- */
+.rich-title-container .ql-container.ql-snow {
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.rich-title-container .ql-editor {
+  min-height: 42px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  line-height: 1.6;
+}
+
+.rich-title-container .ql-editor p {
+  margin: 0;
+  display: inline;
+}
+
+.rich-title-container .ql-editor.ql-blank::before {
+  color: var(--admin-text-muted, #bfbfbf);
+  font-style: normal;
+  left: 12px;
+  right: 12px;
+}
+
+/* 富文本图片在编辑器与展示中的行内图标优化 */
+.rich-title-container .ql-editor img,
+.rich-title-render-content img,
+.hot-vote-rich-title img,
+.preview-sample-img {
+  max-height: 1.35em;
+  width: auto;
+  vertical-align: -0.22em;
+  margin: 0 4px;
+  border-radius: 50%;
+  display: inline-block;
+  object-fit: contain;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- 实时预览区 ---------- */
+.rich-title-preview-card {
+  border-top: 1px dashed var(--admin-border, #e8e8e8);
+  background: var(--admin-surface-soft, #fcfcfd);
+  padding: 8px 12px;
+}
+
+.rich-title-preview-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.preview-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--admin-primary, #1677ff);
+}
+
+.preview-tip {
+  font-size: 11px;
+  color: var(--admin-text-muted, #8c8c8c);
+  margin-left: 4px;
+}
+
+.rich-title-preview-body {
+  font-size: 14px;
+  color: var(--admin-text-strong, inherit);
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+/* ---------- 插入图片弹窗快捷预设 ---------- */
+.preset-tokens-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.preset-token-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 13px;
+  border-radius: 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+  background: var(--admin-surface, #ffffff);
+  border-color: var(--admin-border, #d9d9d9);
+}
+
+.preset-token-tag:hover {
+  border-color: var(--admin-primary, #1677ff);
+  color: var(--admin-primary, #1677ff);
+}
+
+.preset-token-tag.selected {
+  background: #e6f4ff;
+  border-color: #1677ff;
+  color: #1677ff;
+  font-weight: 500;
+}
+
+.preset-token-img {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
+.image-preview-card {
+  margin-top: 10px;
+  background: var(--admin-surface-soft, #fafafa);
+}
+
+.image-preview-content {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+}
+
+.preview-sample {
+  font-weight: 500;
+  color: #1f1f1f;
+  background: #ffffff;
+  padding: 4px 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+}
+
+/* ---------- 列表页富文本标题 ---------- */
+.hot-vote-rich-title {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--admin-text-strong, inherit);
+}
