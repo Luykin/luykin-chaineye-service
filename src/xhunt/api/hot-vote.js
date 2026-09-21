@@ -22,6 +22,46 @@ const router = express.Router();
 // Redis 投票计数缓存 TTL（秒），与 getTopicVoteDistribution 回填逻辑保持一致
 const HOT_VOTE_CACHE_TTL_SECONDS = 3600;
 
+// 预设高辨识度多彩默认头像列表（8 种鲜艳主题色与极简剪影，零网络依赖且各不相同）
+const ANONYMOUS_AVATARS = [
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%232563EB"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%23059669"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%237C3AED"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%23D97706"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%23E11D48"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%230891B2"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%23DB2777"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="%234F46E5"/><circle cx="20" cy="15" r="6" fill="%23FFFFFF"/><path d="M10 32c0-5.5 4.5-9 10-9s10 3.5 10 9" fill="%23FFFFFF"/></svg>',
+];
+
+/**
+ * 根据种子稳定生成匿名默认头像，既避免头像千篇一律，又保证单条评论多次展示时头像一致
+ */
+function getAnonymousAvatar(seed) {
+  if (!seed) return ANONYMOUS_AVATARS[0];
+  let hash = 0;
+  const str = String(seed);
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % ANONYMOUS_AVATARS.length;
+  return ANONYMOUS_AVATARS[index];
+}
+
+/**
+ * Twitter Handle 隐私掩码：保留前后字符，中间加 ***
+ */
+function maskTwitterHandle(handle) {
+  if (!handle) return "user***";
+  const cleaned = String(handle).trim().replace(/^@/, "");
+  if (!cleaned) return "user***";
+  if (cleaned.length <= 1) return `${cleaned}***`;
+  if (cleaned.length === 2) return `${cleaned[0]}***${cleaned[1]}`;
+  if (cleaned.length <= 4) return `${cleaned[0]}***${cleaned.slice(-1)}`;
+  return `${cleaned.slice(0, 2)}***${cleaned.slice(-2)}`;
+}
+
 /**
  * 议题有效性校验：必须为已发布状态且当前时间处于 [startTime, endTime] 窗口内
  * startTime / endTime 为 null 时表示对应方向不限（与 GET /active 过滤逻辑一致）
@@ -252,6 +292,7 @@ router.get(
             hasVoted: true,
             votedOptionId: record.optionId,
             remainingRevotes: Math.max(0, activeTopic.maxRevotes - record.revoteCount),
+            isAnonymous: Boolean(record.isAnonymous),
           };
         }
       }
@@ -302,12 +343,14 @@ router.post(
     header("x-tw-id").trim().matches(/^\d{1,25}$/).withMessage("无效的 Twitter ID"),
     param("topicId").isUUID().withMessage("无效的议题ID"),
     body("optionId").trim().matches(/^[a-zA-Z0-9_-]{1,32}$/).withMessage("无效的选项ID"),
+    body("isAnonymous").optional().isBoolean().toBoolean(),
     validateRequest,
   ],
   async (req, res) => {
     try {
       const { topicId } = req.params;
       const { optionId } = req.body;
+      const isAnonymous = Boolean(req.body.isAnonymous);
       const twitterId = req.headers["x-tw-id"].trim();
       const requestHandle = req.headers["x-user-id"] || req.user?.username || null;
 
@@ -374,6 +417,7 @@ router.post(
             xHuntUserId: req.user?.id || null,
             optionId,
             revoteCount: 0,
+            isAnonymous,
             clientIp: req.ip || null,
           },
           { transaction: t }
@@ -411,6 +455,7 @@ router.post(
             hasVoted: true,
             votedOptionId: optionId,
             remainingRevotes: topic.maxRevotes,
+            isAnonymous,
           },
           results,
         },
@@ -438,6 +483,7 @@ router.put(
     header("x-tw-id").trim().matches(/^\d{1,25}$/).withMessage("无效的 Twitter ID"),
     param("topicId").isUUID().withMessage("无效的议题ID"),
     body("newOptionId").trim().matches(/^[a-zA-Z0-9_-]{1,32}$/).withMessage("无效的新选项ID"),
+    body("isAnonymous").optional().isBoolean().toBoolean(),
     validateRequest,
   ],
   async (req, res) => {
@@ -514,6 +560,9 @@ router.put(
         record.previousOptionId = oldOptionId;
         record.optionId = newOptionId;
         record.revoteCount += 1;
+        if (req.body.isAnonymous !== undefined) {
+          record.isAnonymous = Boolean(req.body.isAnonymous);
+        }
         if (req.user?.id) {
           record.xHuntUserId = req.user.id;
         }
@@ -548,6 +597,7 @@ router.put(
             hasVoted: true,
             votedOptionId: newOptionId,
             remainingRevotes: Math.max(0, topic.maxRevotes - newRevoteCount),
+            isAnonymous: Boolean(record.isAnonymous),
           },
           results,
         },
@@ -575,17 +625,22 @@ router.put(
 router.get(
   "/topics/:topicId/comments",
   [
+    authenticateTokenOptional,
     param("topicId").isUUID().withMessage("无效的议题ID"),
     query("page").optional().isInt({ min: 1, max: 1000 }).toInt(),
     query("pageSize").optional().isInt({ min: 1, max: 20 }).toInt(),
+    query("lang").optional().trim().isIn(["zh", "en"]),
     validateRequest,
   ],
   async (req, res) => {
     try {
       const { topicId } = req.params;
+      const lang = req.query.lang || "zh";
       const page = req.query.page || 1;
       const pageSize = req.query.pageSize || 3;
       const offset = (page - 1) * pageSize;
+      const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
+      const currentTwitterId = rawTwitterId ? String(rawTwitterId).trim() : null;
 
       const { count, rows } = await XHuntHotVoteComment.findAndCountAll({
         where: {
@@ -602,14 +657,43 @@ router.get(
           "displayName",
           "userAvatar",
           "content",
+          "isAnonymous",
           "createdAt",
         ],
+      });
+
+      const list = rows.map((c) => {
+        const isSelf = Boolean(currentTwitterId && c.twitterId === currentTwitterId);
+        if (c.isAnonymous) {
+          return {
+            id: c.id,
+            twitterId: "",
+            userName: maskTwitterHandle(c.userName),
+            displayName: lang === "en" ? "Anonymous User" : "匿名用户",
+            userAvatar: getAnonymousAvatar(c.id),
+            content: c.content,
+            isAnonymous: true,
+            isSelf,
+            createdAt: c.createdAt,
+          };
+        }
+        return {
+          id: c.id,
+          twitterId: c.twitterId,
+          userName: c.userName,
+          displayName: c.displayName,
+          userAvatar: c.userAvatar,
+          content: c.content,
+          isAnonymous: false,
+          isSelf,
+          createdAt: c.createdAt,
+        };
       });
 
       return res.json({
         success: true,
         data: {
-          list: rows,
+          list,
           pagination: {
             page,
             pageSize,
@@ -638,6 +722,7 @@ router.post(
       .trim()
       .isLength({ min: 1, max: 200 })
       .withMessage("留言字数需在 1 ~ 200 字之间"),
+    body("isAnonymous").optional().isBoolean().toBoolean(),
     validateRequest,
   ],
   async (req, res) => {
@@ -716,6 +801,8 @@ router.post(
         return res.status(403).json({ success: false, error: "您在此议题下的留言数量已达上限 (最多5条)" });
       }
 
+      const isAnonymous = Boolean(req.body.isAnonymous);
+
       const newComment = await XHuntHotVoteComment.create({
         topicId,
         twitterId,
@@ -724,6 +811,7 @@ router.post(
         displayName: req.user.displayName || req.user.username || "User",
         userAvatar: (req.user.avatar || "").substring(0, 512),
         content: cleanContent,
+        isAnonymous,
         isDeleted: false,
       });
 
@@ -731,11 +819,13 @@ router.post(
         success: true,
         data: {
           id: newComment.id,
-          twitterId: newComment.twitterId,
-          userName: newComment.userName,
-          displayName: newComment.displayName,
-          userAvatar: newComment.userAvatar,
+          twitterId: isAnonymous ? "" : newComment.twitterId,
+          userName: isAnonymous ? maskTwitterHandle(newComment.userName) : newComment.userName,
+          displayName: isAnonymous ? "匿名用户" : newComment.displayName,
+          userAvatar: isAnonymous ? getAnonymousAvatar(newComment.id) : newComment.userAvatar,
           content: newComment.content,
+          isAnonymous,
+          isSelf: true,
           createdAt: newComment.createdAt,
         },
       });

@@ -51,6 +51,12 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         comment: "已修改次数",
       },
+      isAnonymous: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+        comment: "是否匿名投票",
+      },
       clientIp: {
         type: DataTypes.STRING(64),
         allowNull: true,

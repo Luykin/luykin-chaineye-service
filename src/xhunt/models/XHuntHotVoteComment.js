@@ -52,6 +52,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         comment: "留言内容 (脱敏纯文本，限200字)",
       },
+      isAnonymous: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+        comment: "是否匿名留言",
+      },
       isDeleted: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
