@@ -46,6 +46,7 @@ import { KolMatchConfigPage } from "@/pages/KolMatchConfigPage";
 import { SocialListeningPage } from "@/pages/SocialListeningPage";
 import { DbAdminPage } from "@/features/db-admin/DbAdminPage";
 import { BusinessCollaborationPage } from "@/pages/BusinessCollaborationPage";
+import { HotVotePage } from "@/pages/HotVotePage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { TwitterIdHandlerPage } from "@/pages/TwitterIdHandlerPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
@@ -94,6 +95,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "social-listening": <SocialListeningPage />,
   "db-admin": <DbAdminPage />,
   "business-collaboration": <BusinessCollaborationPage />,
+  "hot-vote": <HotVotePage />,
   "twitter-id-handler": <TwitterIdHandlerPage />,
 };
 
