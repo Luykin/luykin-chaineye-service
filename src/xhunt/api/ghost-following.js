@@ -245,7 +245,7 @@ function getCircuitBreaker(name) {
 const CRAWLER_QUOTA_CONFIG = {
   url:
     process.env.GHOST_FOLLOWING_CRAWLER_QUOTA_URL ||
-    "https://data.cryptohunt.ai/pro/api/crawler/quota-current?endpoint=user_tweets",
+    "http://172.31.0.2:3001/api/crawler/quota-current?endpoint=user_tweets",
   minRemaining:
     parseInt(process.env.GHOST_FOLLOWING_CRAWLER_MIN_QUOTA, 10) || 200,
   timeoutMs: 3000,
