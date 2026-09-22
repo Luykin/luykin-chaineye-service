@@ -10,6 +10,10 @@ module.exports = {
     await queryInterface.sequelize.query(
       'ALTER TABLE "XHuntHotVoteComments" ALTER COLUMN "userAvatar" DROP NOT NULL;'
     );
+    // 清理此前 changeColumn 误生成的重复外键约束
+    await queryInterface.sequelize.query(
+      'ALTER TABLE "XHuntHotVoteComments" DROP CONSTRAINT IF EXISTS "XHuntHotVoteComments_xHuntUserId_fkey1";'
+    );
   },
 
   down: async (queryInterface, Sequelize) => {
