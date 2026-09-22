@@ -1,5 +1,6 @@
 const express = require("express");
 const { body, param, query } = require("express-validator");
+const { fn, col } = require("sequelize");
 const { validateRequest } = require("../middleware/validate-request");
 const {
   XHuntHotVoteTopic,
@@ -24,17 +25,20 @@ const OPTION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/;
  * name 为中文名（兼容旧字段），nameEn 可选，二者合并为 nameI18n 供多语言展示
  */
 function buildCleanOptions(options) {
+  let hasGua = false;
   const cleanOptions = options.map((opt, idx) => {
     const name = sanitizePlainText(opt.name || "", 30);
     const nameEn = opt.nameEn ? sanitizePlainText(opt.nameEn, 60) : "";
+    const isThisGua = !!opt.isGua && !hasGua;
+    if (isThisGua) hasGua = true;
     return {
       id: String(opt.id || `opt_${idx + 1}`).trim().substring(0, 32),
       name,
       nameI18n: nameEn ? { zh: name, en: nameEn } : { zh: name },
-      avatar: opt.avatar ? sanitizeSafeUrl(opt.avatar, 512) : "",
-      twitterHandle: opt.twitterHandle ? sanitizePlainText(opt.twitterHandle, 50).replace(/^@/, "") : "",
+      avatar: isThisGua ? "" : opt.avatar ? sanitizeSafeUrl(opt.avatar, 512) : "",
+      twitterHandle: isThisGua ? "" : opt.twitterHandle ? sanitizePlainText(opt.twitterHandle, 50).replace(/^@/, "") : "",
       color: opt.color ? sanitizePlainText(opt.color, 20) : "",
-      isGua: !!opt.isGua,
+      isGua: isThisGua,
     };
   });
 
@@ -386,8 +390,58 @@ router.put(
 );
 
 /**
+ * GET /topics/:topicId/comments
+ * 运营后台获取议题所有留言列表（包含匿名与已屏蔽状态）
+ */
+router.get(
+  "/topics/:topicId/comments",
+  [
+    param("topicId").isUUID().withMessage("无效的议题ID"),
+    query("page").optional().isInt({ min: 1 }).toInt(),
+    query("pageSize").optional().isInt({ min: 1, max: 100 }).toInt(),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const { topicId } = req.params;
+      const page = req.query.page || 1;
+      const pageSize = req.query.pageSize || 20;
+      const offset = (page - 1) * pageSize;
+
+      const where = { topicId };
+      if (req.query.isDeleted !== undefined) {
+        where.isDeleted = req.query.isDeleted === "true" || req.query.isDeleted === true;
+      }
+
+      const { count, rows } = await XHuntHotVoteComment.findAndCountAll({
+        where,
+        order: [["createdAt", "DESC"]],
+        limit: pageSize,
+        offset,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          list: rows,
+          pagination: {
+            page,
+            pageSize,
+            total: count,
+            totalPages: Math.ceil(count / pageSize),
+          },
+        },
+      });
+    } catch (err) {
+      console.error("[HotVoteAdmin] GET /comments error:", err);
+      return res.status(500).json({ success: false, error: "获取议题留言失败" });
+    }
+  }
+);
+
+/**
  * DELETE /topics/:topicId/comments/:commentId
- * 屏蔽留言 (软删除)
+ * 管理员屏蔽/删除留言
  */
 router.delete(
   "/topics/:topicId/comments/:commentId",
@@ -407,15 +461,179 @@ router.delete(
         return res.status(404).json({ success: false, error: "留言不存在" });
       }
 
-      comment.isDeleted = true;
-      await comment.save();
+      const isHardDelete = req.query.hard === "true" || req.query.hard === true;
+      if (isHardDelete) {
+        await comment.destroy();
+        await recordAdminAudit(req, "DELETE_HOT_VOTE_COMMENT_PERMANENT", commentId, { topicId });
+      } else {
+        comment.isDeleted = true;
+        await comment.save();
+        await recordAdminAudit(req, "BLOCK_HOT_VOTE_COMMENT", commentId, { topicId });
+      }
 
-      await recordAdminAudit(req, "BLOCK_HOT_VOTE_COMMENT", commentId, { topicId });
-
-      return res.json({ success: true, message: "留言已屏蔽" });
+      return res.json({
+        success: true,
+        message: isHardDelete ? "留言已彻底删除" : "留言已屏蔽",
+      });
     } catch (err) {
       console.error("[HotVoteAdmin] DELETE /comments error:", err);
-      return res.status(500).json({ success: false, error: "屏蔽留言失败" });
+      return res.status(500).json({ success: false, error: "删除留言失败" });
+    }
+  }
+);
+
+/**
+ * GET /topics/:topicId/votes
+ * 运营后台获取议题投票情况（汇总统计与流水明细）
+ */
+router.get(
+  "/topics/:topicId/votes",
+  [
+    param("topicId").isUUID().withMessage("无效的议题ID"),
+    query("page").optional().isInt({ min: 1 }).toInt(),
+    query("pageSize").optional().isInt({ min: 1, max: 100 }).toInt(),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const { topicId } = req.params;
+      const page = req.query.page || 1;
+      const pageSize = req.query.pageSize || 20;
+      const offset = (page - 1) * pageSize;
+
+      const topic = await XHuntHotVoteTopic.findByPk(topicId);
+      if (!topic) {
+        return res.status(404).json({ success: false, error: "议题不存在" });
+      }
+
+      const optionsList = Array.isArray(topic.options) ? topic.options : [];
+      const optionMap = {};
+      for (const opt of optionsList) {
+        optionMap[opt.id] = opt.name || opt.id;
+      }
+
+      // 统计总参与人数与各选项分布
+      const totalParticipants = await XHuntHotVoteRecord.count({ where: { topicId } });
+      const groupCounts = await XHuntHotVoteRecord.findAll({
+        where: { topicId },
+        attributes: ["optionId", [fn("COUNT", col("id")), "count"]],
+        group: ["optionId"],
+        raw: true,
+      });
+
+      const countMap = {};
+      for (const g of groupCounts) {
+        countMap[g.optionId] = parseInt(g.count || "0", 10);
+      }
+
+      const distribution = optionsList.map((opt) => {
+        const count = countMap[opt.id] || 0;
+        const percentage =
+          totalParticipants > 0
+            ? `${Math.round((count / totalParticipants) * 100)}%`
+            : "0%";
+        return {
+          id: opt.id,
+          name: opt.name || opt.id,
+          color: opt.color || "#1677ff",
+          isGua: !!opt.isGua,
+          count,
+          percentage,
+        };
+      });
+
+      // 投票明细列表查询
+      const where = { topicId };
+      if (req.query.optionId) {
+        where.optionId = req.query.optionId;
+      }
+
+      const { count, rows } = await XHuntHotVoteRecord.findAndCountAll({
+        where,
+        order: [["createdAt", "DESC"]],
+        limit: pageSize,
+        offset,
+      });
+
+      const list = rows.map((r) => ({
+        id: r.id,
+        topicId: r.topicId,
+        twitterId: r.twitterId,
+        optionId: r.optionId,
+        optionName: optionMap[r.optionId] || r.optionId,
+        previousOptionId: r.previousOptionId,
+        revoteCount: r.revoteCount,
+        isAnonymous: Boolean(r.isAnonymous),
+        clientIp: r.clientIp,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      }));
+
+      return res.json({
+        success: true,
+        data: {
+          summary: {
+            totalParticipants,
+            distribution,
+          },
+          list,
+          pagination: {
+            page,
+            pageSize,
+            total: count,
+            totalPages: Math.ceil(count / pageSize),
+          },
+        },
+      });
+    } catch (err) {
+      console.error("[HotVoteAdmin] GET /votes error:", err);
+      return res.status(500).json({ success: false, error: "获取投票情况失败" });
+    }
+  }
+);
+
+/**
+ * DELETE /topics/:topicId/votes/:recordId
+ * 管理员删除单条投票流水记录（如清理刷票、测试票）
+ */
+router.delete(
+  "/topics/:topicId/votes/:recordId",
+  [
+    param("topicId").isUUID().withMessage("无效的议题ID"),
+    param("recordId").isUUID().withMessage("无效的投票记录ID"),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const { topicId, recordId } = req.params;
+      const record = await XHuntHotVoteRecord.findOne({
+        where: { id: recordId, topicId },
+      });
+
+      if (!record) {
+        return res.status(404).json({ success: false, error: "投票记录不存在" });
+      }
+
+      const optionId = record.optionId;
+      const twitterId = record.twitterId;
+
+      await record.destroy();
+
+      // 清除 Redis 票数缓存促使下一次请求重新精准聚合
+      if (req.redisClient?.del) {
+        await req.redisClient.del(`hotvote:counts:${topicId}`);
+      }
+
+      await recordAdminAudit(req, "DELETE_HOT_VOTE_RECORD", recordId, {
+        topicId,
+        twitterId,
+        optionId,
+      });
+
+      return res.json({ success: true, message: "投票记录已删除" });
+    } catch (err) {
+      console.error("[HotVoteAdmin] DELETE /votes error:", err);
+      return res.status(500).json({ success: false, error: "删除投票记录失败" });
     }
   }
 );
