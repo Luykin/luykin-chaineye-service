@@ -529,6 +529,9 @@ router.put(
     param("topicId").isUUID().withMessage("无效的议题ID"),
     body("newOptionId").trim().matches(/^[a-zA-Z0-9_-]{1,32}$/).withMessage("无效的新选项ID"),
     body("isAnonymous").optional().isBoolean().toBoolean(),
+    body("comment").optional().trim().isLength({ min: 1, max: 200 }),
+    body("content").optional().trim().isLength({ min: 1, max: 200 }),
+    body("commentContent").optional().trim().isLength({ min: 1, max: 200 }),
     validateRequest,
   ],
   async (req, res) => {
@@ -616,6 +619,34 @@ router.put(
         await record.save({ transaction: t });
         newRevoteCount = record.revoteCount;
         isRecordAnonymous = Boolean(record.isAnonymous);
+
+        // 若改票时同时附带了留言观点，则写入留言表
+        const rawComment = req.body.comment || req.body.content || req.body.commentContent;
+        const cleanComment = rawComment ? sanitizePlainText(rawComment, 200) : "";
+        if (cleanComment && cleanComment.trim() && !containsSensitiveWord(cleanComment)) {
+          const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
+          const requestHandle = rawHandle
+            ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
+            : null;
+          const userName = requestHandle || req.user?.username || "Anonymous";
+          const displayName = req.user?.displayName || userName;
+          const userAvatar = (req.user?.avatar || "").substring(0, 512);
+
+          await XHuntHotVoteComment.create(
+            {
+              topicId,
+              twitterId,
+              xHuntUserId: req.user?.id || null,
+              userName,
+              displayName,
+              userAvatar,
+              content: cleanComment,
+              isAnonymous: isRecordAnonymous,
+              isDeleted: false,
+            },
+            { transaction: t }
+          );
+        }
       });
 
       // 原子更新 Redis 缓存（旧选项 -1，新选项 +1；仅在缓存存在时自增，防止产生负数与脏数据）

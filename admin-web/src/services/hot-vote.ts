@@ -100,6 +100,9 @@ export interface HotVoteAdminVoteRecord {
   revoteCount: number;
   isAnonymous: boolean;
   clientIp?: string;
+  commentContent?: string | null;
+  commentDeleted?: boolean;
+  commentId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

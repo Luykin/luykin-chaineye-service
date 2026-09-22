@@ -927,7 +927,27 @@ export function HotVotePage() {
                     {
                       title: "修改次数",
                       dataIndex: "revoteCount",
-                      width: 90,
+                      width: 80,
+                    },
+                    {
+                      title: "附带留言",
+                      dataIndex: "commentContent",
+                      render: (val: string | null, record: HotVoteAdminVoteRecord) =>
+                        val ? (
+                          <Space direction="vertical" size={2}>
+                            <Typography.Paragraph
+                              ellipsis={{ rows: 2, expandable: true, symbol: "展开" }}
+                              style={{ margin: 0, fontSize: 12, wordBreak: "break-word", maxWidth: 220 }}
+                            >
+                              {val}
+                            </Typography.Paragraph>
+                            {record.commentDeleted && <Tag color="error" style={{ fontSize: 10 }}>已屏蔽</Tag>}
+                          </Space>
+                        ) : (
+                          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                            -
+                          </Typography.Text>
+                        ),
                     },
                     {
                       title: "IP",

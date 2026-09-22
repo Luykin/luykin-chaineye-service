@@ -664,19 +664,43 @@ router.get(
         offset,
       });
 
-      const list = rows.map((r) => ({
-        id: r.id,
-        topicId: r.topicId,
-        twitterId: r.twitterId,
-        optionId: r.optionId,
-        optionName: optionMap[r.optionId] || r.optionId,
-        previousOptionId: r.previousOptionId,
-        revoteCount: r.revoteCount,
-        isAnonymous: Boolean(r.isAnonymous),
-        clientIp: r.clientIp,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-      }));
+      // 批量关联当前页选民的最近留言
+      const voterTwitterIds = Array.from(new Set(rows.map((r) => r.twitterId).filter(Boolean)));
+      const commentsByTwitterId = {};
+      if (voterTwitterIds.length > 0) {
+        const voterComments = await XHuntHotVoteComment.findAll({
+          where: {
+            topicId,
+            twitterId: { [Op.in]: voterTwitterIds },
+          },
+          order: [["createdAt", "DESC"]],
+        });
+        for (const c of voterComments) {
+          if (!commentsByTwitterId[c.twitterId]) {
+            commentsByTwitterId[c.twitterId] = c;
+          }
+        }
+      }
+
+      const list = rows.map((r) => {
+        const comment = commentsByTwitterId[r.twitterId];
+        return {
+          id: r.id,
+          topicId: r.topicId,
+          twitterId: r.twitterId,
+          optionId: r.optionId,
+          optionName: optionMap[r.optionId] || r.optionId,
+          previousOptionId: r.previousOptionId,
+          revoteCount: r.revoteCount,
+          isAnonymous: Boolean(r.isAnonymous),
+          clientIp: r.clientIp,
+          commentContent: comment ? comment.content : null,
+          commentDeleted: comment ? Boolean(comment.isDeleted) : false,
+          commentId: comment ? comment.id : null,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        };
+      });
 
       return res.json({
         success: true,
