@@ -84,6 +84,21 @@ function mergeI18nField(existingI18n, zhValue, enValue) {
   return i18n;
 }
 
+function extractPlainTextFromHtml(html, maxLength = 100) {
+  if (!html) return "";
+  const text = String(html)
+    .replace(/<img\b[^>]*\balt=["']([^"']+)["'][^>]*>/gi, "[$1]")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .trim();
+  return sanitizePlainText(text, maxLength);
+}
+
 async function recordAdminAudit(req, action, targetId, details = null) {
   try {
     if (XhuntAdminAuditLog && req.adminUser) {
@@ -204,11 +219,14 @@ router.get(
 router.post(
   "/topics",
   [
-    body("title").trim().isLength({ min: 1, max: 100 }).withMessage("标题必须在 1-100 字之间"),
-    body("titleEn").optional().trim().isLength({ max: 100 }).withMessage("英文标题不能超过 100 字"),
-    body("titleHtml").optional().trim().isLength({ max: 1000 }).withMessage("富文本标题不能超过 1000 字符"),
-    body("summary").trim().isLength({ min: 1, max: 100 }).withMessage("核心冲突介绍必须在 1-100 字之间"),
-    body("summaryEn").optional().trim().isLength({ max: 100 }).withMessage("英文核心冲突介绍不能超过 100 字"),
+    body("title").optional().trim().isLength({ min: 1, max: 100 }),
+    body("titleEn").optional().trim().isLength({ max: 100 }),
+    body("titleHtml").optional().trim().isLength({ max: 1000 }),
+    body("titleHtmlEn").optional().trim().isLength({ max: 1000 }),
+    body("summary").optional().trim().isLength({ min: 1, max: 100 }),
+    body("summaryEn").optional().trim().isLength({ max: 100 }),
+    body("summaryHtml").optional().trim().isLength({ max: 1000 }),
+    body("summaryHtmlEn").optional().trim().isLength({ max: 1000 }),
     body("topicType").isIn(["person_pk", "general_topic"]).withMessage("议题形式不合法"),
     body("options").isArray({ min: 2, max: 6 }).withMessage("选项数量必须在 2 ~ 6 个之间"),
     body("displayDomains").isArray({ min: 1 }).withMessage("展示领域必须至少选一项"),
@@ -226,8 +244,11 @@ router.post(
         title,
         titleEn,
         titleHtml,
+        titleHtmlEn,
         summary,
         summaryEn,
+        summaryHtml,
+        summaryHtmlEn,
         topicType,
         options,
         displayDomains,
@@ -241,12 +262,24 @@ router.post(
         endTime,
       } = req.body;
 
-      // XSS 安全清洗
-      const cleanTitle = sanitizePlainText(title, 100);
-      const cleanTitleEn = titleEn ? sanitizePlainText(titleEn, 100) : "";
-      const cleanTitleHtml = titleHtml ? sanitizeVoteTitleHtml(titleHtml, 1000) : null;
-      const cleanSummary = sanitizePlainText(summary, 100);
-      const cleanSummaryEn = summaryEn ? sanitizePlainText(summaryEn, 100) : "";
+      // XSS 安全清洗与纯文本提炼
+      const cleanTitleHtml = titleHtml ? sanitizeVoteTitleHtml(titleHtml, 1000) : "";
+      const cleanTitleHtmlEn = titleHtmlEn ? sanitizeVoteTitleHtml(titleHtmlEn, 1000) : "";
+      const cleanTitle = (title ? sanitizePlainText(title, 100) : "") || extractPlainTextFromHtml(cleanTitleHtml, 100);
+      const cleanTitleEn = (titleEn ? sanitizePlainText(titleEn, 100) : "") || extractPlainTextFromHtml(cleanTitleHtmlEn, 100);
+
+      if (!cleanTitle && !cleanTitleHtml) {
+        return res.status(400).json({ success: false, error: "议题标题不能为空" });
+      }
+
+      const cleanSummaryHtml = summaryHtml ? sanitizeVoteTitleHtml(summaryHtml, 1000) : "";
+      const cleanSummaryHtmlEn = summaryHtmlEn ? sanitizeVoteTitleHtml(summaryHtmlEn, 1000) : "";
+      const cleanSummary = (summary ? sanitizePlainText(summary, 100) : "") || extractPlainTextFromHtml(cleanSummaryHtml, 100);
+      const cleanSummaryEn = (summaryEn ? sanitizePlainText(summaryEn, 100) : "") || extractPlainTextFromHtml(cleanSummaryHtmlEn, 100);
+
+      if (!cleanSummary && !cleanSummaryHtml) {
+        return res.status(400).json({ success: false, error: "核心冲突介绍不能为空" });
+      }
 
       // 清洗选项（含 id 字符集校验与自动补吃瓜选项）
       const cleanOptions = buildCleanOptions(options);
@@ -258,12 +291,23 @@ router.post(
         ? testList.map((item) => sanitizePlainText(String(item || "").trim().toLowerCase().replace(/^@/, ""), 50)).filter(Boolean)
         : [];
 
+      const titleI18n = { zh: cleanTitle };
+      if (cleanTitleEn) titleI18n.en = cleanTitleEn;
+      if (cleanTitleHtml) titleI18n.zhHtml = cleanTitleHtml;
+      if (cleanTitleHtmlEn) titleI18n.enHtml = cleanTitleHtmlEn;
+
+      const summaryI18n = { zh: cleanSummary };
+      if (cleanSummaryEn) summaryI18n.en = cleanSummaryEn;
+      if (cleanSummaryHtml) summaryI18n.zhHtml = cleanSummaryHtml;
+      if (cleanSummaryHtmlEn) summaryI18n.enHtml = cleanSummaryHtmlEn;
+
       const topic = await XHuntHotVoteTopic.create({
         title: cleanTitle,
-        titleI18n: buildI18nField(cleanTitle, cleanTitleEn),
-        titleHtml: cleanTitleHtml,
+        titleI18n,
+        titleHtml: cleanTitleHtml || null,
         summary: cleanSummary,
-        summaryI18n: buildI18nField(cleanSummary, cleanSummaryEn),
+        summaryI18n,
+        summaryHtml: cleanSummaryHtml || null,
         topicType,
         options: cleanOptions,
         displayDomains,
@@ -298,8 +342,11 @@ router.put(
     body("title").optional().trim().isLength({ min: 1, max: 100 }),
     body("titleEn").optional().trim().isLength({ max: 100 }),
     body("titleHtml").optional().trim().isLength({ max: 1000 }),
+    body("titleHtmlEn").optional().trim().isLength({ max: 1000 }),
     body("summary").optional().trim().isLength({ min: 1, max: 100 }),
     body("summaryEn").optional().trim().isLength({ max: 100 }),
+    body("summaryHtml").optional().trim().isLength({ max: 1000 }),
+    body("summaryHtmlEn").optional().trim().isLength({ max: 1000 }),
     body("topicType").optional().isIn(["person_pk", "general_topic"]),
     body("options").optional().isArray({ min: 2, max: 6 }),
     body("displayDomains").optional().isArray({ min: 1 }),
@@ -319,18 +366,80 @@ router.put(
       }
 
       const updates = {};
-      if (req.body.title !== undefined || req.body.titleEn !== undefined) {
-        const cleanTitle = req.body.title !== undefined ? sanitizePlainText(req.body.title, 100) : undefined;
-        const cleanTitleEn = req.body.titleEn !== undefined ? sanitizePlainText(req.body.titleEn, 100) : undefined;
-        if (cleanTitle !== undefined) updates.title = cleanTitle;
-        updates.titleI18n = mergeI18nField(topic.titleI18n || { zh: topic.title }, cleanTitle, cleanTitleEn);
+      if (
+        req.body.title !== undefined ||
+        req.body.titleEn !== undefined ||
+        req.body.titleHtml !== undefined ||
+        req.body.titleHtmlEn !== undefined
+      ) {
+        const currentTitleI18n = topic.titleI18n || {};
+        const cleanTitleHtml = req.body.titleHtml !== undefined
+          ? (req.body.titleHtml ? sanitizeVoteTitleHtml(req.body.titleHtml, 1000) : "")
+          : (currentTitleI18n.zhHtml || topic.titleHtml || "");
+        const cleanTitleHtmlEn = req.body.titleHtmlEn !== undefined
+          ? (req.body.titleHtmlEn ? sanitizeVoteTitleHtml(req.body.titleHtmlEn, 1000) : "")
+          : (currentTitleI18n.enHtml || "");
+
+        const cleanTitle = req.body.title !== undefined
+          ? sanitizePlainText(req.body.title, 100)
+          : (cleanTitleHtml ? extractPlainTextFromHtml(cleanTitleHtml, 100) : topic.title);
+        const cleanTitleEn = req.body.titleEn !== undefined
+          ? sanitizePlainText(req.body.titleEn, 100)
+          : (cleanTitleHtmlEn ? extractPlainTextFromHtml(cleanTitleHtmlEn, 100) : (currentTitleI18n.en || ""));
+
+        if (cleanTitle) updates.title = cleanTitle;
+        updates.titleHtml = cleanTitleHtml || null;
+
+        const nextTitleI18n = { ...(topic.titleI18n || {}) };
+        if (cleanTitle) nextTitleI18n.zh = cleanTitle;
+        if (cleanTitleEn) nextTitleI18n.en = cleanTitleEn;
+        else if (req.body.titleEn === "" || req.body.titleHtmlEn === "") delete nextTitleI18n.en;
+
+        if (cleanTitleHtml) nextTitleI18n.zhHtml = cleanTitleHtml;
+        else if (req.body.titleHtml === "") delete nextTitleI18n.zhHtml;
+
+        if (cleanTitleHtmlEn) nextTitleI18n.enHtml = cleanTitleHtmlEn;
+        else if (req.body.titleHtmlEn === "") delete nextTitleI18n.enHtml;
+
+        updates.titleI18n = nextTitleI18n;
       }
-      if (req.body.titleHtml !== undefined) updates.titleHtml = sanitizeVoteTitleHtml(req.body.titleHtml, 1000);
-      if (req.body.summary !== undefined || req.body.summaryEn !== undefined) {
-        const cleanSummary = req.body.summary !== undefined ? sanitizePlainText(req.body.summary, 100) : undefined;
-        const cleanSummaryEn = req.body.summaryEn !== undefined ? sanitizePlainText(req.body.summaryEn, 100) : undefined;
-        if (cleanSummary !== undefined) updates.summary = cleanSummary;
-        updates.summaryI18n = mergeI18nField(topic.summaryI18n || { zh: topic.summary }, cleanSummary, cleanSummaryEn);
+
+      if (
+        req.body.summary !== undefined ||
+        req.body.summaryEn !== undefined ||
+        req.body.summaryHtml !== undefined ||
+        req.body.summaryHtmlEn !== undefined
+      ) {
+        const currentSummaryI18n = topic.summaryI18n || {};
+        const cleanSummaryHtml = req.body.summaryHtml !== undefined
+          ? (req.body.summaryHtml ? sanitizeVoteTitleHtml(req.body.summaryHtml, 1000) : "")
+          : (currentSummaryI18n.zhHtml || topic.summaryHtml || "");
+        const cleanSummaryHtmlEn = req.body.summaryHtmlEn !== undefined
+          ? (req.body.summaryHtmlEn ? sanitizeVoteTitleHtml(req.body.summaryHtmlEn, 1000) : "")
+          : (currentSummaryI18n.enHtml || "");
+
+        const cleanSummary = req.body.summary !== undefined
+          ? sanitizePlainText(req.body.summary, 100)
+          : (cleanSummaryHtml ? extractPlainTextFromHtml(cleanSummaryHtml, 100) : topic.summary);
+        const cleanSummaryEn = req.body.summaryEn !== undefined
+          ? sanitizePlainText(req.body.summaryEn, 100)
+          : (cleanSummaryHtmlEn ? extractPlainTextFromHtml(cleanSummaryHtmlEn, 100) : (currentSummaryI18n.en || ""));
+
+        if (cleanSummary) updates.summary = cleanSummary;
+        updates.summaryHtml = cleanSummaryHtml || null;
+
+        const nextSummaryI18n = { ...(topic.summaryI18n || {}) };
+        if (cleanSummary) nextSummaryI18n.zh = cleanSummary;
+        if (cleanSummaryEn) nextSummaryI18n.en = cleanSummaryEn;
+        else if (req.body.summaryEn === "" || req.body.summaryHtmlEn === "") delete nextSummaryI18n.en;
+
+        if (cleanSummaryHtml) nextSummaryI18n.zhHtml = cleanSummaryHtml;
+        else if (req.body.summaryHtml === "") delete nextSummaryI18n.zhHtml;
+
+        if (cleanSummaryHtmlEn) nextSummaryI18n.enHtml = cleanSummaryHtmlEn;
+        else if (req.body.summaryHtmlEn === "") delete nextSummaryI18n.enHtml;
+
+        updates.summaryI18n = nextSummaryI18n;
       }
       if (req.body.topicType !== undefined) updates.topicType = req.body.topicType;
       if (req.body.options !== undefined) {

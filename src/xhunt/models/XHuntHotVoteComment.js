@@ -28,12 +28,12 @@ module.exports = (sequelize) => {
       },
       xHuntUserId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: "XHuntUsers",
           key: "id",
         },
-        comment: "必须登录才能留言",
+        comment: "XHunt 用户 ID (登录用户关联，免登录为 null)",
       },
       userName: {
         type: DataTypes.STRING(128),
@@ -45,7 +45,8 @@ module.exports = (sequelize) => {
       },
       userAvatar: {
         type: DataTypes.STRING(512),
-        allowNull: false,
+        allowNull: true,
+        defaultValue: "",
       },
       content: {
         type: DataTypes.STRING(200),

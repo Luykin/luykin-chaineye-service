@@ -39,6 +39,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "核心冲突介绍多语言内容，例如 { zh, en }",
       },
+      summaryHtml: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: "富文本核心冲突介绍 (限1000字符，白名单HTML标签)",
+      },
       topicType: {
         type: DataTypes.ENUM("person_pk", "general_topic"),
         defaultValue: "person_pk",

@@ -190,6 +190,9 @@ export interface RichTitleEditorProps {
   disabled?: boolean;
   placeholder?: string;
   maxLength?: number;
+  minHeight?: number | string;
+  allowNewline?: boolean;
+  defaultShowPreview?: boolean;
 }
 
 /**
@@ -203,8 +206,11 @@ export function RichTitleEditor({
   value = "",
   onChange,
   disabled = false,
-  placeholder = "输入富文本标题，支持文字加粗/斜体及插入代币图标...",
+  placeholder = "输入富文本内容，支持文字加粗/斜体及插入代币图标...",
   maxLength = 1000,
+  minHeight = 90,
+  allowNewline = false,
+  defaultShowPreview = false,
 }: RichTitleEditorProps) {
   const editorId = useId().replace(/:/g, "_");
   const toolbarId = `rich-title-toolbar-${editorId}`;
@@ -216,7 +222,7 @@ export function RichTitleEditor({
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview, setShowPreview] = useState(defaultShowPreview);
 
   // 初始化 Quill 实例，复用已加载的 window.Quill
   useEffect(() => {
@@ -231,7 +237,12 @@ export function RichTitleEditor({
           bindings: {
             enter: {
               key: 13,
-              handler: () => false, // 标题模式拦截多段落回车
+              handler: () => {
+                if (allowNewline) {
+                  return true;
+                }
+                return false;
+              },
             },
           },
         },
@@ -326,8 +337,15 @@ export function RichTitleEditor({
     savedSelectionRef.current = null;
   };
 
+  const heightVal = typeof minHeight === "number" ? `${minHeight}px` : (minHeight || "90px");
+
   return (
-    <div className="rich-title-editor-wrapper">
+    <div
+      className="rich-title-editor-wrapper"
+      style={{
+        ["--rich-editor-min-height" as any]: heightVal,
+      }}
+    >
       {/* Quill Snow 工具栏 */}
       <div id={toolbarId} className="rich-title-toolbar">
         <span className="ql-formats">

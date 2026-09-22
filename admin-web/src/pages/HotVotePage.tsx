@@ -73,7 +73,7 @@ export function HotVotePage() {
   const [testingFilter, setTestingFilter] = useState<string>();
   const [editing, setEditing] = useState<HotVoteTopic | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [advancedKey, setAdvancedKey] = useState<string[]>([]);
+  const [contentLangTab, setContentLangTab] = useState<"zh" | "en">("zh");
   const [scheduleKey, setScheduleKey] = useState<string[]>([]);
   const [, forceUpdate] = useState({});
   const [form] = Form.useForm();
@@ -98,36 +98,43 @@ export function HotVotePage() {
   const openEdit = (item?: HotVoteTopic) => {
     setEditing(item || null);
     setEditorOpen(true);
+    setContentLangTab("zh");
     if (item) {
-      if (item.titleI18n?.en || item.summaryI18n?.en || item.titleHtml) {
-        setAdvancedKey(["rich-and-i18n"]);
-      } else {
-        setAdvancedKey([]);
-      }
       if (item.startTime || item.endTime || item.testingPhase || (item.testList && item.testList.length > 0)) {
         setScheduleKey(["schedule-and-testing"]);
       } else {
         setScheduleKey([]);
       }
       form.setFieldsValue({
-        ...item,
-        titleEn: item.titleI18n?.en || "",
-        summaryEn: item.summaryI18n?.en || "",
+        topicType: item.topicType || "person_pk",
+        status: item.status || "draft",
+        titleHtml: item.titleI18n?.zhHtml || item.titleHtml || item.title || "",
+        titleHtmlEn: item.titleI18n?.enHtml || item.titleI18n?.en || "",
+        summaryHtml: item.summaryI18n?.zhHtml || item.summaryHtml || item.summary || "",
+        summaryHtmlEn: item.summaryI18n?.enHtml || item.summaryI18n?.en || "",
         options: (item.options || []).map((opt) => ({
           ...opt,
           nameEn: opt.nameI18n?.en || "",
           isGua: Boolean(opt.isGua),
         })),
-        titleHtml: item.titleHtml || "",
+        displayDomains: item.displayDomains || ["web3"],
+        displayLanguages: item.displayLanguages || ["zh"],
+        maxRevotes: item.maxRevotes ?? 2,
+        sortWeight: item.sortWeight ?? 0,
         startTime: toLocalInput(item.startTime),
         endTime: toLocalInput(item.endTime),
+        testingPhase: item.testingPhase ?? false,
+        testList: item.testList || [],
       });
     } else {
-      setAdvancedKey([]);
       setScheduleKey([]);
       form.setFieldsValue({
         topicType: "person_pk",
         status: "draft",
+        titleHtml: "",
+        titleHtmlEn: "",
+        summaryHtml: "",
+        summaryHtmlEn: "",
         sortWeight: 0,
         maxRevotes: 2,
         testingPhase: false,
@@ -164,10 +171,24 @@ export function HotVotePage() {
 
   const submit = (values: Record<string, unknown>) => {
     const payload: Record<string, unknown> = { ...values };
-    if (isRichTitleEmpty(payload.titleHtml as string)) {
-      if (editing) payload.titleHtml = "";
-      else delete payload.titleHtml;
-    }
+
+    const titleHtml = sanitizeRichTitleHtml((values.titleHtml as string) || "");
+    const titleHtmlEn = sanitizeRichTitleHtml((values.titleHtmlEn as string) || "");
+    const summaryHtml = sanitizeRichTitleHtml((values.summaryHtml as string) || "");
+    const summaryHtmlEn = sanitizeRichTitleHtml((values.summaryHtmlEn as string) || "");
+
+    payload.titleHtml = isRichTitleEmpty(titleHtml) ? "" : titleHtml;
+    payload.titleHtmlEn = isRichTitleEmpty(titleHtmlEn) ? "" : titleHtmlEn;
+    payload.summaryHtml = isRichTitleEmpty(summaryHtml) ? "" : summaryHtml;
+    payload.summaryHtmlEn = isRichTitleEmpty(summaryHtmlEn) ? "" : summaryHtmlEn;
+
+    const extractText = (html: string) =>
+      html.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
+    payload.title = extractText(payload.titleHtml as string);
+    payload.titleEn = extractText(payload.titleHtmlEn as string);
+    payload.summary = extractText(payload.summaryHtml as string);
+    payload.summaryEn = extractText(payload.summaryHtmlEn as string);
+
     payload.startTime = values.startTime ? new Date(String(values.startTime)).toISOString() : null;
     payload.endTime = values.endTime ? new Date(String(values.endTime)).toISOString() : null;
 
@@ -360,101 +381,138 @@ export function HotVotePage() {
     destroyOnClose
   >
     <Form form={form} layout="vertical" onFinish={submit} size="middle">
-      {/* 1. 核心基本信息：紧凑排列，中文标题 + 形式 + 状态 + 中文简介 */}
-      <Row gutter={12}>
-        <Col xs={24} md={14}>
-          <Form.Item
-            name="title"
-            label={<InfoLabel label="议题标题（中文）" info="前台卡片主标题，限 100 字。" />}
-            rules={[{ required: true, message: "请输入议题标题" }, { max: 100 }]}
-          >
-            <Input placeholder="例如：Sui vs Aptos 谁能成为新一代公链之王？" maxLength={100} showCount />
-          </Form.Item>
-        </Col>
-        <Col xs={12} md={5}>
+      {/* 1. 核心属性：议题形式与发布状态并排紧凑 */}
+      <Row gutter={12} style={{ marginBottom: 6 }}>
+        <Col span={12}>
           <Form.Item
             name="topicType"
             label={<InfoLabel label="议题形式" info="人物 PK 强调双方对决；普通议题为一般观点投票。" />}
             rules={[{ required: true }]}
+            style={{ marginBottom: 10 }}
           >
             <Select options={TOPIC_TYPE_OPTIONS} />
           </Form.Item>
         </Col>
-        <Col xs={12} md={5}>
+        <Col span={12}>
           <Form.Item
             name="status"
             label={<InfoLabel label="议题状态" info="仅「已发布」的议题对用户可见；结束后不可再投票。" />}
             rules={[{ required: true }]}
+            style={{ marginBottom: 10 }}
           >
             <Select options={STATUS_OPTIONS} />
           </Form.Item>
         </Col>
-        <Col span={24}>
-          <Form.Item
-            name="summary"
-            label={<InfoLabel label="核心冲突介绍（中文）" info="一句话说明议题的核心冲突与争议背景，限 100 字。" />}
-            rules={[{ required: true, message: "请输入核心冲突介绍" }, { max: 100 }]}
-            style={{ marginBottom: 12 }}
-          >
-            <Input.TextArea rows={2} maxLength={100} showCount placeholder="一句话介绍这个议题的核心争议点与背景..." />
-          </Form.Item>
-        </Col>
       </Row>
 
-      {/* 2. 折叠面板：多语言与富文本高级标题（默认收起，有内容时自动展开） */}
-      <Collapse
-        className="hot-vote-form-collapse"
-        style={{ marginBottom: 14 }}
-        activeKey={advancedKey}
-        onChange={(keys) => setAdvancedKey(typeof keys === "string" ? [keys] : keys)}
-        items={[
-          {
-            key: "rich-and-i18n",
-            label: (
-              <span style={{ fontSize: 13, fontWeight: 500, color: "#1677ff" }}>
-                🌐 英文信息与富文本高级定制标题（可选展开）
-              </span>
-            ),
-            children: (
-              <Row gutter={12}>
-                <Col xs={24} md={12}>
-                  <Form.Item
-                    name="titleEn"
-                    label={<InfoLabel label="议题标题（English，可选）" info="英文界面展示标题；留空则英文界面也展示中文标题。" />}
-                    rules={[{ max: 100 }]}
-                  >
-                    <Input placeholder="English debate title (optional)" maxLength={100} showCount />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item
-                    name="summaryEn"
-                    label={<InfoLabel label="核心冲突介绍（English，可选）" info="英文界面展示简介；留空则英文界面也展示中文简介。" />}
-                    rules={[{ max: 100 }]}
-                  >
-                    <Input.TextArea rows={1} maxLength={100} showCount placeholder="One-line summary for English UI" />
-                  </Form.Item>
-                </Col>
-                <Col span={24}>
-                  <Form.Item
-                    name="titleHtml"
-                    label={
-                      <InfoLabel
-                        label="富文本标题（可选定制）"
-                        info="基于后台 Quill 引擎，支持加粗、斜体和一键插入主流代币图标；留空则展示上方纯文本标题。"
-                      />
-                    }
-                    rules={[{ max: 1000, message: "富文本标题不能超过 1000 字符" }]}
-                    style={{ marginBottom: 0 }}
-                  >
-                    <RichTitleEditor placeholder="支持文字加粗、斜体及插入主流代币 Logo；留空则默认展示上方纯文本标题" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            ),
-          },
-        ]}
-      />
+      {/* 2. 议题核心内容：仅包含标题与核心冲突介绍两个实体，中英文双语 Tabs */}
+      <div style={{ marginBottom: 14 }}>
+        <Form.Item noStyle shouldUpdate>
+          {({ getFieldValue }) => {
+            const hasEnConfig = !isRichTitleEmpty(getFieldValue("titleHtmlEn")) || !isRichTitleEmpty(getFieldValue("summaryHtmlEn"));
+            return (
+              <Tabs
+                type="card"
+                activeKey={contentLangTab}
+                onChange={(key) => setContentLangTab(key as "zh" | "en")}
+                items={[
+                  {
+                    key: "zh",
+                    label: <span>🇨🇳 <b>中文内容</b>（必填）</span>,
+                    children: (
+                      <div style={{ padding: "4px 0" }}>
+                        <Form.Item
+                          name="titleHtml"
+                          label={<InfoLabel label="议题标题" info="前台卡片主标题，支持文字加粗、斜体与代币图标。必填。" />}
+                          rules={[
+                            {
+                              validator: async (_, value) => {
+                                if (isRichTitleEmpty(value)) {
+                                  throw new Error("请输入议题标题");
+                                }
+                              },
+                            },
+                          ]}
+                          style={{ marginBottom: 12 }}
+                        >
+                          <RichTitleEditor
+                            placeholder="输入中文议题标题，支持加粗、斜体与代币图标..."
+                            minHeight={80}
+                            maxLength={200}
+                          />
+                        </Form.Item>
+
+                        <Form.Item
+                          name="summaryHtml"
+                          label={<InfoLabel label="核心冲突介绍" info="一句话说明议题的核心冲突与争议背景，支持加粗、斜体与代币图标。必填。" />}
+                          rules={[
+                            {
+                              validator: async (_, value) => {
+                                if (isRichTitleEmpty(value)) {
+                                  throw new Error("请输入核心冲突介绍");
+                                }
+                              },
+                            },
+                          ]}
+                          style={{ marginBottom: 4 }}
+                        >
+                          <RichTitleEditor
+                            placeholder="一句话说明核心冲突与背景，支持加粗、斜体与代币图标..."
+                            minHeight={100}
+                            maxLength={300}
+                            allowNewline
+                          />
+                        </Form.Item>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "en",
+                    label: (
+                      <Space size={6}>
+                        <span>🌐 <b>英文内容</b> (English)</span>
+                        {hasEnConfig && <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: "16px", padding: "0 4px" }}>已配置</Tag>}
+                      </Space>
+                    ),
+                    children: (
+                      <div style={{ padding: "4px 0" }}>
+                        <div style={{ marginBottom: 10, padding: "6px 12px", background: "var(--admin-surface-soft, #f6f8fa)", borderRadius: 6, fontSize: 12, color: "#8c8c8c" }}>
+                          💡 英文内容为选填项。若留空，英文前台界面将自动回退展示对应的中文标题与核心冲突介绍。
+                        </div>
+
+                        <Form.Item
+                          name="titleHtmlEn"
+                          label={<InfoLabel label="英文议题标题 (Title)" info="英文界面展示标题；留空则自动回退展示中文标题。" />}
+                          style={{ marginBottom: 12 }}
+                        >
+                          <RichTitleEditor
+                            placeholder="English debate title (optional)..."
+                            minHeight={80}
+                            maxLength={200}
+                          />
+                        </Form.Item>
+
+                        <Form.Item
+                          name="summaryHtmlEn"
+                          label={<InfoLabel label="英文核心冲突介绍 (Conflict Summary)" info="英文界面展示简介；留空则自动回退展示中文简介。" />}
+                          style={{ marginBottom: 4 }}
+                        >
+                          <RichTitleEditor
+                            placeholder="One-line conflict summary for English UI (optional)..."
+                            minHeight={100}
+                            maxLength={300}
+                            allowNewline
+                          />
+                        </Form.Item>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            );
+          }}
+        </Form.Item>
+      </div>
 
       {/* 3. 投票选项列表（去除颜色配置，吃瓜选项单选互斥，高度紧凑） */}
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -959,7 +1017,7 @@ export function HotVotePage() {
                     width: 220,
                     render: (_: unknown, record: HotVoteAdminComment) => (
                       <Space align="start" size={8}>
-                        <Avatar src={record.userAvatar} size={32} />
+                        <Avatar src={record.userAvatar || undefined} size={32}>{(record.displayName || record.userName || "U")[0]}</Avatar>
                         <div>
                           <div style={{ fontWeight: 500, fontSize: 13, lineHeight: 1.2 }}>
                             @{record.userName}

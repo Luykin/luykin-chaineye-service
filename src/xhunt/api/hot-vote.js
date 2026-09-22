@@ -113,6 +113,18 @@ function pickI18nText(i18n, lang, fallback) {
   return fallback || "";
 }
 
+function pickI18nHtml(i18n, lang, fallbackHtml, fallbackText) {
+  if (i18n && typeof i18n === "object") {
+    if (lang === "en") {
+      if (i18n.enHtml) return i18n.enHtml;
+      if (i18n.en) return i18n.en;
+    }
+    if (i18n.zhHtml) return i18n.zhHtml;
+    if (i18n.zh) return i18n.zh;
+  }
+  return fallbackHtml || fallbackText || "";
+}
+
 /**
  * 按请求语言本地化议题选项名称（name 为中文兼容值，nameI18n 为多语言内容）
  */
@@ -314,8 +326,9 @@ router.get(
           topic: {
             id: activeTopic.id,
             title: pickI18nText(activeTopic.titleI18n, lang, activeTopic.title),
-            titleHtml: activeTopic.titleHtml || null,
+            titleHtml: pickI18nHtml(activeTopic.titleI18n, lang, activeTopic.titleHtml, activeTopic.title),
             summary: pickI18nText(activeTopic.summaryI18n, lang, activeTopic.summary),
+            summaryHtml: pickI18nHtml(activeTopic.summaryI18n, lang, activeTopic.summaryHtml, activeTopic.summary),
             topicType: activeTopic.topicType,
             options: localizeVoteOptions(Array.isArray(activeTopic.options) ? activeTopic.options : [], lang),
             maxRevotes: activeTopic.maxRevotes,
@@ -344,6 +357,9 @@ router.post(
     param("topicId").isUUID().withMessage("无效的议题ID"),
     body("optionId").trim().matches(/^[a-zA-Z0-9_-]{1,32}$/).withMessage("无效的选项ID"),
     body("isAnonymous").optional().isBoolean().toBoolean(),
+    body("comment").optional().trim().isLength({ min: 1, max: 200 }),
+    body("content").optional().trim().isLength({ min: 1, max: 200 }),
+    body("commentContent").optional().trim().isLength({ min: 1, max: 200 }),
     validateRequest,
   ],
   async (req, res) => {
@@ -422,6 +438,35 @@ router.post(
           },
           { transaction: t }
         );
+
+        // 若投票请求同时携带了留言观点，则原子写入留言表
+        const rawComment = req.body.comment || req.body.content || req.body.commentContent;
+        const cleanComment = rawComment ? sanitizePlainText(rawComment, 200) : "";
+        if (cleanComment && cleanComment.trim() && !containsSensitiveWord(cleanComment)) {
+          const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
+          const requestHandle = rawHandle
+            ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
+            : null;
+          const userName = requestHandle || req.user?.username || "Anonymous";
+          const displayName = req.user?.displayName || userName;
+          const userAvatar = (req.user?.avatar || "").substring(0, 512);
+
+          await XHuntHotVoteComment.create(
+            {
+              topicId,
+              twitterId,
+              xHuntUserId: req.user?.id || null,
+              userName,
+              displayName,
+              userAvatar,
+              content: cleanComment,
+              isAnonymous,
+              isDeleted: false,
+            },
+            { transaction: t }
+          );
+        }
+
         created = true;
       });
 
@@ -536,6 +581,7 @@ router.put(
 
       let oldOptionId = null;
       let newRevoteCount = 0;
+      let isRecordAnonymous = false;
 
       await pgInstance.transaction(async (t) => {
         const record = await XHuntHotVoteRecord.findOne({
@@ -569,6 +615,7 @@ router.put(
 
         await record.save({ transaction: t });
         newRevoteCount = record.revoteCount;
+        isRecordAnonymous = Boolean(record.isAnonymous);
       });
 
       // 原子更新 Redis 缓存（旧选项 -1，新选项 +1；仅在缓存存在时自增，防止产生负数与脏数据）
@@ -597,7 +644,7 @@ router.put(
             hasVoted: true,
             votedOptionId: newOptionId,
             remainingRevotes: Math.max(0, topic.maxRevotes - newRevoteCount),
-            isAnonymous: Boolean(record.isAnonymous),
+            isAnonymous: isRecordAnonymous,
           },
           results,
         },
@@ -682,7 +729,7 @@ router.get(
           twitterId: c.twitterId,
           userName: c.userName,
           displayName: c.displayName,
-          userAvatar: c.userAvatar,
+          userAvatar: c.userAvatar || getAnonymousAvatar(c.id),
           content: c.content,
           isAnonymous: false,
           isSelf,
@@ -711,12 +758,13 @@ router.get(
 
 /**
  * POST /api/xhunt/hot-vote/topics/:topicId/comments
- * 发表留言（强制登录鉴权）
+ * 发表留言（支持登录与免登录推特用户）
  */
 router.post(
   "/topics/:topicId/comments",
   [
-    authenticateToken,
+    authenticateTokenOptional,
+    header("x-tw-id").trim().matches(/^\d{1,25}$/).withMessage("无效的 Twitter ID"),
     param("topicId").isUUID().withMessage("无效的议题ID"),
     body("content")
       .trim()
@@ -742,15 +790,21 @@ router.post(
         return res.status(403).json({ success: false, error: "TOPIC_NOT_ACTIVE" });
       }
 
-      const twitterId = req.user.twitterId;
-      if (!twitterId) {
-        return res.status(400).json({ success: false, error: "未关联有效的推特账号" });
+      const twitterId = req.headers["x-tw-id"].trim();
+      const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
+      const requestHandle = rawHandle
+        ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
+        : null;
+
+      // 若携带 Token 登录态，校验一致性防伪造
+      if (req.user?.twitterId && req.user.twitterId !== twitterId) {
+        return res.status(403).json({ success: false, error: "TWITTER_ID_MISMATCH" });
       }
 
       // 测试阶段鉴权
       if (topic.testingPhase) {
         const isTester = isHotVoteTester(topic.testList, {
-          username: req.user.username,
+          username: requestHandle || req.user?.username,
           twitterId,
         });
         if (!isTester) {
@@ -802,14 +856,19 @@ router.post(
       }
 
       const isAnonymous = Boolean(req.body.isAnonymous);
+      const lang = req.query.lang || "zh";
+
+      const userName = requestHandle || req.user?.username || "Anonymous";
+      const displayName = req.user?.displayName || userName;
+      const userAvatar = (req.user?.avatar || "").substring(0, 512);
 
       const newComment = await XHuntHotVoteComment.create({
         topicId,
         twitterId,
-        xHuntUserId: req.user.id,
-        userName: req.user.username || "Anonymous",
-        displayName: req.user.displayName || req.user.username || "User",
-        userAvatar: (req.user.avatar || "").substring(0, 512),
+        xHuntUserId: req.user?.id || null,
+        userName,
+        displayName,
+        userAvatar,
         content: cleanContent,
         isAnonymous,
         isDeleted: false,
@@ -821,8 +880,8 @@ router.post(
           id: newComment.id,
           twitterId: isAnonymous ? "" : newComment.twitterId,
           userName: isAnonymous ? maskTwitterHandle(newComment.userName) : newComment.userName,
-          displayName: isAnonymous ? "匿名用户" : newComment.displayName,
-          userAvatar: isAnonymous ? getAnonymousAvatar(newComment.id) : newComment.userAvatar,
+          displayName: isAnonymous ? (lang === "en" ? "Anonymous User" : "匿名用户") : newComment.displayName,
+          userAvatar: isAnonymous ? getAnonymousAvatar(newComment.id) : (newComment.userAvatar || getAnonymousAvatar(newComment.id)),
           content: newComment.content,
           isAnonymous,
           isSelf: true,

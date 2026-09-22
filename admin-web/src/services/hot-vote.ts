@@ -18,11 +18,12 @@ export interface HotVoteTopic {
   id: string;
   title: string;
   titleEn?: string;
-  titleI18n?: { zh?: string; en?: string };
+  titleI18n?: { zh?: string; en?: string; zhHtml?: string; enHtml?: string };
   titleHtml?: string | null;
   summary: string;
   summaryEn?: string;
-  summaryI18n?: { zh?: string; en?: string };
+  summaryI18n?: { zh?: string; en?: string; zhHtml?: string; enHtml?: string };
+  summaryHtml?: string | null;
   topicType: HotVoteTopicType;
   options: HotVoteOption[];
   displayDomains: string[];
