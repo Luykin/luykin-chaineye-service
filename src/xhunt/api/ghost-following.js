@@ -74,9 +74,9 @@ class CircuitBreaker {
         return { allowed: true };
       }
       const remainingMs = this.nextAttemptTime - now;
-      return { 
-        allowed: false, 
-        reason: `Circuit breaker is OPEN. Retry after ${Math.ceil(remainingMs / 1000)}s` 
+      return {
+        allowed: false,
+        reason: `Circuit breaker is OPEN. Retry after ${Math.ceil(remainingMs / 1000)}s`
       };
     }
 
@@ -262,7 +262,7 @@ function resetCrawlerQuotaCacheForTest() {
 
  // ======== 并发用户限制配置 ========
  const CONCURRENT_LIMIT_CONFIG = {
-  maxConcurrentUsers: 8,       // 最大并发用户数8人
+  maxConcurrentUsers: 6,       // 最大并发用户数6人
   userActivityTTL: 60,          // 用户活跃状态保持时间（秒）
   redisKeyPrefix: "xhunt:ghost:concurrent",  // Redis key前缀
 };
@@ -858,9 +858,9 @@ router.post(
       });
       return res.status(statusCode).json({
         success: false,
-        error: { 
-          code: statusCode === 500 ? "INTERNAL_ERROR" : "EXTERNAL_API_ERROR", 
-          message: error.message || "Analysis failed" 
+        error: {
+          code: statusCode === 500 ? "INTERNAL_ERROR" : "EXTERNAL_API_ERROR",
+          message: error.message || "Analysis failed"
         },
       });
     }
@@ -1017,10 +1017,10 @@ router.get(
         
         followingData = {
           status: "active",
-          quota: { 
-            total: FOLLOWING_QUOTA_CONFIG.monthlyLimit, 
-            remaining: FOLLOWING_QUOTA_CONFIG.monthlyLimit, 
-            used: 0 
+          quota: {
+            total: FOLLOWING_QUOTA_CONFIG.monthlyLimit,
+            remaining: FOLLOWING_QUOTA_CONFIG.monthlyLimit,
+            used: 0
           },
           resetAt: followingQuotaInfo.resetAt,
           expiresInDays: FOLLOWING_QUOTA_CONFIG.periodDays,
@@ -1367,8 +1367,8 @@ async function checkUserProtectedStatus(user_id, logCtx = {}) {
         html: null,
         twitter_user_id: user_id,
         protected: isProtected,
-        message: isProtected 
-          ? "User account is protected (private)" 
+        message: isProtected
+          ? "User account is protected (private)"
           : "No tweets found for this user (verified)",
         verified: true,
         source: "pro_api",
