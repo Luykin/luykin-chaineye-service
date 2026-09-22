@@ -725,8 +725,7 @@ export function HotVotePage() {
                               : "未开启内测时无需配置"
                           }
                           loading={testersQuery.isFetching}
-                          tokenSeparators={[",", "，", "
-", " "]}
+                          tokenSeparators={[",", "，", "\n", " "]}
                           size="small"
                         />
                       </Form.Item>
