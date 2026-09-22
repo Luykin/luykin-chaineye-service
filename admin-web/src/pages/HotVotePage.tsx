@@ -127,7 +127,7 @@ export function HotVotePage() {
         testList: item.testList || [],
       });
     } else {
-      setScheduleKey([]);
+      setScheduleKey(["schedule"]);
       form.setFieldsValue({
         topicType: "person_pk",
         status: "draft",
@@ -137,7 +137,7 @@ export function HotVotePage() {
         summaryHtmlEn: "",
         sortWeight: 0,
         maxRevotes: 2,
-        testingPhase: false,
+        testingPhase: true,
         displayDomains: ["web3"],
         displayLanguages: ["zh"],
         testList: [],
@@ -518,7 +518,7 @@ export function HotVotePage() {
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <InfoLabel
           label={<span style={{ fontWeight: 600, fontSize: 13 }}>投票选项配置 (2 ~ 6 项)</span>}
-          info="至少 2 个选项；ID 仅支持字母、数字、下划线和中划线。吃瓜选项只能同时有 1 个，无需配置推特 Handle 和头像。未设吃瓜选项时系统将自动追加。"
+          info="至少 2 个选项；ID 仅支持字母、数字、下划线和中划线。吃瓜选项为可选配置（最多 1 个），无需配置推特 Handle 和头像。"
         />
       </div>
 

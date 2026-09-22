@@ -12,12 +12,30 @@ const {
   XHuntHotVoteTopic,
   XHuntHotVoteRecord,
   XHuntHotVoteComment,
+  XHuntUser,
   pgInstance,
 } = require("../../models/postgres-start");
 const { sanitizePlainText } = require("../services/inputValidator");
 const { containsSensitiveWord } = require("../services/sensitiveWordFilter");
 
 const router = express.Router();
+/**
+ * 辅助解析 XHunt 用户 ID：若未携带登录态，则尝试根据推特 ID 反查既有账户
+ */
+async function resolveXHuntUserId(reqUser, twitterId) {
+  if (reqUser?.id) return reqUser.id;
+  if (!twitterId) return null;
+  try {
+    const existing = await XHuntUser.findOne({
+      where: { twitterId: String(twitterId).trim() },
+      attributes: ["id"],
+    });
+    return existing ? existing.id : null;
+  } catch {
+    return null;
+  }
+}
+
 
 // Redis 投票计数缓存 TTL（秒），与 getTopicVoteDistribution 回填逻辑保持一致
 const HOT_VOTE_CACHE_TTL_SECONDS = 3600;
@@ -216,10 +234,11 @@ async function getTopicVoteDistribution(topicId, optionsList, redisClient) {
 
 /**
  * GET /api/xhunt/hot-vote/active
- * 获取当前生效的热点议题及用户个人投票状态
+ * GET /api/xhunt/hot-vote/topics
+ * 获取当前生效进行中的所有热点议题及用户个人投票状态（支持多个议题同时返回）
  */
 router.get(
-  "/active",
+  ["/active", "/topics"],
   [
     authenticateTokenOptional,
     query("domain").optional().trim().isIn(["web3", "ai"]).withMessage("domain 必须是 web3 或 ai"),
@@ -228,7 +247,7 @@ router.get(
   ],
   async (req, res) => {
     try {
-      const domain = req.query.domain || "web3";
+      const domain = req.query.domain || null;
       const lang = req.query.lang || "zh";
       const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
       const twitterId = rawTwitterId && /^\d{1,25}$/.test(String(rawTwitterId).trim())
@@ -238,35 +257,40 @@ router.get(
 
       const now = new Date();
 
-      // 查询处于发布状态且匹配领域与语言的议题列表（由数据库直接按数组包含过滤，避免硬编码 LIMIT 导致多语种/领域被饿死截断）
+      // 查询处于发布状态且匹配多语言/领域的进行中议题
+      const where = {
+        status: "published",
+        displayLanguages: { [Op.contains]: [lang] },
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { startTime: null },
+              { startTime: { [Op.lte]: now } },
+            ],
+          },
+          {
+            [Op.or]: [
+              { endTime: null },
+              { endTime: { [Op.gte]: now } },
+            ],
+          },
+        ],
+      };
+
+      if (domain) {
+        where.displayDomains = { [Op.contains]: [domain] };
+      }
+
       const topics = await XHuntHotVoteTopic.findAll({
-        where: {
-          status: "published",
-          displayDomains: { [Op.contains]: [domain] },
-          displayLanguages: { [Op.contains]: [lang] },
-          [Op.and]: [
-            {
-              [Op.or]: [
-                { startTime: null },
-                { startTime: { [Op.lte]: now } },
-              ],
-            },
-            {
-              [Op.or]: [
-                { endTime: null },
-                { endTime: { [Op.gte]: now } },
-              ],
-            },
-          ],
-        },
+        where,
         order: [
           ["sortWeight", "DESC"],
           ["createdAt", "DESC"],
         ],
       });
 
-      // 测试模式精准过滤：寻找第一条当前用户有权查看的生效议题
-      let activeTopic = null;
+      // 测试模式精准过滤：筛选出当前用户有权查看的所有生效议题
+      const visibleTopics = [];
       for (const t of topics) {
         if (t.testingPhase) {
           const isTester = isHotVoteTester(t.testList, {
@@ -276,65 +300,94 @@ router.get(
           if (!isTester) continue;
         }
 
-        activeTopic = t;
-        break;
+        visibleTopics.push(t);
       }
 
-      if (!activeTopic) {
-        return res.json({ success: true, data: null });
+      if (visibleTopics.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            topic: null,
+            topics: [],
+            userState: {
+              hasVoted: false,
+              votedOptionId: null,
+              remainingRevotes: 2,
+            },
+            results: null,
+          },
+        });
       }
 
-      // 获取当前用户的投票状态
-      let userState = {
-        hasVoted: false,
-        votedOptionId: null,
-        remainingRevotes: activeTopic.maxRevotes,
-      };
-
+      // 批量查询当前用户在所有进行中议题下的投票流水
+      const visibleTopicIds = visibleTopics.map((t) => t.id);
+      const userRecordsByTopicId = {};
       if (twitterId) {
-        const record = await XHuntHotVoteRecord.findOne({
+        const records = await XHuntHotVoteRecord.findAll({
           where: {
-            topicId: activeTopic.id,
+            topicId: { [Op.in]: visibleTopicIds },
             twitterId,
           },
         });
-
-        if (record) {
-          userState = {
-            hasVoted: true,
-            votedOptionId: record.optionId,
-            remainingRevotes: Math.max(0, activeTopic.maxRevotes - record.revoteCount),
-            isAnonymous: Boolean(record.isAnonymous),
-          };
+        for (const r of records) {
+          userRecordsByTopicId[r.topicId] = r;
         }
       }
 
-      // 计算投票统计结果 (仅已投票用户返回结果数据，未投票时返回 null)
-      let results = null;
-      if (userState.hasVoted) {
-        const optionsList = Array.isArray(activeTopic.options) ? activeTopic.options : [];
-        results = await getTopicVoteDistribution(
-          activeTopic.id,
-          optionsList,
-          req.redisClient
-        );
-      }
+      // 并行聚合各议题的用户状态与票数分布
+      const topicItems = await Promise.all(
+        visibleTopics.map(async (t) => {
+          const record = userRecordsByTopicId[t.id];
+          const userState = record
+            ? {
+                hasVoted: true,
+                votedOptionId: record.optionId,
+                remainingRevotes: Math.max(0, t.maxRevotes - record.revoteCount),
+                isAnonymous: Boolean(record.isAnonymous),
+              }
+            : {
+                hasVoted: false,
+                votedOptionId: null,
+                remainingRevotes: t.maxRevotes,
+              };
 
+          let results = null;
+          if (userState.hasVoted) {
+            const optionsList = Array.isArray(t.options) ? t.options : [];
+            results = await getTopicVoteDistribution(
+              t.id,
+              optionsList,
+              req.redisClient
+            );
+          }
+
+          const topicPayload = {
+            id: t.id,
+            title: pickI18nText(t.titleI18n, lang, t.title),
+            titleHtml: pickI18nHtml(t.titleI18n, lang, t.titleHtml, t.title),
+            summary: pickI18nText(t.summaryI18n, lang, t.summary),
+            summaryHtml: pickI18nHtml(t.summaryI18n, lang, t.summaryHtml, t.summary),
+            topicType: t.topicType,
+            options: localizeVoteOptions(Array.isArray(t.options) ? t.options : [], lang),
+            maxRevotes: t.maxRevotes,
+          };
+
+          return {
+            topic: topicPayload,
+            userState,
+            results,
+          };
+        })
+      );
+
+      const primary = topicItems[0];
       return res.json({
         success: true,
         data: {
-          topic: {
-            id: activeTopic.id,
-            title: pickI18nText(activeTopic.titleI18n, lang, activeTopic.title),
-            titleHtml: pickI18nHtml(activeTopic.titleI18n, lang, activeTopic.titleHtml, activeTopic.title),
-            summary: pickI18nText(activeTopic.summaryI18n, lang, activeTopic.summary),
-            summaryHtml: pickI18nHtml(activeTopic.summaryI18n, lang, activeTopic.summaryHtml, activeTopic.summary),
-            topicType: activeTopic.topicType,
-            options: localizeVoteOptions(Array.isArray(activeTopic.options) ? activeTopic.options : [], lang),
-            maxRevotes: activeTopic.maxRevotes,
-          },
-          userState,
-          results,
+          topic: primary.topic,
+          userState: primary.userState,
+          results: primary.results,
+          topics: topicItems,
         },
       });
     } catch (err) {
@@ -344,10 +397,6 @@ router.get(
   }
 );
 
-/**
- * POST /api/xhunt/hot-vote/topics/:topicId/vote
- * 提交投票（免登录或登录均可）
- */
 router.post(
   "/topics/:topicId/vote",
   [
@@ -413,6 +462,10 @@ router.post(
         }
       }
 
+      // 解析有效用户 ID 与客户端安全 IP (防溢出)
+      const effectiveUserId = await resolveXHuntUserId(req.user, twitterId);
+      const safeClientIp = req.ip ? String(req.ip).substring(0, 64) : null;
+
       // 事务写入并防重
       let created = false;
       await pgInstance.transaction(async (t) => {
@@ -430,48 +483,54 @@ router.post(
           {
             topicId,
             twitterId,
-            xHuntUserId: req.user?.id || null,
+            xHuntUserId: effectiveUserId,
             optionId,
             revoteCount: 0,
             isAnonymous,
-            clientIp: req.ip || null,
+            clientIp: safeClientIp,
           },
           { transaction: t }
         );
-
-        // 若投票请求同时携带了留言观点，则原子写入留言表
-        const rawComment = req.body.comment || req.body.content || req.body.commentContent;
-        const cleanComment = rawComment ? sanitizePlainText(rawComment, 200) : "";
-        if (cleanComment && cleanComment.trim() && !containsSensitiveWord(cleanComment)) {
-          const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
-          const requestHandle = rawHandle
-            ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
-            : null;
-          const userName = requestHandle || req.user?.username || "Anonymous";
-          const displayName = req.user?.displayName || userName;
-          const userAvatar = (req.user?.avatar || "").substring(0, 512);
-
-          await XHuntHotVoteComment.create(
-            {
-              topicId,
-              twitterId,
-              xHuntUserId: req.user?.id || null,
-              userName,
-              displayName,
-              userAvatar,
-              content: cleanComment,
-              isAnonymous,
-              isDeleted: false,
-            },
-            { transaction: t }
-          );
-        }
 
         created = true;
       });
 
       if (!created) {
         return res.status(400).json({ success: false, error: "您已参与过该投票，请使用修改选择功能" });
+      }
+
+      // 若投票请求同时携带了留言观点，则写入留言表（独立执行并容灾兜底，绝不阻塞或污染主投票流水）
+      const rawComment = req.body.comment || req.body.content || req.body.commentContent;
+      const cleanComment = rawComment ? sanitizePlainText(rawComment, 200) : "";
+      if (cleanComment && cleanComment.trim() && !containsSensitiveWord(cleanComment)) {
+        const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
+        const requestHandle = rawHandle
+          ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
+          : null;
+        const userName = requestHandle || req.user?.username || "Anonymous";
+        const displayName = req.user?.displayName || userName;
+        const userAvatar = (req.user?.avatar || "").substring(0, 512);
+
+        try {
+          await XHuntHotVoteComment.create({
+            topicId,
+            twitterId,
+            xHuntUserId: effectiveUserId,
+            userName,
+            displayName,
+            userAvatar,
+            content: cleanComment,
+            isAnonymous,
+            isDeleted: false,
+          });
+        } catch (commentErr) {
+          console.error(
+            "[HotVote] 留言写入异常 (未阻塞主投票流水):",
+            commentErr.name,
+            commentErr.message,
+            commentErr.parent?.detail || commentErr.original?.message || ""
+          );
+        }
       }
 
       // 更新 Redis 缓存原子自增（仅在缓存存在时自增；若缓存失效切勿直接自增，交由 getTopicVoteDistribution 从 DB 全量回填）
@@ -510,7 +569,13 @@ router.post(
       if (err instanceof UniqueConstraintError || err.name === "SequelizeUniqueConstraintError") {
         return res.status(400).json({ success: false, error: "ALREADY_VOTED", message: "您已参与过该投票，请使用修改选择功能" });
       }
-      console.error("[HotVote] POST /vote error:", err);
+      console.error(
+        "[HotVote] POST /vote error:",
+        err.name,
+        err.message,
+        err.parent?.detail || err.original?.message || "",
+        err.sql ? ("SQL: " + err.sql) : ""
+      );
       return res.status(500).json({ success: false, error: "投票提交失败，请重试" });
     }
   }
@@ -582,6 +647,9 @@ router.put(
         }
       }
 
+      // 解析有效用户 ID
+      const effectiveUserId = await resolveXHuntUserId(req.user, twitterId);
+
       let oldOptionId = null;
       let newRevoteCount = 0;
       let isRecordAnonymous = false;
@@ -612,42 +680,48 @@ router.put(
         if (req.body.isAnonymous !== undefined) {
           record.isAnonymous = Boolean(req.body.isAnonymous);
         }
-        if (req.user?.id) {
-          record.xHuntUserId = req.user.id;
+        if (effectiveUserId && !record.xHuntUserId) {
+          record.xHuntUserId = effectiveUserId;
         }
 
         await record.save({ transaction: t });
         newRevoteCount = record.revoteCount;
         isRecordAnonymous = Boolean(record.isAnonymous);
+      });
 
-        // 若改票时同时附带了留言观点，则写入留言表
-        const rawComment = req.body.comment || req.body.content || req.body.commentContent;
-        const cleanComment = rawComment ? sanitizePlainText(rawComment, 200) : "";
-        if (cleanComment && cleanComment.trim() && !containsSensitiveWord(cleanComment)) {
-          const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
-          const requestHandle = rawHandle
-            ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
-            : null;
-          const userName = requestHandle || req.user?.username || "Anonymous";
-          const displayName = req.user?.displayName || userName;
-          const userAvatar = (req.user?.avatar || "").substring(0, 512);
+      // 若改票时同时附带了留言观点，则写入留言表（独立执行并容灾兜底，绝不影响主改票流水）
+      const rawRevoteComment = req.body.comment || req.body.content || req.body.commentContent;
+      const cleanRevoteComment = rawRevoteComment ? sanitizePlainText(rawRevoteComment, 200) : "";
+      if (cleanRevoteComment && cleanRevoteComment.trim() && !containsSensitiveWord(cleanRevoteComment)) {
+        const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
+        const requestHandle = rawHandle
+          ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
+          : null;
+        const userName = requestHandle || req.user?.username || "Anonymous";
+        const displayName = req.user?.displayName || userName;
+        const userAvatar = (req.user?.avatar || "").substring(0, 512);
 
-          await XHuntHotVoteComment.create(
-            {
-              topicId,
-              twitterId,
-              xHuntUserId: req.user?.id || null,
-              userName,
-              displayName,
-              userAvatar,
-              content: cleanComment,
-              isAnonymous: isRecordAnonymous,
-              isDeleted: false,
-            },
-            { transaction: t }
+        try {
+          await XHuntHotVoteComment.create({
+            topicId,
+            twitterId,
+            xHuntUserId: effectiveUserId,
+            userName,
+            displayName,
+            userAvatar,
+            content: cleanRevoteComment,
+            isAnonymous: isRecordAnonymous,
+            isDeleted: false,
+          });
+        } catch (commentErr) {
+          console.error(
+            "[HotVote] 改票附带留言写入异常 (未阻塞主改票流水):",
+            commentErr.name,
+            commentErr.message,
+            commentErr.parent?.detail || commentErr.original?.message || ""
           );
         }
-      });
+      }
 
       // 原子更新 Redis 缓存（旧选项 -1，新选项 +1；仅在缓存存在时自增，防止产生负数与脏数据）
       const cacheKey = `hotvote:counts:${topicId}`;
@@ -690,7 +764,13 @@ router.put(
       if (err.message === "REVOTE_LIMIT_EXCEEDED") {
         return res.status(403).json({ success: false, error: "已达到该议题的最大修改次数限制" });
       }
-      console.error("[HotVote] PUT /vote error:", err);
+      console.error(
+        "[HotVote] PUT /vote error:",
+        err.name,
+        err.message,
+        err.parent?.detail || err.original?.message || "",
+        err.sql ? ("SQL: " + err.sql) : ""
+      );
       return res.status(500).json({ success: false, error: "修改投票失败，请重试" });
     }
   }
@@ -893,10 +973,12 @@ router.post(
       const displayName = req.user?.displayName || userName;
       const userAvatar = (req.user?.avatar || "").substring(0, 512);
 
+      const effectiveUserId = await resolveXHuntUserId(req.user, twitterId);
+
       const newComment = await XHuntHotVoteComment.create({
         topicId,
         twitterId,
-        xHuntUserId: req.user?.id || null,
+        xHuntUserId: effectiveUserId,
         userName,
         displayName,
         userAvatar,
@@ -920,7 +1002,13 @@ router.post(
         },
       });
     } catch (err) {
-      console.error("[HotVote] POST /comments error:", err);
+      console.error(
+        "[HotVote] POST /comments error:",
+        err.name,
+        err.message,
+        err.parent?.detail || err.original?.message || "",
+        err.sql ? ("SQL: " + err.sql) : ""
+      );
       return res.status(500).json({ success: false, error: "留言发布失败，请重试" });
     }
   }

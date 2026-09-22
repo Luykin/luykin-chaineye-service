@@ -1,6 +1,6 @@
 const express = require("express");
 const { body, param, query } = require("express-validator");
-const { fn, col } = require("sequelize");
+const { fn, col, Op } = require("sequelize");
 const { validateRequest } = require("../middleware/validate-request");
 const {
   XHuntHotVoteTopic,
@@ -44,19 +44,6 @@ function buildCleanOptions(options) {
 
   if (cleanOptions.some((o) => !OPTION_ID_PATTERN.test(o.id))) {
     return null;
-  }
-
-  // 确保包含吃瓜选项（若无，自动追加默认吃瓜选项）
-  if (!cleanOptions.some((o) => o.isGua)) {
-    cleanOptions.push({
-      id: "opt_gua",
-      name: "吃个瓜",
-      nameI18n: { zh: "吃个瓜", en: "Just watching" },
-      avatar: "",
-      twitterHandle: "",
-      color: "#94a3b8",
-      isGua: true,
-    });
   }
 
   return cleanOptions;
@@ -254,7 +241,7 @@ router.post(
         displayDomains,
         displayLanguages,
         maxRevotes = 2,
-        testingPhase = false,
+        testingPhase = true,
         testList = [],
         status = "draft",
         sortWeight = 0,
