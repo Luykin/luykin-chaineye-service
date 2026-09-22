@@ -15,10 +15,127 @@ const {
   XHuntUser,
   pgInstance,
 } = require("../../models/postgres-start");
-const { sanitizePlainText } = require("../services/inputValidator");
+const { sanitizePlainText, sanitizeSafeUrl } = require("../services/inputValidator");
 const { containsSensitiveWord } = require("../services/sensitiveWordFilter");
+const {
+  handleNegotiatedCache,
+  invalidateTopicCommentsCache,
+  invalidateTopicVotesCache,
+  getCachedTopicCommentsPage,
+} = require("../utils/hot-vote-cache");
+const { queryTwitterProfile } = require("./stats-routes/twitter-id-handler-lookup");
 
 const router = express.Router();
+/**
+ * 根据 Twitter ID 调取推特用户公开档案（直接复用管理后台 /xhunt/stats#/twitter-id-handler 的接口服务）
+ * 支持 Redis 24 小时缓存；报错或查无结果时回退为默认头像
+ */
+async function fetchTwitterProfileSafe(twitterId, redisClient = null) {
+  if (!twitterId) return null;
+  const cleanTwId = String(twitterId).trim();
+  const cacheKey = `hotvote:twitter:profile:${cleanTwId}`;
+
+  if (redisClient?.get) {
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (_) {}
+  }
+
+  try {
+    const profile = await queryTwitterProfile({ user_id: cleanTwId });
+    if (profile && (profile.avatar || profile.displayName || profile.handler)) {
+      if (redisClient?.set) {
+        try {
+          await redisClient.set(cacheKey, JSON.stringify(profile), { EX: 86400 });
+        } catch (_) {}
+      }
+      return profile;
+    }
+  } catch (err) {
+    console.warn(`[HotVote] 查询 Twitter 用户资料失败 (twitterId=${cleanTwId}):`, err.message);
+  }
+
+  return null;
+}
+
+/**
+ * 智能解析选民/留言用户的身份信息：
+ * 优先级顺序：
+ * 1. 携带的 Token 认证态 (req.user)
+ * 2. 客户端显式传递的参数 (req.body.userAvatar/avatar, req.headers["x-user-avatar"], displayName, userName)
+ * 3. 调取 Twitter ID 查询接口 (与 /xhunt/stats#/twitter-id-handler 一致，报错使用默认头像)
+ */
+async function resolveVoterUserInfo(req, twitterId) {
+  const effectiveUserId = req.user?.id || null;
+  let userName = req.user?.username || null;
+  let displayName = req.user?.displayName || null;
+  let userAvatar = req.user?.avatar || null;
+
+  // 1. 提取请求头
+  const rawHeaderHandle = req.headers["x-user-id"];
+  const headerHandle = rawHeaderHandle
+    ? String(rawHeaderHandle).replace(/^@/, "").trim().substring(0, 50)
+    : null;
+  const rawHeaderName = req.headers["x-user-name"];
+  const headerDisplayName = rawHeaderName
+    ? String(rawHeaderName).trim().substring(0, 50)
+    : null;
+  const rawHeaderAvatar = req.headers["x-user-avatar"] || req.headers["x-avatar"];
+  const headerAvatar = rawHeaderAvatar && typeof rawHeaderAvatar === "string"
+    ? sanitizeSafeUrl(rawHeaderAvatar.trim(), 512)
+    : null;
+
+  // 2. 提取请求体
+  const rawBodyAvatar = req.body?.userAvatar || req.body?.avatar;
+  const bodyAvatar = rawBodyAvatar && typeof rawBodyAvatar === "string"
+    ? sanitizeSafeUrl(rawBodyAvatar.trim(), 512)
+    : null;
+  const rawBodyDisplayName = req.body?.displayName || req.body?.name;
+  const bodyDisplayName = rawBodyDisplayName
+    ? sanitizePlainText(String(rawBodyDisplayName), 50)
+    : null;
+  const rawBodyUserName = req.body?.userName || req.body?.username || req.body?.handle;
+  const bodyUserName = rawBodyUserName
+    ? String(rawBodyUserName).replace(/^@/, "").trim().substring(0, 50)
+    : null;
+
+  if (!userName) userName = bodyUserName || headerHandle;
+  if (!displayName) displayName = bodyDisplayName || headerDisplayName || userName;
+  if (!userAvatar) userAvatar = bodyAvatar || headerAvatar;
+
+  // 3. 若缺少头像或昵称，调用 Twitter ID 查询接口
+  const cleanTwitterId = twitterId ? String(twitterId).trim() : null;
+  if (cleanTwitterId && (!userAvatar || !displayName || !userName || displayName === "Anonymous")) {
+    const profile = await fetchTwitterProfileSafe(cleanTwitterId, req.redisClient);
+    if (profile) {
+      if (!userAvatar && profile.avatar) {
+        userAvatar = profile.avatar;
+      }
+      if ((!displayName || displayName === "Anonymous") && profile.displayName) {
+        displayName = profile.displayName;
+      }
+      if ((!userName || userName === "Anonymous") && profile.handler) {
+        userName = profile.handler;
+      }
+    }
+  }
+
+  // 4. 报错或查无头像时回退使用默认头像
+  if (!userAvatar) {
+    userAvatar = getAnonymousAvatar(cleanTwitterId || "default");
+  }
+
+  return {
+    effectiveUserId,
+    userName: userName || "Anonymous",
+    displayName: displayName || userName || "User",
+    userAvatar: sanitizeSafeUrl(userAvatar, 512) || getAnonymousAvatar(cleanTwitterId || "default"),
+  };
+}
+
 /**
  * 辅助解析 XHunt 用户 ID：若未携带登录态，则尝试根据推特 ID 反查既有账户
  */
@@ -121,24 +238,57 @@ function isHotVoteTester(testList, { username, twitterId }) {
 }
 
 /**
+ * 安全解析多语言对象（兼容 JSONB 对象与 JSON 序列化字符串）
+ */
+function safeParseI18n(val) {
+  if (!val) return null;
+  if (typeof val === "object") return val;
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch (_) {}
+  }
+  return null;
+}
+
+/**
+ * 解析客户端请求语言（支持 ?lang=en, ?x-language=en, Header x-language: en, Header accept-language: en...）
+ * 归一化为 "en" 或 "zh"
+ */
+function resolveRequestLang(req) {
+  const candidate =
+    req.query?.lang ||
+    req.query?.["x-language"] ||
+    req.headers?.["x-language"] ||
+    req.headers?.["accept-language"];
+  if (candidate && String(candidate).trim().toLowerCase().startsWith("en")) {
+    return "en";
+  }
+  return "zh";
+}
+
+/**
  * 多语言文案选择：优先请求语言，其次中文，最后回退到兼容旧字段
  */
 function pickI18nText(i18n, lang, fallback) {
-  if (i18n && typeof i18n === "object") {
-    if (lang && i18n[lang]) return i18n[lang];
-    if (i18n.zh) return i18n.zh;
+  const obj = safeParseI18n(i18n);
+  if (obj) {
+    if (lang && obj[lang]) return obj[lang];
+    if (obj.zh) return obj.zh;
   }
   return fallback || "";
 }
 
 function pickI18nHtml(i18n, lang, fallbackHtml, fallbackText) {
-  if (i18n && typeof i18n === "object") {
+  const obj = safeParseI18n(i18n);
+  if (obj) {
     if (lang === "en") {
-      if (i18n.enHtml) return i18n.enHtml;
-      if (i18n.en) return i18n.en;
+      if (obj.enHtml) return obj.enHtml;
+      if (obj.en) return obj.en;
     }
-    if (i18n.zhHtml) return i18n.zhHtml;
-    if (i18n.zh) return i18n.zh;
+    if (obj.zhHtml) return obj.zhHtml;
+    if (obj.zh) return obj.zh;
   }
   return fallbackHtml || fallbackText || "";
 }
@@ -242,13 +392,14 @@ router.get(
   [
     authenticateTokenOptional,
     query("domain").optional().trim().isIn(["web3", "ai"]).withMessage("domain 必须是 web3 或 ai"),
-    query("lang").optional().trim().isIn(["zh", "en"]).withMessage("lang 必须是 zh 或 en"),
+    query("lang").optional().trim(),
+    query("x-language").optional().trim(),
     validateRequest,
   ],
   async (req, res) => {
     try {
       const domain = req.query.domain || null;
-      const lang = req.query.lang || "zh";
+      const lang = resolveRequestLang(req);
       const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
       const twitterId = rawTwitterId && /^\d{1,25}$/.test(String(rawTwitterId).trim())
         ? String(rawTwitterId).trim()
@@ -304,7 +455,7 @@ router.get(
       }
 
       if (visibleTopics.length === 0) {
-        return res.json({
+        const emptyResponse = {
           success: true,
           data: {
             topic: null,
@@ -316,7 +467,11 @@ router.get(
             },
             results: null,
           },
-        });
+        };
+        if (handleNegotiatedCache(req, res, emptyResponse, { isPrivate: true, maxAge: 0, staleWhileRevalidate: 300 })) {
+          return;
+        }
+        return res.json(emptyResponse);
       }
 
       // 批量查询当前用户在所有进行中议题下的投票流水
@@ -381,7 +536,7 @@ router.get(
       );
 
       const primary = topicItems[0];
-      return res.json({
+      const responseData = {
         success: true,
         data: {
           topic: primary.topic,
@@ -389,7 +544,13 @@ router.get(
           results: primary.results,
           topics: topicItems,
         },
-      });
+      };
+
+      if (handleNegotiatedCache(req, res, responseData, { isPrivate: true, maxAge: 0, staleWhileRevalidate: 300 })) {
+        return;
+      }
+
+      return res.json(responseData);
     } catch (err) {
       console.error("[HotVote] GET /active error:", err);
       return res.status(500).json({ success: false, error: "获取热点投票失败" });
@@ -462,8 +623,9 @@ router.post(
         }
       }
 
-      // 解析有效用户 ID 与客户端安全 IP (防溢出)
-      const effectiveUserId = await resolveXHuntUserId(req.user, twitterId);
+      // 解析有效用户信息与客户端安全 IP (防溢出)
+      const userInfo = await resolveVoterUserInfo(req, twitterId);
+      const effectiveUserId = userInfo.effectiveUserId;
       const safeClientIp = req.ip ? String(req.ip).substring(0, 64) : null;
 
       // 事务写入并防重
@@ -503,26 +665,19 @@ router.post(
       const rawComment = req.body.comment || req.body.content || req.body.commentContent;
       const cleanComment = rawComment ? sanitizePlainText(rawComment, 200) : "";
       if (cleanComment && cleanComment.trim() && !containsSensitiveWord(cleanComment)) {
-        const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
-        const requestHandle = rawHandle
-          ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
-          : null;
-        const userName = requestHandle || req.user?.username || "Anonymous";
-        const displayName = req.user?.displayName || userName;
-        const userAvatar = (req.user?.avatar || "").substring(0, 512);
-
         try {
           await XHuntHotVoteComment.create({
             topicId,
             twitterId,
             xHuntUserId: effectiveUserId,
-            userName,
-            displayName,
-            userAvatar,
+            userName: userInfo.userName,
+            displayName: userInfo.displayName,
+            userAvatar: userInfo.userAvatar,
             content: cleanComment,
             isAnonymous,
             isDeleted: false,
           });
+          await invalidateTopicCommentsCache(req.redisClient, topicId);
         } catch (commentErr) {
           console.error(
             "[HotVote] 留言写入异常 (未阻塞主投票流水):",
@@ -551,6 +706,7 @@ router.post(
       }
 
       const results = await getTopicVoteDistribution(topicId, options, req.redisClient);
+      await invalidateTopicVotesCache(req.redisClient, topicId);
 
       return res.json({
         success: true,
@@ -647,8 +803,9 @@ router.put(
         }
       }
 
-      // 解析有效用户 ID
-      const effectiveUserId = await resolveXHuntUserId(req.user, twitterId);
+      // 解析有效用户信息
+      const userInfo = await resolveVoterUserInfo(req, twitterId);
+      const effectiveUserId = userInfo.effectiveUserId;
 
       let oldOptionId = null;
       let newRevoteCount = 0;
@@ -693,26 +850,19 @@ router.put(
       const rawRevoteComment = req.body.comment || req.body.content || req.body.commentContent;
       const cleanRevoteComment = rawRevoteComment ? sanitizePlainText(rawRevoteComment, 200) : "";
       if (cleanRevoteComment && cleanRevoteComment.trim() && !containsSensitiveWord(cleanRevoteComment)) {
-        const rawHandle = req.headers["x-user-id"] || req.user?.username || null;
-        const requestHandle = rawHandle
-          ? String(rawHandle).replace(/^@/, "").trim().substring(0, 50)
-          : null;
-        const userName = requestHandle || req.user?.username || "Anonymous";
-        const displayName = req.user?.displayName || userName;
-        const userAvatar = (req.user?.avatar || "").substring(0, 512);
-
         try {
           await XHuntHotVoteComment.create({
             topicId,
             twitterId,
             xHuntUserId: effectiveUserId,
-            userName,
-            displayName,
-            userAvatar,
+            userName: userInfo.userName,
+            displayName: userInfo.displayName,
+            userAvatar: userInfo.userAvatar,
             content: cleanRevoteComment,
             isAnonymous: isRecordAnonymous,
             isDeleted: false,
           });
+          await invalidateTopicCommentsCache(req.redisClient, topicId);
         } catch (commentErr) {
           console.error(
             "[HotVote] 改票附带留言写入异常 (未阻塞主改票流水):",
@@ -787,38 +937,85 @@ router.get(
     param("topicId").isUUID().withMessage("无效的议题ID"),
     query("page").optional().isInt({ min: 1, max: 1000 }).toInt(),
     query("pageSize").optional().isInt({ min: 1, max: 20 }).toInt(),
-    query("lang").optional().trim().isIn(["zh", "en"]),
+    query("lang").optional().trim(),
+    query("x-language").optional().trim(),
     validateRequest,
   ],
   async (req, res) => {
     try {
       const { topicId } = req.params;
-      const lang = req.query.lang || "zh";
+      const lang = resolveRequestLang(req);
       const page = req.query.page || 1;
       const pageSize = req.query.pageSize || 3;
       const offset = (page - 1) * pageSize;
       const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
       const currentTwitterId = rawTwitterId ? String(rawTwitterId).trim() : null;
 
-      const { count, rows } = await XHuntHotVoteComment.findAndCountAll({
-        where: {
-          topicId,
-          isDeleted: false,
-        },
-        order: [["createdAt", "DESC"]],
-        limit: pageSize,
-        offset,
-        attributes: [
-          "id",
-          "twitterId",
-          "userName",
-          "displayName",
-          "userAvatar",
-          "content",
-          "isAnonymous",
-          "createdAt",
-        ],
-      });
+      const { count, rows } = await getCachedTopicCommentsPage(
+        req.redisClient,
+        topicId,
+        page,
+        pageSize,
+        async () => {
+          const res = await XHuntHotVoteComment.findAndCountAll({
+            where: {
+              topicId,
+              isDeleted: false,
+            },
+            order: [["createdAt", "DESC"]],
+            limit: pageSize,
+            offset,
+            attributes: [
+              "id",
+              "twitterId",
+              "userName",
+              "displayName",
+              "userAvatar",
+              "content",
+              "isAnonymous",
+              "createdAt",
+            ],
+          });
+
+          const rawRows = res.rows.map((r) => (typeof r.toJSON === "function" ? r.toJSON() : r));
+
+          // 补全非匿名留言中缺失的头像（调用 Twitter ID 接口，报错使用默认头像）
+          const missingTwIds = rawRows
+            .filter((r) => !r.isAnonymous && !r.userAvatar && r.twitterId)
+            .map((r) => r.twitterId);
+
+          if (missingTwIds.length > 0) {
+            const uniqueTwIds = Array.from(new Set(missingTwIds));
+            await Promise.all(
+              uniqueTwIds.map(async (twId) => {
+                const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
+                const avatar = profile?.avatar || getAnonymousAvatar(twId);
+                const name = profile?.displayName || null;
+                for (const r of rawRows) {
+                  if (r.twitterId === twId && !r.isAnonymous) {
+                    if (!r.userAvatar) {
+                      r.userAvatar = avatar;
+                      // 异步自愈数据库历史数据
+                      XHuntHotVoteComment.update(
+                        { userAvatar: avatar },
+                        { where: { id: r.id } }
+                      ).catch(() => {});
+                    }
+                    if ((!r.displayName || r.displayName === "Anonymous") && name) {
+                      r.displayName = name;
+                    }
+                  }
+                }
+              })
+            );
+          }
+
+          return {
+            count: res.count,
+            rows: rawRows,
+          };
+        }
+      );
 
       const list = rows.map((c) => {
         const isSelf = Boolean(currentTwitterId && c.twitterId === currentTwitterId);
@@ -840,7 +1037,7 @@ router.get(
           twitterId: c.twitterId,
           userName: c.userName,
           displayName: c.displayName,
-          userAvatar: c.userAvatar || getAnonymousAvatar(c.id),
+          userAvatar: c.userAvatar || "", // 真实头像；若无头像则留空，绝不替换为匿名彩色剪影！
           content: c.content,
           isAnonymous: false,
           isSelf,
@@ -848,7 +1045,7 @@ router.get(
         };
       });
 
-      return res.json({
+      const responseData = {
         success: true,
         data: {
           list,
@@ -859,7 +1056,19 @@ router.get(
             totalPages: Math.ceil(count / pageSize),
           },
         },
-      });
+      };
+
+      if (
+        handleNegotiatedCache(req, res, responseData, {
+          isPrivate: false,
+          maxAge: 30, // 30秒短强缓存防频刷
+          staleWhileRevalidate: 300, // 5分钟容灾/后台静默刷新
+        })
+      ) {
+        return;
+      }
+
+      return res.json(responseData);
     } catch (err) {
       console.error("[HotVote] GET /comments error:", err);
       return res.status(500).json({ success: false, error: "获取留言失败" });
@@ -967,25 +1176,23 @@ router.post(
       }
 
       const isAnonymous = Boolean(req.body.isAnonymous);
-      const lang = req.query.lang || "zh";
+      const lang = resolveRequestLang(req);
 
-      const userName = requestHandle || req.user?.username || "Anonymous";
-      const displayName = req.user?.displayName || userName;
-      const userAvatar = (req.user?.avatar || "").substring(0, 512);
-
-      const effectiveUserId = await resolveXHuntUserId(req.user, twitterId);
+      const userInfo = await resolveVoterUserInfo(req, twitterId);
 
       const newComment = await XHuntHotVoteComment.create({
         topicId,
         twitterId,
-        xHuntUserId: effectiveUserId,
-        userName,
-        displayName,
-        userAvatar,
+        xHuntUserId: userInfo.effectiveUserId,
+        userName: userInfo.userName,
+        displayName: userInfo.displayName,
+        userAvatar: userInfo.userAvatar,
         content: cleanContent,
         isAnonymous,
         isDeleted: false,
       });
+
+      await invalidateTopicCommentsCache(req.redisClient, topicId);
 
       return res.json({
         success: true,
@@ -994,7 +1201,7 @@ router.post(
           twitterId: isAnonymous ? "" : newComment.twitterId,
           userName: isAnonymous ? maskTwitterHandle(newComment.userName) : newComment.userName,
           displayName: isAnonymous ? (lang === "en" ? "Anonymous User" : "匿名用户") : newComment.displayName,
-          userAvatar: isAnonymous ? getAnonymousAvatar(newComment.id) : (newComment.userAvatar || getAnonymousAvatar(newComment.id)),
+          userAvatar: isAnonymous ? getAnonymousAvatar(newComment.id) : (newComment.userAvatar || ""),
           content: newComment.content,
           isAnonymous,
           isSelf: true,

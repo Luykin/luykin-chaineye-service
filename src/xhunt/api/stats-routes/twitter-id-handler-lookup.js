@@ -89,4 +89,8 @@ router.get(
   }
 );
 
+router.queryTwitterProfile = queryTwitterProfile;
+router.normalizeProfile = normalizeProfile;
 module.exports = router;
+module.exports.queryTwitterProfile = queryTwitterProfile;
+module.exports.normalizeProfile = normalizeProfile;

@@ -96,6 +96,9 @@ export interface HotVoteAdminVoteRecord {
   id: string;
   topicId: string;
   twitterId: string;
+  voterDisplayName?: string | null;
+  voterHandle?: string | null;
+  voterAvatar?: string | null;
   optionId: string;
   optionName?: string;
   previousOptionId?: string;

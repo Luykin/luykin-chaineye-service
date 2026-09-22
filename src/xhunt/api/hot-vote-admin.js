@@ -14,10 +14,66 @@ const {
   sanitizePlainText,
   sanitizeSafeUrl,
 } = require("../services/inputValidator");
+const {
+  handleNegotiatedCache,
+  invalidateTopicsCache,
+  invalidateTopicVotesCache,
+  invalidateTopicCommentsCache,
+} = require("../utils/hot-vote-cache");
+const { queryTwitterProfile } = require("./stats-routes/twitter-id-handler-lookup");
 
 const router = express.Router();
 
+/**
+ * 根据 Twitter ID 调取推特用户公开档案（复用管理后台 /xhunt/stats#/twitter-id-handler 的接口服务）
+ */
+async function fetchTwitterProfileSafe(twitterId, redisClient = null) {
+  if (!twitterId) return null;
+  const cleanTwId = String(twitterId).trim();
+  const cacheKey = `hotvote:twitter:profile:${cleanTwId}`;
+
+  if (redisClient?.get) {
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (_) {}
+  }
+
+  try {
+    const profile = await queryTwitterProfile({ user_id: cleanTwId });
+    if (profile && (profile.avatar || profile.displayName || profile.handler)) {
+      if (redisClient?.set) {
+        try {
+          await redisClient.set(cacheKey, JSON.stringify(profile), { EX: 86400 });
+        } catch (_) {}
+      }
+      return profile;
+    }
+  } catch (err) {
+    console.warn(`[HotVoteAdmin] 查询 Twitter 用户资料失败 (twitterId=${cleanTwId}):`, err.message);
+  }
+
+  return null;
+}
+
 const OPTION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/;
+
+/**
+ * 安全解析多语言对象（兼容 JSONB 对象与 JSON 序列化字符串）
+ */
+function safeParseI18n(val) {
+  if (!val) return null;
+  if (typeof val === "object") return val;
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch (_) {}
+  }
+  return null;
+}
 
 /**
  * 清洗选项数组；自动补默认"吃个瓜"选项。
@@ -28,7 +84,9 @@ function buildCleanOptions(options) {
   let hasGua = false;
   const cleanOptions = options.map((opt, idx) => {
     const name = sanitizePlainText(opt.name || "", 30);
-    const nameEn = opt.nameEn ? sanitizePlainText(opt.nameEn, 60) : "";
+    const nameEn = opt.nameEn
+      ? sanitizePlainText(opt.nameEn, 60)
+      : (opt.nameI18n?.en ? sanitizePlainText(opt.nameI18n.en, 60) : "");
     const isThisGua = !!opt.isGua && !hasGua;
     if (isThisGua) hasGua = true;
     return {
@@ -123,7 +181,11 @@ router.get("/internal-testers", async (req, res) => {
       attributes: ["id", "username", "twitterId"],
       order: [["username", "ASC"]],
     });
-    return res.json({ success: true, data: list });
+    const responseData = { success: true, data: list };
+    if (handleNegotiatedCache(req, res, responseData, { isPrivate: true, maxAge: 300, staleWhileRevalidate: 600 })) {
+      return;
+    }
+    return res.json(responseData);
   } catch (err) {
     console.error("[HotVoteAdmin] GET /internal-testers error:", err);
     return res.status(500).json({ success: false, error: "获取内测名单失败" });
@@ -190,7 +252,7 @@ router.get(
         };
       });
 
-      return res.json({
+      const responseData = {
         success: true,
         data: {
           list,
@@ -201,7 +263,13 @@ router.get(
             totalPages: Math.ceil(count / pageSize),
           },
         },
-      });
+      };
+
+      if (handleNegotiatedCache(req, res, responseData, { isPrivate: true, maxAge: 0, staleWhileRevalidate: 300 })) {
+        return;
+      }
+
+      return res.json(responseData);
     } catch (err) {
       console.error("[HotVoteAdmin] GET /topics error:", err);
       return res.status(500).json({ success: false, error: "获取议题列表失败" });
@@ -223,14 +291,20 @@ router.get(
         return res.status(404).json({ success: false, error: "议题不存在" });
       }
       const voteCount = await XHuntHotVoteRecord.count({ where: { topicId: topic.id } });
-      return res.json({
+      const responseData = {
         success: true,
         data: {
           ...topic.toJSON(),
           voteCount,
           hasVotes: voteCount > 0,
         },
-      });
+      };
+
+      if (handleNegotiatedCache(req, res, responseData, { isPrivate: true, maxAge: 0, staleWhileRevalidate: 300 })) {
+        return;
+      }
+
+      return res.json(responseData);
     } catch (err) {
       console.error("[HotVoteAdmin] GET /topics/:id error:", err);
       return res.status(500).json({ success: false, error: "获取议题详情失败" });
@@ -348,6 +422,7 @@ router.post(
       });
 
       await recordAdminAudit(req, "CREATE_HOT_VOTE_TOPIC", topic.id, { title: cleanTitle });
+      await invalidateTopicsCache(req.redisClient, topic.id);
 
       return res.json({
         success: true,
@@ -405,7 +480,7 @@ router.put(
         req.body.titleHtml !== undefined ||
         req.body.titleHtmlEn !== undefined
       ) {
-        const currentTitleI18n = topic.titleI18n || {};
+        const currentTitleI18n = safeParseI18n(topic.titleI18n) || {};
         const cleanTitleHtml = req.body.titleHtml !== undefined
           ? (req.body.titleHtml ? sanitizeVoteTitleHtml(req.body.titleHtml, 5000) : "")
           : (currentTitleI18n.zhHtml || topic.titleHtml || "");
@@ -423,7 +498,7 @@ router.put(
         if (cleanTitle) updates.title = cleanTitle;
         updates.titleHtml = cleanTitleHtml || null;
 
-        const nextTitleI18n = { ...(topic.titleI18n || {}) };
+        const nextTitleI18n = { ...(currentTitleI18n || {}) };
         if (cleanTitle) nextTitleI18n.zh = cleanTitle;
         if (cleanTitleEn) nextTitleI18n.en = cleanTitleEn;
         else if (req.body.titleEn === "" || req.body.titleHtmlEn === "") delete nextTitleI18n.en;
@@ -443,7 +518,7 @@ router.put(
         req.body.summaryHtml !== undefined ||
         req.body.summaryHtmlEn !== undefined
       ) {
-        const currentSummaryI18n = topic.summaryI18n || {};
+        const currentSummaryI18n = safeParseI18n(topic.summaryI18n) || {};
         const cleanSummaryHtml = req.body.summaryHtml !== undefined
           ? (req.body.summaryHtml ? sanitizeVoteTitleHtml(req.body.summaryHtml, 5000) : "")
           : (currentSummaryI18n.zhHtml || topic.summaryHtml || "");
@@ -461,7 +536,7 @@ router.put(
         if (cleanSummary) updates.summary = cleanSummary;
         updates.summaryHtml = cleanSummaryHtml || null;
 
-        const nextSummaryI18n = { ...(topic.summaryI18n || {}) };
+        const nextSummaryI18n = { ...(currentSummaryI18n || {}) };
         if (cleanSummary) nextSummaryI18n.zh = cleanSummary;
         if (cleanSummaryEn) nextSummaryI18n.en = cleanSummaryEn;
         else if (req.body.summaryEn === "" || req.body.summaryHtmlEn === "") delete nextSummaryI18n.en;
@@ -529,10 +604,8 @@ router.put(
 
       await topic.update(updates);
 
-      // 清除 Redis 缓存促使前端刷新
-      if (req.redisClient?.del) {
-        await req.redisClient.del(`hotvote:counts:${topic.id}`);
-      }
+      // 清除 Redis 缓存并递增版本号促使前端协商缓存立即刷新
+      await invalidateTopicsCache(req.redisClient, topic.id);
 
       await recordAdminAudit(req, "UPDATE_HOT_VOTE_TOPIC", topic.id, updates);
 
@@ -583,10 +656,45 @@ router.get(
         offset,
       });
 
-      return res.json({
+      const rawRows = rows.map((r) => (typeof r.toJSON === "function" ? r.toJSON() : r));
+
+      // 批量补全非匿名留言中缺失的头像与昵称（调用 Twitter 接口）
+      const missingTwIds = rawRows
+        .filter((r) => !r.isAnonymous && (!r.userAvatar || r.userName === "Anonymous") && r.twitterId)
+        .map((r) => r.twitterId);
+
+      if (missingTwIds.length > 0) {
+        const uniqueTwIds = Array.from(new Set(missingTwIds));
+        await Promise.all(
+          uniqueTwIds.map(async (twId) => {
+            const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
+            if (profile) {
+              for (const r of rawRows) {
+                if (r.twitterId === twId && !r.isAnonymous) {
+                  if (!r.userAvatar && profile.avatar) {
+                    r.userAvatar = profile.avatar;
+                    XHuntHotVoteComment.update(
+                      { userAvatar: profile.avatar },
+                      { where: { id: r.id } }
+                    ).catch(() => {});
+                  }
+                  if ((!r.displayName || r.displayName === "Anonymous") && profile.displayName) {
+                    r.displayName = profile.displayName;
+                  }
+                  if ((!r.userName || r.userName === "Anonymous") && profile.handler) {
+                    r.userName = profile.handler;
+                  }
+                }
+              }
+            }
+          })
+        );
+      }
+
+      const responseData = {
         success: true,
         data: {
-          list: rows,
+          list: rawRows,
           pagination: {
             page,
             pageSize,
@@ -594,7 +702,13 @@ router.get(
             totalPages: Math.ceil(count / pageSize),
           },
         },
-      });
+      };
+
+      if (handleNegotiatedCache(req, res, responseData, { isPrivate: true, maxAge: 0, staleWhileRevalidate: 300 })) {
+        return;
+      }
+
+      return res.json(responseData);
     } catch (err) {
       console.error("[HotVoteAdmin] GET /comments error:", err);
       return res.status(500).json({ success: false, error: "获取议题留言失败" });
@@ -633,6 +747,8 @@ router.delete(
         await comment.save();
         await recordAdminAudit(req, "BLOCK_HOT_VOTE_COMMENT", commentId, { topicId });
       }
+
+      await invalidateTopicCommentsCache(req.redisClient, topicId);
 
       return res.json({
         success: true,
@@ -718,9 +834,10 @@ router.get(
         offset,
       });
 
-      // 批量关联当前页选民的最近留言
+      // 批量关联当前页选民的最近留言与推特用户档案
       const voterTwitterIds = Array.from(new Set(rows.map((r) => r.twitterId).filter(Boolean)));
       const commentsByTwitterId = {};
+      const voterUserMap = {};
       if (voterTwitterIds.length > 0) {
         const voterComments = await XHuntHotVoteComment.findAll({
           where: {
@@ -734,19 +851,37 @@ router.get(
             commentsByTwitterId[c.twitterId] = c;
           }
         }
+
+        await Promise.all(
+          voterTwitterIds.map(async (twId) => {
+            const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
+            if (profile) {
+              voterUserMap[twId] = {
+                avatar: profile.avatar || "",
+                displayName: profile.displayName || "",
+                userName: profile.handler || "",
+              };
+            }
+          })
+        );
       }
 
       const list = rows.map((r) => {
         const comment = commentsByTwitterId[r.twitterId];
+        const userInfo = voterUserMap[r.twitterId] || {};
+        const isAnon = Boolean(r.isAnonymous);
         return {
           id: r.id,
           topicId: r.topicId,
           twitterId: r.twitterId,
+          voterDisplayName: isAnon ? "匿名选民" : (userInfo.displayName || comment?.displayName || null),
+          voterHandle: isAnon ? null : (userInfo.userName || comment?.userName || null),
+          voterAvatar: isAnon ? null : (userInfo.avatar || comment?.userAvatar || null),
           optionId: r.optionId,
           optionName: optionMap[r.optionId] || r.optionId,
           previousOptionId: r.previousOptionId,
           revoteCount: r.revoteCount,
-          isAnonymous: Boolean(r.isAnonymous),
+          isAnonymous: isAnon,
           clientIp: r.clientIp,
           commentContent: comment ? comment.content : null,
           commentDeleted: comment ? Boolean(comment.isDeleted) : false,
@@ -756,7 +891,7 @@ router.get(
         };
       });
 
-      return res.json({
+      const responseData = {
         success: true,
         data: {
           summary: {
@@ -771,7 +906,13 @@ router.get(
             totalPages: Math.ceil(count / pageSize),
           },
         },
-      });
+      };
+
+      if (handleNegotiatedCache(req, res, responseData, { isPrivate: true, maxAge: 0, staleWhileRevalidate: 300 })) {
+        return;
+      }
+
+      return res.json(responseData);
     } catch (err) {
       console.error("[HotVoteAdmin] GET /votes error:", err);
       return res.status(500).json({ success: false, error: "获取投票情况失败" });
@@ -806,10 +947,8 @@ router.delete(
 
       await record.destroy();
 
-      // 清除 Redis 票数缓存促使下一次请求重新精准聚合
-      if (req.redisClient?.del) {
-        await req.redisClient.del(`hotvote:counts:${topicId}`);
-      }
+      // 清除 Redis 票数缓存并递增版本号促使前端协商缓存立即刷新
+      await invalidateTopicVotesCache(req.redisClient, topicId);
 
       await recordAdminAudit(req, "DELETE_HOT_VOTE_RECORD", recordId, {
         topicId,
