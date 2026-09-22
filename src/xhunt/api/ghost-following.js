@@ -26,6 +26,99 @@ const FOLLOWING_QUOTA_CONFIG = {
   periodDays: 30,
 };
 
+function resolveLanguage(langOrReq) {
+  if (!langOrReq) return "zh";
+  if (typeof langOrReq === "string") {
+    const trimmed = langOrReq.trim().toLowerCase();
+    return trimmed.startsWith("en") ? "en" : "zh";
+  }
+  const req = langOrReq;
+  const raw =
+    req.headers?.["x-language"] ||
+    req.query?.["x-language"] ||
+    req.body?.["x-language"] ||
+    req.query?.lang ||
+    req.body?.lang ||
+    req.headers?.["x-echohunt-language"] ||
+    req.headers?.["accept-language"];
+
+  const candidate = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof candidate === "string" && candidate.trim().toLowerCase().startsWith("en")) {
+    return "en";
+  }
+  return "zh";
+}
+
+function getText(langOrReq, zhText, enText) {
+  return resolveLanguage(langOrReq) === "en" ? enText : zhText;
+}
+
+function validationMsg(zhText, enText) {
+  return (value, { req }) => getText(req, zhText, enText);
+}
+
+const ERROR_MESSAGE_I18N = {
+  "Analysis failed": {
+    zh: "分析失败",
+    en: "Analysis failed",
+  },
+  "分析失败": {
+    zh: "分析失败",
+    en: "Analysis failed",
+  },
+  "Service temporarily unavailable": {
+    zh: "服务暂时不可用",
+    en: "Service temporarily unavailable",
+  },
+  "服务暂时不可用": {
+    zh: "服务暂时不可用",
+    en: "Service temporarily unavailable",
+  },
+  "Failed to get quota": {
+    zh: "获取额度失败",
+    en: "Failed to get quota",
+  },
+  "获取额度失败": {
+    zh: "获取额度失败",
+    en: "Failed to get quota",
+  },
+  "Failed to fetch following list": {
+    zh: "获取关注列表失败",
+    en: "Failed to fetch following list",
+  },
+  "获取关注列表失败": {
+    zh: "获取关注列表失败",
+    en: "Failed to fetch following list",
+  },
+  "External API request failed": {
+    zh: "外部接口请求失败",
+    en: "External API request failed",
+  },
+  "外部接口请求失败": {
+    zh: "外部接口请求失败",
+    en: "External API request failed",
+  },
+  "Second API invalid response format": {
+    zh: "接口返回格式异常",
+    en: "Invalid API response format",
+  },
+  "Third API profile check invalid response format": {
+    zh: "接口返回格式异常",
+    en: "Invalid API response format",
+  },
+};
+
+function localizeErrorMessage(rawMessage, req, defaultZh, defaultEn) {
+  const isEn = resolveLanguage(req) === "en";
+  if (!rawMessage) {
+    return isEn ? defaultEn : defaultZh;
+  }
+  if (ERROR_MESSAGE_I18N[rawMessage]) {
+    return isEn ? ERROR_MESSAGE_I18N[rawMessage].en : ERROR_MESSAGE_I18N[rawMessage].zh;
+  }
+  return rawMessage;
+}
+
 // ======== CryptoHunt Pro API 配置 ========
 const PRO_API_CONFIG = {
   baseUrl: process.env.PRO_API_BASE_URL || "http://172.31.0.2:3001",
@@ -235,7 +328,11 @@ async function checkCrawlerQuota(req, res, next) {
           success: false,
           error: {
             code: "CONCURRENT_LIMIT_EXCEEDED",
-            message: "当前服务使用人数过多，请10分钟后再试",
+            message: getText(
+              req,
+              "当前服务使用人数过多，请10分钟后再试",
+              "The service is currently experiencing high traffic. Please try again in 10 minutes."
+            ),
             data: {
               available_remaining_total: available,
               minRemaining: CRAWLER_QUOTA_CONFIG.minRemaining,
@@ -324,7 +421,11 @@ async function concurrentUserLimit(req, res, next) {
         success: false,
         error: {
           code: "CONCURRENT_LIMIT_EXCEEDED",
-          message: "当前服务使用人数过多，请10分钟后再试",
+          message: getText(
+            req,
+            "当前服务使用人数过多，请10分钟后再试",
+            "The service is currently experiencing high traffic. Please try again in 10 minutes."
+          ),
           data: {
             total: maxConcurrentUsers,
             used: activeCount,
@@ -596,6 +697,7 @@ function createAnalyzeLogContext(req, user_id, handle) {
     appUserId: req.user?.id,
     twitterUserId: user_id,
     handle,
+    lang: resolveLanguage(req),
   };
 }
 
@@ -638,13 +740,13 @@ router.post(
     body("user_id")
       .trim()
       .notEmpty()
-      .withMessage("user_id is required")
+      .withMessage(validationMsg("user_id 不能为空", "user_id is required"))
       .isNumeric()
-      .withMessage("user_id must be a numeric string"),
+      .withMessage(validationMsg("user_id 必须是纯数字字符串", "user_id must be a numeric string")),
     body("handle")
       .trim()
       .notEmpty()
-      .withMessage("handle is required"),
+      .withMessage(validationMsg("handle 不能为空", "handle is required")),
     validateRequest,
   ],
   async (req, res) => {
@@ -662,7 +764,10 @@ router.post(
         console.error("[ghost-following/analyze] redis unavailable", logCtx);
         return res.status(500).json({
           success: false,
-          error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
+          error: {
+            code: "INTERNAL_ERROR",
+            message: getText(req, "服务暂时不可用", "Service temporarily unavailable"),
+          },
         });
       }
 
@@ -694,7 +799,11 @@ router.post(
           success: false,
           error: {
             code: "CONCURRENT_LIMIT_EXCEEDED",
-            message: "本月额度已用完",
+            message: getText(
+              req,
+              "本月额度已用完",
+              "Monthly quota exhausted"
+            ),
             data: {
               total,
               used: total,
@@ -726,7 +835,11 @@ router.post(
           success: false,
           error: {
             code: "CONCURRENT_LIMIT_EXCEEDED",
-            message: "服务暂时不可用，请稍后重试",
+            message: getText(
+              req,
+              "服务暂时不可用，请稍后重试",
+              "Service temporarily unavailable, please try again later"
+            ),
             retryAfter: Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
             data: {
               nextApplyAt: Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
@@ -786,7 +899,7 @@ router.post(
                 tweetId: tweet.id,
                 createTime: tweet.create_time,
               });
-              analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
+              analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx, req);
             } else {
               // 数据正常，直接使用
               analysisResult = {
@@ -799,14 +912,14 @@ router.post(
           } else {
             // KOL tweets 返回空，调用第二个接口进行二次确认
             console.info("[ghost-following/analyze] first api empty, fallback", logCtx);
-            analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
+            analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx, req);
           }
         } else {
           console.warn("[ghost-following/analyze] first api invalid format, fallback", {
             ...logCtx,
             dataType: typeof response.data,
           });
-          analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
+          analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx, req);
         }
       } catch (apiError) {
         circuitBreaker.recordFailure();
@@ -818,7 +931,7 @@ router.post(
         
         // 第一个接口失败，尝试第二个接口
         // 如果第二个接口也失败，会抛出带状态码的错误，透传给外层处理
-        analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
+        analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx, req);
       }
 
       // 计算过期时间
@@ -856,11 +969,13 @@ router.post(
         statusCode,
         error: summarizeAnalyzeError(error),
       });
+      const defaultZh = statusCode === 500 ? "分析失败" : "外部接口请求失败";
+      const defaultEn = statusCode === 500 ? "Analysis failed" : "External API request failed";
       return res.status(statusCode).json({
         success: false,
         error: {
           code: statusCode === 500 ? "INTERNAL_ERROR" : "EXTERNAL_API_ERROR",
-          message: error.message || "Analysis failed"
+          message: localizeErrorMessage(error.message, req, defaultZh, defaultEn),
         },
       });
     }
@@ -883,7 +998,10 @@ router.get(
       if (!redisClient) {
         return res.status(500).json({
           success: false,
-          error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
+          error: {
+            code: "INTERNAL_ERROR",
+            message: getText(req, "服务暂时不可用", "Service temporarily unavailable"),
+          },
         });
       }
 
@@ -1062,7 +1180,10 @@ router.get(
     } catch (error) {
       return res.status(500).json({
         success: false,
-        error: { code: "INTERNAL_ERROR", message: "Failed to get quota" },
+        error: {
+          code: "INTERNAL_ERROR",
+          message: getText(req, "获取额度失败", "Failed to get quota"),
+        },
       });
     }
   }
@@ -1133,10 +1254,10 @@ router.post(
     body("user_id")
       .trim()
       .notEmpty()
-      .withMessage("user_id is required")
+      .withMessage(validationMsg("user_id 不能为空", "user_id is required"))
       .isNumeric()
-      .withMessage("user_id must be a numeric string"),
-    body("cursor").optional().isString().withMessage("cursor must be a string"),
+      .withMessage(validationMsg("user_id 必须是纯数字字符串", "user_id must be a numeric string")),
+    body("cursor").optional().isString().withMessage(validationMsg("cursor 必须是字符串", "cursor must be a string")),
     validateRequest,
   ],
   async (req, res) => {
@@ -1149,7 +1270,10 @@ router.post(
         console.error("[ghost-following] Redis client not available");
         return res.status(500).json({
           success: false,
-          error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
+          error: {
+            code: "INTERNAL_ERROR",
+            message: getText(req, "服务暂时不可用", "Service temporarily unavailable"),
+          },
         });
       }
 
@@ -1170,7 +1294,11 @@ router.post(
           success: false,
           error: {
             code: "FOLLOWING_QUOTA_EXHAUSTED",
-            message: "本月关注列表查询额度已用完",
+            message: getText(
+              req,
+              "本月关注列表查询额度已用完",
+              "Monthly following list query quota exhausted"
+            ),
             data: {
               total: FOLLOWING_QUOTA_CONFIG.monthlyLimit,
               used: FOLLOWING_QUOTA_CONFIG.monthlyLimit,
@@ -1224,14 +1352,22 @@ router.post(
           success: false,
           error: {
             code: data?.code || "EXTERNAL_API_ERROR",
-            message: data?.message || "External API request failed",
+            message: localizeErrorMessage(
+              data?.message,
+              req,
+              "外部接口请求失败",
+              "External API request failed"
+            ),
           },
         });
       }
 
       return res.status(500).json({
         success: false,
-        error: { code: "INTERNAL_ERROR", message: "Failed to fetch following list" },
+        error: {
+          code: "INTERNAL_ERROR",
+          message: getText(req, "获取关注列表失败", "Failed to fetch following list"),
+        },
       });
     }
   }
@@ -1242,7 +1378,7 @@ router.post(
  * @param {string} user_id - Twitter 用户 ID
  * @returns {Object} - 分析结果
  */
-async function verifyEmptyUserWithSecondApi(user_id, logCtx = {}) {
+async function verifyEmptyUserWithSecondApi(user_id, logCtx = {}, req = null) {
   try {
     const secondApiStartedAt = Date.now();
     const response = await axios.post(
@@ -1293,7 +1429,7 @@ async function verifyEmptyUserWithSecondApi(user_id, logCtx = {}) {
       } else {
         // 第二个接口也确认没有推文，调用第三个接口检查是否锁推
         console.info("[ghost-following/analyze] second api empty, checking profile", logCtx);
-        return await checkUserProtectedStatus(user_id, logCtx);
+        return await checkUserProtectedStatus(user_id, logCtx, req);
       }
     } else {
       // 第二个接口返回异常格式
@@ -1331,7 +1467,7 @@ async function verifyEmptyUserWithSecondApi(user_id, logCtx = {}) {
  * @param {string} apiKey - API Key
  * @returns {Object} - 用户状态信息
  */
-async function checkUserProtectedStatus(user_id, logCtx = {}) {
+async function checkUserProtectedStatus(user_id, logCtx = {}, req = null) {
   try {
     const profileApiStartedAt = Date.now();
     const response = await axios.post(
@@ -1368,8 +1504,8 @@ async function checkUserProtectedStatus(user_id, logCtx = {}) {
         twitter_user_id: user_id,
         protected: isProtected,
         message: isProtected
-          ? "User account is protected (private)"
-          : "No tweets found for this user (verified)",
+          ? getText(req || logCtx?.req || logCtx?.lang, "用户账号已设为私密（推文受保护）", "User account is protected (private)")
+          : getText(req || logCtx?.req || logCtx?.lang, "未找到该用户的推文（已确认）", "No tweets found for this user (verified)"),
         verified: true,
         source: "pro_api",
         profile: {
@@ -1419,5 +1555,8 @@ router.checkCrawlerQuota = checkCrawlerQuota;
 router.fetchCrawlerQuota = fetchCrawlerQuota;
 router.CRAWLER_QUOTA_CONFIG = CRAWLER_QUOTA_CONFIG;
 router.resetCrawlerQuotaCacheForTest = resetCrawlerQuotaCacheForTest;
+router.resolveLanguage = resolveLanguage;
+router.getText = getText;
+router.localizeErrorMessage = localizeErrorMessage;
 
 module.exports = router;
