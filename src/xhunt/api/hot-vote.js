@@ -17,6 +17,7 @@ const {
 } = require("../../models/postgres-start");
 const { sanitizePlainText, sanitizeSafeUrl } = require("../services/inputValidator");
 const { containsSensitiveWord } = require("../services/sensitiveWordFilter");
+const { auditCommentContentWithAI } = require("../services/hotVoteModerationService");
 const {
   handleNegotiatedCache,
   invalidateTopicCommentsCache,
@@ -623,6 +624,22 @@ router.post(
         }
       }
 
+      // 提取附带留言观点
+      const rawComment = req.body.comment || req.body.content || req.body.commentContent;
+      const cleanComment = rawComment ? sanitizePlainText(rawComment, 200).trim() : "";
+
+      // 用户投票时若附带了留言，调用 AI 大模型进行安全审核（不能是反对政治、暴力、色情、辱骂或极端言论）
+      if (cleanComment) {
+        const audit = await auditCommentContentWithAI(cleanComment);
+        if (!audit.passed) {
+          return res.status(400).json({
+            success: false,
+            error: "COMMENT_CONTENT_VIOLATION",
+            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂或极端言论），请文明发言",
+          });
+        }
+      }
+
       // 解析有效用户信息与客户端安全 IP (防溢出)
       const userInfo = await resolveVoterUserInfo(req, twitterId);
       const effectiveUserId = userInfo.effectiveUserId;
@@ -661,10 +678,8 @@ router.post(
         return res.status(400).json({ success: false, error: "您已参与过该投票，请使用修改选择功能" });
       }
 
-      // 若投票请求同时携带了留言观点，则写入留言表（独立执行并容灾兜底，绝不阻塞或污染主投票流水）
-      const rawComment = req.body.comment || req.body.content || req.body.commentContent;
-      const cleanComment = rawComment ? sanitizePlainText(rawComment, 200) : "";
-      if (cleanComment && cleanComment.trim() && !containsSensitiveWord(cleanComment)) {
+      // 若投票请求同时携带了留言观点，则写入留言表
+      if (cleanComment) {
         try {
           await XHuntHotVoteComment.create({
             topicId,
@@ -803,6 +818,22 @@ router.put(
         }
       }
 
+      // 提取附带改票留言观点
+      const rawRevoteComment = req.body.comment || req.body.content || req.body.commentContent;
+      const cleanRevoteComment = rawRevoteComment ? sanitizePlainText(rawRevoteComment, 200).trim() : "";
+
+      // 用户改票时若附带了留言，调用 AI 大模型进行安全审核（不能是反对政治、暴力、色情、辱骂或极端言论）
+      if (cleanRevoteComment) {
+        const audit = await auditCommentContentWithAI(cleanRevoteComment);
+        if (!audit.passed) {
+          return res.status(400).json({
+            success: false,
+            error: "COMMENT_CONTENT_VIOLATION",
+            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂或极端言论），请文明发言",
+          });
+        }
+      }
+
       // 解析有效用户信息
       const userInfo = await resolveVoterUserInfo(req, twitterId);
       const effectiveUserId = userInfo.effectiveUserId;
@@ -846,10 +877,8 @@ router.put(
         isRecordAnonymous = Boolean(record.isAnonymous);
       });
 
-      // 若改票时同时附带了留言观点，则写入留言表（独立执行并容灾兜底，绝不影响主改票流水）
-      const rawRevoteComment = req.body.comment || req.body.content || req.body.commentContent;
-      const cleanRevoteComment = rawRevoteComment ? sanitizePlainText(rawRevoteComment, 200) : "";
-      if (cleanRevoteComment && cleanRevoteComment.trim() && !containsSensitiveWord(cleanRevoteComment)) {
+      // 若改票时同时附带了留言观点，则写入留言表
+      if (cleanRevoteComment) {
         try {
           await XHuntHotVoteComment.create({
             topicId,
@@ -1132,9 +1161,14 @@ router.post(
         }
       }
 
-      // 敏感词过滤
-      if (containsSensitiveWord(cleanContent)) {
-        return res.status(400).json({ success: false, error: "SENSITIVE_CONTENT", message: "留言内容包含违规信息，请修改后再试" });
+      // AI 大模型安全审核（包含内置敏感词与钓鱼预检）
+      const audit = await auditCommentContentWithAI(cleanContent);
+      if (!audit.passed) {
+        return res.status(400).json({
+          success: false,
+          error: "COMMENT_CONTENT_VIOLATION",
+          message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂或极端言论），请文明发言",
+        });
       }
 
       // 防灌水限频：同一推特ID 30秒内只能发一条留言
