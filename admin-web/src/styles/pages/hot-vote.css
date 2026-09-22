@@ -8,7 +8,8 @@
   border-radius: 6px;
   background: var(--admin-surface, #ffffff);
   transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .rich-title-editor-wrapper:hover {
@@ -24,9 +25,9 @@
 .rich-title-toolbar.ql-toolbar.ql-snow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: nowrap !important;
-  gap: 6px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   padding: 4px 8px;
   background: var(--admin-surface-soft, #fafafa);
   border: none;
@@ -87,14 +88,30 @@
   white-space: nowrap;
 }
 
-/* 工具栏右侧操作与计数 */
-.rich-title-toolbar-right {
-  margin-left: auto;
+/* ---------- 底部独立状态栏 ---------- */
+.rich-title-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  background: var(--admin-surface-soft, #fafafa);
+  border-top: 1px solid var(--admin-border, #f0f0f0);
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  font-size: 11px;
+}
+
+.rich-title-footer-tip {
+  color: var(--admin-text-muted, #8c8c8c);
+  font-size: 11px;
+  user-select: none;
+}
+
+.rich-title-footer-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0 !important;
-  white-space: nowrap !important;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .rich-title-preview-toggle {
@@ -156,7 +173,7 @@
 
 .rich-title-container .ql-editor {
   min-height: var(--rich-editor-min-height, 90px);
-  max-height: 260px;
+  max-height: 400px;
   overflow-y: auto;
   padding: 10px 14px;
   font-size: 14px;
@@ -164,8 +181,10 @@
 }
 
 .rich-title-container .ql-editor p {
-  margin: 0;
-  display: inline;
+  margin: 0 0 4px 0;
+}
+.rich-title-container .ql-editor p:last-child {
+  margin-bottom: 0;
 }
 
 .rich-title-container .ql-editor.ql-blank::before {
@@ -175,10 +194,10 @@
   right: 12px;
 }
 
-/* 富文本图片在编辑器与展示中的行内图标优化 */
-.rich-title-container .ql-editor img,
-.rich-title-render-content img,
-.hot-vote-rich-title img,
+/* 富文本图片在编辑器与展示中的行内代币图标与常规图片分类优化 */
+.rich-title-container .ql-editor img.token-icon,
+.rich-title-render-content img.token-icon,
+.hot-vote-rich-title img.token-icon,
 .preview-sample-img {
   max-height: 1.35em;
   width: auto;
@@ -188,6 +207,140 @@
   display: inline-block;
   object-fit: contain;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.rich-title-container .ql-editor img:not(.token-icon),
+.rich-title-render-content img:not(.token-icon),
+.hot-vote-rich-title img:not(.token-icon) {
+  max-width: 100%;
+  max-height: 220px;
+  height: auto;
+  border-radius: 6px;
+  margin: 6px 0;
+  display: block;
+  object-fit: contain;
+}
+
+/* 链接样式 */
+.rich-title-container .ql-editor a,
+.rich-title-render-content a,
+.hot-vote-rich-title a {
+  color: #1677ff;
+  text-decoration: underline;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.rich-title-container .ql-editor a:hover,
+.rich-title-render-content a:hover,
+.hot-vote-rich-title a:hover {
+  color: #4096ff;
+}
+
+/* 列表样式 */
+.rich-title-container .ql-editor ol,
+.rich-title-render-content ol,
+.hot-vote-rich-title ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin: 4px 0;
+}
+
+.rich-title-container .ql-editor ul,
+.rich-title-render-content ul,
+.hot-vote-rich-title ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin: 4px 0;
+}
+
+/* 下拉菜单与提示框 z-index 提高，防止被遮挡 */
+.rich-title-toolbar .ql-picker-options {
+  z-index: 1060 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  background: #ffffff !important;
+}
+
+.rich-title-container .ql-tooltip {
+  z-index: 1060 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  background: #ffffff !important;
+}
+
+/* 字号选择器中文标签 */
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-label::before,
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-item::before {
+  content: "标准" !important;
+}
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-label[data-value="small"]::before,
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-item[data-value="small"]::before {
+  content: "小" !important;
+}
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-label[data-value="large"]::before,
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-item[data-value="large"]::before {
+  content: "大" !important;
+}
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-label[data-value="huge"]::before,
+.rich-title-toolbar .ql-picker.ql-size .ql-picker-item[data-value="huge"]::before {
+  content: "特大" !important;
+}
+
+/* 标题选择器中文标签 */
+.rich-title-toolbar .ql-picker.ql-header .ql-picker-label::before,
+.rich-title-toolbar .ql-picker.ql-header .ql-picker-item::before {
+  content: "正文" !important;
+}
+.rich-title-toolbar .ql-picker.ql-header .ql-picker-label[data-value="2"]::before,
+.rich-title-toolbar .ql-picker.ql-header .ql-picker-item[data-value="2"]::before {
+  content: "二级标题" !important;
+}
+.rich-title-toolbar .ql-picker.ql-header .ql-picker-label[data-value="3"]::before,
+.rich-title-toolbar .ql-picker.ql-header .ql-picker-item[data-value="3"]::before {
+  content: "三级标题" !important;
+}
+
+/* 引用与代码样式 */
+.rich-title-container .ql-editor blockquote,
+.rich-title-render-content blockquote,
+.hot-vote-rich-title blockquote {
+  border-left: 3px solid #1677ff;
+  padding-left: 10px;
+  margin: 6px 0;
+  color: #595959;
+  font-style: italic;
+  background: rgba(22, 119, 255, 0.04);
+  border-radius: 0 4px 4px 0;
+}
+
+.rich-title-container .ql-editor code,
+.rich-title-render-content code,
+.hot-vote-rich-title code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: SFMono-Regular, Consolas, Monaco, monospace;
+  font-size: 0.9em;
+}
+
+/* 对齐类样式 */
+.rich-title-container .ql-editor .ql-align-center,
+.rich-title-render-content .ql-align-center,
+.hot-vote-rich-title .ql-align-center {
+  text-align: center;
+}
+
+.rich-title-container .ql-editor .ql-align-right,
+.rich-title-render-content .ql-align-right,
+.hot-vote-rich-title .ql-align-right {
+  text-align: right;
+}
+
+.rich-title-container .ql-editor .ql-align-justify,
+.rich-title-render-content .ql-align-justify,
+.hot-vote-rich-title .ql-align-justify {
+  text-align: justify;
 }
 
 /* ---------- 实时预览区 ---------- */

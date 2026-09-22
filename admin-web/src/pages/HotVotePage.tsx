@@ -436,9 +436,9 @@ export function HotVotePage() {
                           style={{ marginBottom: 12 }}
                         >
                           <RichTitleEditor
-                            placeholder="输入中文议题标题，支持加粗、斜体与代币图标..."
-                            minHeight={80}
-                            maxLength={200}
+                            placeholder="输入中文议题标题，支持加粗、文字颜色、超链接与代币图标..."
+                            minHeight={100}
+                            maxLength={1000}
                           />
                         </Form.Item>
 
@@ -457,9 +457,9 @@ export function HotVotePage() {
                           style={{ marginBottom: 4 }}
                         >
                           <RichTitleEditor
-                            placeholder="一句话说明核心冲突与背景，支持加粗、斜体与代币图标..."
-                            minHeight={100}
-                            maxLength={300}
+                            placeholder="说明核心冲突与背景，支持多段落、引用、列表、超链接与配图..."
+                            minHeight={180}
+                            maxLength={4000}
                             allowNewline
                           />
                         </Form.Item>
@@ -487,8 +487,8 @@ export function HotVotePage() {
                         >
                           <RichTitleEditor
                             placeholder="English debate title (optional)..."
-                            minHeight={80}
-                            maxLength={200}
+                            minHeight={100}
+                            maxLength={1000}
                           />
                         </Form.Item>
 
@@ -498,9 +498,9 @@ export function HotVotePage() {
                           style={{ marginBottom: 4 }}
                         >
                           <RichTitleEditor
-                            placeholder="One-line conflict summary for English UI (optional)..."
-                            minHeight={100}
-                            maxLength={300}
+                            placeholder="Conflict background and debate summary for English UI (optional)..."
+                            minHeight={180}
+                            maxLength={4000}
                             allowNewline
                           />
                         </Form.Item>

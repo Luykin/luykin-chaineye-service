@@ -221,12 +221,12 @@ router.post(
   [
     body("title").optional().trim().isLength({ min: 1, max: 100 }),
     body("titleEn").optional().trim().isLength({ max: 100 }),
-    body("titleHtml").optional().trim().isLength({ max: 1000 }),
-    body("titleHtmlEn").optional().trim().isLength({ max: 1000 }),
+    body("titleHtml").optional().trim().isLength({ max: 5000 }),
+    body("titleHtmlEn").optional().trim().isLength({ max: 5000 }),
     body("summary").optional().trim().isLength({ min: 1, max: 100 }),
     body("summaryEn").optional().trim().isLength({ max: 100 }),
-    body("summaryHtml").optional().trim().isLength({ max: 1000 }),
-    body("summaryHtmlEn").optional().trim().isLength({ max: 1000 }),
+    body("summaryHtml").optional().trim().isLength({ max: 5000 }),
+    body("summaryHtmlEn").optional().trim().isLength({ max: 5000 }),
     body("topicType").isIn(["person_pk", "general_topic"]).withMessage("议题形式不合法"),
     body("options").isArray({ min: 2, max: 6 }).withMessage("选项数量必须在 2 ~ 6 个之间"),
     body("displayDomains").isArray({ min: 1 }).withMessage("展示领域必须至少选一项"),
@@ -263,8 +263,8 @@ router.post(
       } = req.body;
 
       // XSS 安全清洗与纯文本提炼
-      const cleanTitleHtml = titleHtml ? sanitizeVoteTitleHtml(titleHtml, 1000) : "";
-      const cleanTitleHtmlEn = titleHtmlEn ? sanitizeVoteTitleHtml(titleHtmlEn, 1000) : "";
+      const cleanTitleHtml = titleHtml ? sanitizeVoteTitleHtml(titleHtml, 5000) : "";
+      const cleanTitleHtmlEn = titleHtmlEn ? sanitizeVoteTitleHtml(titleHtmlEn, 5000) : "";
       const cleanTitle = (title ? sanitizePlainText(title, 100) : "") || extractPlainTextFromHtml(cleanTitleHtml, 100);
       const cleanTitleEn = (titleEn ? sanitizePlainText(titleEn, 100) : "") || extractPlainTextFromHtml(cleanTitleHtmlEn, 100);
 
@@ -272,8 +272,8 @@ router.post(
         return res.status(400).json({ success: false, error: "议题标题不能为空" });
       }
 
-      const cleanSummaryHtml = summaryHtml ? sanitizeVoteTitleHtml(summaryHtml, 1000) : "";
-      const cleanSummaryHtmlEn = summaryHtmlEn ? sanitizeVoteTitleHtml(summaryHtmlEn, 1000) : "";
+      const cleanSummaryHtml = summaryHtml ? sanitizeVoteTitleHtml(summaryHtml, 5000) : "";
+      const cleanSummaryHtmlEn = summaryHtmlEn ? sanitizeVoteTitleHtml(summaryHtmlEn, 5000) : "";
       const cleanSummary = (summary ? sanitizePlainText(summary, 100) : "") || extractPlainTextFromHtml(cleanSummaryHtml, 100);
       const cleanSummaryEn = (summaryEn ? sanitizePlainText(summaryEn, 100) : "") || extractPlainTextFromHtml(cleanSummaryHtmlEn, 100);
 
@@ -341,12 +341,12 @@ router.put(
     param("id").isUUID().withMessage("无效的议题ID"),
     body("title").optional().trim().isLength({ min: 1, max: 100 }),
     body("titleEn").optional().trim().isLength({ max: 100 }),
-    body("titleHtml").optional().trim().isLength({ max: 1000 }),
-    body("titleHtmlEn").optional().trim().isLength({ max: 1000 }),
+    body("titleHtml").optional().trim().isLength({ max: 5000 }),
+    body("titleHtmlEn").optional().trim().isLength({ max: 5000 }),
     body("summary").optional().trim().isLength({ min: 1, max: 100 }),
     body("summaryEn").optional().trim().isLength({ max: 100 }),
-    body("summaryHtml").optional().trim().isLength({ max: 1000 }),
-    body("summaryHtmlEn").optional().trim().isLength({ max: 1000 }),
+    body("summaryHtml").optional().trim().isLength({ max: 5000 }),
+    body("summaryHtmlEn").optional().trim().isLength({ max: 5000 }),
     body("topicType").optional().isIn(["person_pk", "general_topic"]),
     body("options").optional().isArray({ min: 2, max: 6 }),
     body("displayDomains").optional().isArray({ min: 1 }),
@@ -374,10 +374,10 @@ router.put(
       ) {
         const currentTitleI18n = topic.titleI18n || {};
         const cleanTitleHtml = req.body.titleHtml !== undefined
-          ? (req.body.titleHtml ? sanitizeVoteTitleHtml(req.body.titleHtml, 1000) : "")
+          ? (req.body.titleHtml ? sanitizeVoteTitleHtml(req.body.titleHtml, 5000) : "")
           : (currentTitleI18n.zhHtml || topic.titleHtml || "");
         const cleanTitleHtmlEn = req.body.titleHtmlEn !== undefined
-          ? (req.body.titleHtmlEn ? sanitizeVoteTitleHtml(req.body.titleHtmlEn, 1000) : "")
+          ? (req.body.titleHtmlEn ? sanitizeVoteTitleHtml(req.body.titleHtmlEn, 5000) : "")
           : (currentTitleI18n.enHtml || "");
 
         const cleanTitle = req.body.title !== undefined
@@ -412,10 +412,10 @@ router.put(
       ) {
         const currentSummaryI18n = topic.summaryI18n || {};
         const cleanSummaryHtml = req.body.summaryHtml !== undefined
-          ? (req.body.summaryHtml ? sanitizeVoteTitleHtml(req.body.summaryHtml, 1000) : "")
+          ? (req.body.summaryHtml ? sanitizeVoteTitleHtml(req.body.summaryHtml, 5000) : "")
           : (currentSummaryI18n.zhHtml || topic.summaryHtml || "");
         const cleanSummaryHtmlEn = req.body.summaryHtmlEn !== undefined
-          ? (req.body.summaryHtmlEn ? sanitizeVoteTitleHtml(req.body.summaryHtmlEn, 1000) : "")
+          ? (req.body.summaryHtmlEn ? sanitizeVoteTitleHtml(req.body.summaryHtmlEn, 5000) : "")
           : (currentSummaryI18n.enHtml || "");
 
         const cleanSummary = req.body.summary !== undefined

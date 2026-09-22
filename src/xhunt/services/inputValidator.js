@@ -183,22 +183,69 @@ function sanitizeJsonStringsDeep(input, keyHint = '') {
 }
 
 
+const VOTE_TITLE_WHITELIST = {
+	a: ['href', 'target', 'rel', 'title', 'class', 'style'],
+	b: ['style', 'class'],
+	strong: ['style', 'class'],
+	i: ['style', 'class'],
+	em: ['style', 'class'],
+	u: ['style', 'class'],
+	s: ['style', 'class'],
+	del: ['style', 'class'],
+	strike: ['style', 'class'],
+	span: ['style', 'class'],
+	p: ['style', 'class'],
+	div: ['style', 'class'],
+	br: [],
+	ul: ['style', 'class'],
+	ol: ['style', 'class'],
+	li: ['style', 'class'],
+	blockquote: ['style', 'class'],
+	code: ['style', 'class'],
+	pre: ['style', 'class'],
+	h1: ['style', 'class'],
+	h2: ['style', 'class'],
+	h3: ['style', 'class'],
+	h4: ['style', 'class'],
+	img: ['src', 'alt', 'class', 'style', 'width', 'height']
+};
+
 const VOTE_TITLE_XSS_OPTIONS = {
-	whiteList: {
-		span: ['class'],
-		strong: ['class'],
-		b: [],
-		em: [],
-		i: [],
-		img: ['src', 'alt', 'class', 'width', 'height']
-	},
+	whiteList: VOTE_TITLE_WHITELIST,
 	stripIgnoreTag: true,
 	stripIgnoreTagBody: ['script', 'style', 'iframe', 'textarea'],
+	css: {
+		whiteList: {
+			'background-color': true,
+			color: true,
+			'font-size': true,
+			'font-weight': true,
+			'font-style': true,
+			'text-decoration': true,
+			'text-align': true,
+			'line-height': true,
+			'margin': true,
+			'margin-top': true,
+			'margin-bottom': true,
+			'padding': true
+		}
+	},
 	onTagAttr: (tag, name, value) => {
 		if (tag === 'img' && name === 'src') {
 			const trimmed = String(value || '').trim();
-			if (!/^https?:\/\//i.test(trimmed)) return '';
+			if (!/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('data:image/')) return '';
 			return `src="${xss.escapeAttrValue(trimmed)}"`;
+		}
+		if (tag === 'a' && name === 'href') {
+			const trimmed = String(value || '').trim();
+			if (!/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('mailto:')) return '';
+			return `href="${xss.escapeAttrValue(trimmed)}"`;
+		}
+		if (tag === 'a' && name === 'target') {
+			return 'target="_blank"';
+		}
+		if (tag === 'a' && name === 'rel') {
+			return 'rel="noopener noreferrer"';
 		}
 		if (name === 'class') {
 			const safeClass = String(value || '')
@@ -210,7 +257,7 @@ const VOTE_TITLE_XSS_OPTIONS = {
 	}
 };
 
-function sanitizeVoteTitleHtml(html, maxLength = 1000) {
+function sanitizeVoteTitleHtml(html, maxLength = 5000) {
 	if (html == null) return '';
 	const normalized = String(html).trim().substring(0, maxLength);
 	if (!normalized) return '';
