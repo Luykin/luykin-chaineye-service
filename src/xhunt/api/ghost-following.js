@@ -148,8 +148,120 @@ function getCircuitBreaker(name) {
   return circuitBreakers.get(name);
 }
 
-// ======== 并发用户限制配置 ========
-const CONCURRENT_LIMIT_CONFIG = {
+// ======== 爬虫可用配额检查配置 ========
+const CRAWLER_QUOTA_CONFIG = {
+  url:
+    process.env.GHOST_FOLLOWING_CRAWLER_QUOTA_URL ||
+    "https://data.cryptohunt.ai/pro/api/crawler/quota-current?endpoint=user_tweets",
+  minRemaining:
+    parseInt(process.env.GHOST_FOLLOWING_CRAWLER_MIN_QUOTA, 10) || 200,
+  timeoutMs: 3000,
+  defaultCacheSeconds: 3,
+};
+
+let crawlerQuotaCache = {
+  data: null,
+  expireAt: 0,
+};
+let inflightCrawlerQuotaPromise = null;
+
+/**
+ * 查询外部爬虫配额状态（带短缓存与并发合并）
+ * 接口报错时返回 null，不阻断主业务流程
+ */
+async function fetchCrawlerQuota() {
+  const now = Date.now();
+  if (crawlerQuotaCache.expireAt > now) {
+    return crawlerQuotaCache.data;
+  }
+  if (inflightCrawlerQuotaPromise) {
+    return inflightCrawlerQuotaPromise;
+  }
+
+  inflightCrawlerQuotaPromise = (async () => {
+    try {
+      const response = await axios.get(CRAWLER_QUOTA_CONFIG.url, {
+        timeout: CRAWLER_QUOTA_CONFIG.timeoutMs,
+      });
+
+      if (response.data && response.data.status === true && response.data.data) {
+        const quotaData = response.data.data;
+        const cacheSeconds =
+          Number(quotaData.cache_seconds) ||
+          CRAWLER_QUOTA_CONFIG.defaultCacheSeconds;
+        crawlerQuotaCache = {
+          data: quotaData,
+          expireAt: Date.now() + Math.max(1, cacheSeconds) * 1000,
+        };
+        return quotaData;
+      }
+      return null;
+    } catch (err) {
+      console.warn(
+        "[ghost-following/check-crawler-quota] query failed, proceeding anyway:",
+        err.message
+      );
+      // 报错时允许通过，设置短缓存避免重复重试造成雪崩
+      crawlerQuotaCache = {
+        data: null,
+        expireAt: Date.now() + CRAWLER_QUOTA_CONFIG.defaultCacheSeconds * 1000,
+      };
+      return null;
+    } finally {
+      inflightCrawlerQuotaPromise = null;
+    }
+  })();
+
+  return inflightCrawlerQuotaPromise;
+}
+
+/**
+ * 爬虫配额检查中间件
+ * 当 user_tweets 爬虫可用配额小于 200 时拦截，提示用户服务繁忙
+ */
+async function checkCrawlerQuota(req, res, next) {
+  try {
+    const quotaData = await fetchCrawlerQuota();
+    if (quotaData) {
+      const available = Number(quotaData.available_remaining_total);
+      if (Number.isFinite(available) && available < CRAWLER_QUOTA_CONFIG.minRemaining) {
+        console.warn("[ghost-following/check-crawler-quota] quota insufficient", {
+          available_remaining_total: available,
+          minRemaining: CRAWLER_QUOTA_CONFIG.minRemaining,
+          userId: req.user?.id,
+        });
+
+        return res.status(200).json({
+          success: false,
+          error: {
+            code: "CONCURRENT_LIMIT_EXCEEDED",
+            message: "当前服务使用人数过多，请稍后再试",
+            data: {
+              available_remaining_total: available,
+              minRemaining: CRAWLER_QUOTA_CONFIG.minRemaining,
+              retryAfter: 60,
+            },
+          },
+        });
+      }
+    }
+    return next();
+  } catch (error) {
+    console.warn(
+      "[ghost-following/check-crawler-quota] middleware error, skipping check:",
+      error.message
+    );
+    return next();
+  }
+}
+
+function resetCrawlerQuotaCacheForTest() {
+  crawlerQuotaCache = { data: null, expireAt: 0 };
+  inflightCrawlerQuotaPromise = null;
+}
+
+ // ======== 并发用户限制配置 ========
+ const CONCURRENT_LIMIT_CONFIG = {
   maxConcurrentUsers: 8,       // 最大并发用户数8人
   userActivityTTL: 60,          // 用户活跃状态保持时间（秒）
   redisKeyPrefix: "xhunt:ghost:concurrent",  // Redis key前缀
@@ -521,6 +633,7 @@ router.post(
   [
     authenticateToken,
     checkProStatusRequired,
+    checkCrawlerQuota,
     concurrentUserLimit,
     body("user_id")
       .trim()
@@ -1016,6 +1129,7 @@ router.post(
   [
     authenticateToken,
     checkProStatusRequired,
+    checkCrawlerQuota,
     body("user_id")
       .trim()
       .notEmpty()
@@ -1300,5 +1414,10 @@ async function checkUserProtectedStatus(user_id, logCtx = {}) {
     throw err;
   }
 }
+
+router.checkCrawlerQuota = checkCrawlerQuota;
+router.fetchCrawlerQuota = fetchCrawlerQuota;
+router.CRAWLER_QUOTA_CONFIG = CRAWLER_QUOTA_CONFIG;
+router.resetCrawlerQuotaCacheForTest = resetCrawlerQuotaCacheForTest;
 
 module.exports = router;
