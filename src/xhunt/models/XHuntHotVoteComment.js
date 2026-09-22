@@ -78,8 +78,10 @@ module.exports = (sequelize) => {
           fields: ["twitterId"],
         },
         {
-          name: "idx_hot_vote_comments_topic_twitter",
+          name: "uk_hot_vote_comments_topic_twitter",
+          unique: true,
           fields: ["topicId", "twitterId"],
+          comment: "同一推特用户在同一议题下唯一留言",
         },
       ],
     }

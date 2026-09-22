@@ -1,7 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const { body, param, query, header } = require("express-validator");
-const { fn, col, Op, UniqueConstraintError } = require("sequelize");
+const { fn, col, Op, QueryTypes, UniqueConstraintError } = require("sequelize");
 const { validateRequest } = require("../middleware/validate-request");
 const {
   authenticateToken,
@@ -195,6 +195,121 @@ function maskTwitterHandle(handle) {
   if (cleaned.length === 2) return `${cleaned[0]}***${cleaned[1]}`;
   if (cleaned.length <= 4) return `${cleaned[0]}***${cleaned.slice(-1)}`;
   return `${cleaned.slice(0, 2)}***${cleaned.slice(-2)}`;
+}
+
+/**
+ * 格式化输出评论详情
+ */
+function formatCommentResponse(comment, isAnonymous, lang = "zh") {
+  const isAnon = Boolean(isAnonymous !== undefined ? isAnonymous : comment.isAnonymous);
+  return {
+    id: comment.id,
+    twitterId: isAnon ? "" : comment.twitterId,
+    userName: isAnon ? maskTwitterHandle(comment.userName) : comment.userName,
+    displayName: isAnon ? (lang === "en" ? "Anonymous User" : "匿名用户") : comment.displayName,
+    userAvatar: isAnon ? getAnonymousAvatar(comment.id) : (comment.userAvatar || ""),
+    content: comment.content,
+    isAnonymous: isAnon,
+    isSelf: true,
+    createdAt: comment.createdAt,
+  };
+}
+
+/**
+ * 保存或修改用户在议题下的唯一留言观点
+ * 业务规则：同一推特用户在同一议题下只能发言一次，第二次再发言为对第一次发言的修改更新
+ */
+async function saveOrUpdateUserComment({
+  topicId,
+  twitterId,
+  content,
+  isAnonymous = false,
+  userInfo = {},
+  effectiveUserId = null,
+  redisClient = null,
+}) {
+  const isAnon = Boolean(isAnonymous);
+  const now = new Date();
+
+  // 查询当前用户在该议题下的所有留言记录（按 createdAt 降序取最新的一条）
+  const existingComments = await XHuntHotVoteComment.findAll({
+    where: {
+      topicId,
+      twitterId,
+    },
+    order: [["createdAt", "DESC"]],
+  });
+
+  let targetComment = null;
+
+  if (existingComments && existingComments.length > 0) {
+    targetComment = existingComments[0];
+    targetComment.content = content;
+    targetComment.isAnonymous = isAnon;
+    targetComment.isDeleted = false;
+    targetComment.createdAt = now;
+    if (userInfo.userName) targetComment.userName = userInfo.userName;
+    if (userInfo.displayName) targetComment.displayName = userInfo.displayName;
+    if (userInfo.userAvatar) targetComment.userAvatar = userInfo.userAvatar;
+    if (effectiveUserId && !targetComment.xHuntUserId) {
+      targetComment.xHuntUserId = effectiveUserId;
+    }
+    await targetComment.save();
+
+    // 历史脏数据自愈：若历史已存在多条留言记录，清理多余的旧记录，确保唯一
+    if (existingComments.length > 1) {
+      const extraIds = existingComments.slice(1).map((c) => c.id);
+      await XHuntHotVoteComment.destroy({
+        where: { id: { [Op.in]: extraIds } },
+      }).catch((e) => {
+        console.warn("[HotVote] 清理历史重复留言异常:", e.message);
+      });
+    }
+  } else {
+    try {
+      targetComment = await XHuntHotVoteComment.create({
+        topicId,
+        twitterId,
+        xHuntUserId: effectiveUserId || userInfo.effectiveUserId || null,
+        userName: userInfo.userName || "",
+        displayName: userInfo.displayName || null,
+        userAvatar: userInfo.userAvatar || "",
+        content,
+        isAnonymous: isAnon,
+        isDeleted: false,
+      });
+    } catch (err) {
+      // 处理极端并发情况下的唯一索引冲突，回退为更新既有记录
+      if (err.name === "SequelizeUniqueConstraintError" || err instanceof UniqueConstraintError) {
+        targetComment = await XHuntHotVoteComment.findOne({
+          where: { topicId, twitterId },
+        });
+        if (targetComment) {
+          targetComment.content = content;
+          targetComment.isAnonymous = isAnon;
+          targetComment.isDeleted = false;
+          targetComment.createdAt = now;
+          if (userInfo.userName) targetComment.userName = userInfo.userName;
+          if (userInfo.displayName) targetComment.displayName = userInfo.displayName;
+          if (userInfo.userAvatar) targetComment.userAvatar = userInfo.userAvatar;
+          if (effectiveUserId && !targetComment.xHuntUserId) {
+            targetComment.xHuntUserId = effectiveUserId;
+          }
+          await targetComment.save();
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  if (redisClient) {
+    await invalidateTopicCommentsCache(redisClient, topicId);
+  }
+
+  return targetComment;
 }
 
 /**
@@ -695,21 +810,18 @@ router.post(
         return res.status(400).json({ success: false, error: "您已参与过该投票，请使用修改选择功能" });
       }
 
-      // 若投票请求同时携带了留言观点，则写入留言表
+      // 若投票请求同时携带了留言观点，则写入或更新留言表（单人单议题唯一留言）
       if (cleanComment) {
         try {
-          await XHuntHotVoteComment.create({
+          await saveOrUpdateUserComment({
             topicId,
             twitterId,
-            xHuntUserId: effectiveUserId,
-            userName: userInfo.userName,
-            displayName: userInfo.displayName,
-            userAvatar: userInfo.userAvatar,
             content: cleanComment,
             isAnonymous,
-            isDeleted: false,
+            userInfo,
+            effectiveUserId,
+            redisClient: req.redisClient,
           });
-          await invalidateTopicCommentsCache(req.redisClient, topicId);
         } catch (commentErr) {
           console.error(
             "[HotVote] 留言写入异常 (未阻塞主投票流水):",
@@ -893,28 +1005,39 @@ router.put(
         isRecordAnonymous = Boolean(record.isAnonymous);
       });
 
-      // 若改票时同时附带了留言观点，则写入留言表
+      // 若改票时同时附带了留言观点，则更新（或写入）留言表（单人单议题唯一留言，再次发言为修改）
       if (cleanRevoteComment) {
         try {
-          await XHuntHotVoteComment.create({
+          await saveOrUpdateUserComment({
             topicId,
             twitterId,
-            xHuntUserId: effectiveUserId,
-            userName: userInfo.userName,
-            displayName: userInfo.displayName,
-            userAvatar: userInfo.userAvatar,
             content: cleanRevoteComment,
             isAnonymous: isRecordAnonymous,
-            isDeleted: false,
+            userInfo,
+            effectiveUserId,
+            redisClient: req.redisClient,
           });
-          await invalidateTopicCommentsCache(req.redisClient, topicId);
         } catch (commentErr) {
           console.error(
-            "[HotVote] 改票附带留言写入异常 (未阻塞主改票流水):",
+            "[HotVote] 改票附带留言写入/更新异常 (未阻塞主改票流水):",
             commentErr.name,
             commentErr.message,
             commentErr.parent?.detail || commentErr.original?.message || ""
           );
+        }
+      } else if (req.body.isAnonymous !== undefined) {
+        // 未改发言仅切换匿名状态时，同步更新既有留言的匿名状态
+        try {
+          const existingComment = await XHuntHotVoteComment.findOne({
+            where: { topicId, twitterId, isDeleted: false },
+          });
+          if (existingComment && Boolean(existingComment.isAnonymous) !== isRecordAnonymous) {
+            existingComment.isAnonymous = isRecordAnonymous;
+            await existingComment.save();
+            await invalidateTopicCommentsCache(req.redisClient, topicId);
+          }
+        } catch (anonSyncErr) {
+          console.warn("[HotVote] 改票同步留言匿名状态异常:", anonSyncErr.message);
         }
       }
 
@@ -1002,27 +1125,74 @@ router.get(
         page,
         pageSize,
         async () => {
-          const res = await XHuntHotVoteComment.findAndCountAll({
-            where: {
-              topicId,
-              isDeleted: false,
-            },
-            order: [["createdAt", "DESC"]],
-            limit: pageSize,
-            offset,
-            attributes: [
-              "id",
-              "twitterId",
-              "userName",
-              "displayName",
-              "userAvatar",
-              "content",
-              "isAnonymous",
-              "createdAt",
-            ],
-          });
+          let count = 0;
+          let rawRows = [];
 
-          const rawRows = res.rows.map((r) => (typeof r.toJSON === "function" ? r.toJSON() : r));
+          if (XHuntHotVoteComment.sequelize?.getDialect?.() === "postgres") {
+            const countResult = await XHuntHotVoteComment.sequelize.query(
+              `SELECT COUNT(DISTINCT "twitterId")::int AS total
+               FROM "XHuntHotVoteComments"
+               WHERE "topicId" = :topicId AND "isDeleted" = false`,
+              {
+                replacements: { topicId },
+                type: QueryTypes.SELECT,
+              }
+            );
+            count = Number(countResult[0]?.total || 0);
+
+            rawRows = await XHuntHotVoteComment.sequelize.query(
+              `SELECT *
+               FROM (
+                 SELECT DISTINCT ON ("twitterId")
+                   id,
+                   "twitterId",
+                   "userName",
+                   "displayName",
+                   "userAvatar",
+                   content,
+                   "isAnonymous",
+                   "createdAt"
+                 FROM "XHuntHotVoteComments"
+                 WHERE "topicId" = :topicId AND "isDeleted" = false
+                 ORDER BY "twitterId", "createdAt" DESC, id DESC
+               ) sub
+               ORDER BY "createdAt" DESC
+               LIMIT :limit OFFSET :offset`,
+              {
+                replacements: { topicId, limit: pageSize, offset },
+                type: QueryTypes.SELECT,
+              }
+            );
+          } else {
+            const allComments = await XHuntHotVoteComment.findAll({
+              where: {
+                topicId,
+                isDeleted: false,
+              },
+              order: [["createdAt", "DESC"], ["id", "DESC"]],
+              attributes: [
+                "id",
+                "twitterId",
+                "userName",
+                "displayName",
+                "userAvatar",
+                "content",
+                "isAnonymous",
+                "createdAt",
+              ],
+            });
+
+            const uniqueMap = new Map();
+            for (const c of allComments) {
+              const item = typeof c.toJSON === "function" ? c.toJSON() : c;
+              if (item.twitterId && !uniqueMap.has(item.twitterId)) {
+                uniqueMap.set(item.twitterId, item);
+              }
+            }
+            const uniqueList = Array.from(uniqueMap.values());
+            count = uniqueList.length;
+            rawRows = uniqueList.slice(offset, offset + pageSize);
+          }
 
           // 补全非匿名留言中缺失的头像（调用 Twitter ID 接口，报错使用默认头像）
           const missingTwIds = rawRows
@@ -1062,10 +1232,18 @@ router.get(
         }
       );
 
-      const list = rows.map((c) => {
+      const seenTwitterIds = new Set();
+      const list = [];
+      for (const c of rows) {
+        if (c.twitterId && seenTwitterIds.has(c.twitterId)) {
+          continue;
+        }
+        if (c.twitterId) {
+          seenTwitterIds.add(c.twitterId);
+        }
         const isSelf = Boolean(currentTwitterId && c.twitterId === currentTwitterId);
         if (c.isAnonymous) {
-          return {
+          list.push({
             id: c.id,
             twitterId: "",
             userName: maskTwitterHandle(c.userName),
@@ -1075,20 +1253,21 @@ router.get(
             isAnonymous: true,
             isSelf,
             createdAt: c.createdAt,
-          };
+          });
+        } else {
+          list.push({
+            id: c.id,
+            twitterId: c.twitterId,
+            userName: c.userName,
+            displayName: c.displayName,
+            userAvatar: c.userAvatar || "", // 真实头像；若无头像则留空，绝不替换为匿名彩色剪影！
+            content: c.content,
+            isAnonymous: false,
+            isSelf,
+            createdAt: c.createdAt,
+          });
         }
-        return {
-          id: c.id,
-          twitterId: c.twitterId,
-          userName: c.userName,
-          displayName: c.displayName,
-          userAvatar: c.userAvatar || "", // 真实头像；若无头像则留空，绝不替换为匿名彩色剪影！
-          content: c.content,
-          isAnonymous: false,
-          isSelf,
-          createdAt: c.createdAt,
-        };
-      });
+      }
 
       const responseData = {
         success: true,
@@ -1177,17 +1356,41 @@ router.post(
         }
       }
 
-      // AI 大模型安全审核（包含内置敏感词与钓鱼预检）
-      const audit = await auditCommentContentWithAI(cleanContent);
-      if (!audit.passed) {
+      // 1. 查询该用户在该议题下是否已有留言记录（不限 isDeleted，确保能复用被软删除的记录或避免唯一索引冲突）
+      const existingComment = await XHuntHotVoteComment.findOne({
+        where: {
+          topicId,
+          twitterId,
+        },
+        order: [["createdAt", "DESC"]],
+      });
+
+      const isAnonymous = Boolean(req.body.isAnonymous);
+      const lang = resolveRequestLang(req);
+      const isContentSame = existingComment && existingComment.content === cleanContent;
+      const isAnonSame = existingComment && Boolean(existingComment.isAnonymous) === isAnonymous;
+
+      // 若未被删除且内容与匿名状态均未变更，无需重复更新或重新审核
+      if (existingComment && !existingComment.isDeleted && isContentSame && isAnonSame) {
         return res.status(400).json({
           success: false,
-          error: "COMMENT_CONTENT_VIOLATION",
-          message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
+          error: "COMMENT_UNCHANGED",
+          message: "留言内容未发生变更",
         });
       }
 
-      // 防灌水限频：同一推特ID 30秒内只能发一条留言
+      // 若未被删除且仅变更匿名状态（内容未变），直接更新匿名属性，无需重复调用 AI 审核
+      if (existingComment && !existingComment.isDeleted && isContentSame && !isAnonSame) {
+        existingComment.isAnonymous = isAnonymous;
+        await existingComment.save();
+        await invalidateTopicCommentsCache(req.redisClient, topicId);
+        return res.json({
+          success: true,
+          data: formatCommentResponse(existingComment, isAnonymous, lang),
+        });
+      }
+
+      // 防灌水限频：同一推特ID 30秒内只能发一条留言（或修改一次留言）
       const rateLimitKey = `ratelimit:comment:${topicId}:${twitterId}`;
       if (req.redisClient?.set) {
         const acquired = await req.redisClient.set(rateLimitKey, "1", {
@@ -1199,64 +1402,31 @@ router.post(
         }
       }
 
-      // 防重复内容：同一用户 5 分钟内重复提交相同正文直接拒绝
-      const contentMd5 = crypto.createHash("md5").update(cleanContent).digest("hex");
-      const dupKey = `ratelimit:comment-dup:${topicId}:${twitterId}:${contentMd5}`;
-      if (req.redisClient?.set) {
-        const acquired = await req.redisClient.set(dupKey, "1", {
-          EX: 300,
-          NX: true,
+      // AI 大模型安全审核（包含内置敏感词与钓鱼预检）
+      const audit = await auditCommentContentWithAI(cleanContent);
+      if (!audit.passed) {
+        return res.status(400).json({
+          success: false,
+          error: "COMMENT_CONTENT_VIOLATION",
+          message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
         });
-        if (!acquired) {
-          return res.status(429).json({ success: false, error: "DUPLICATE_COMMENT", message: "5分钟内请勿重复提交相同内容" });
-        }
       }
-
-      // 单人单议题最多5条留言限制
-      const userCommentCount = await XHuntHotVoteComment.count({
-        where: {
-          topicId,
-          twitterId,
-          isDeleted: false,
-        },
-      });
-
-      if (userCommentCount >= 5) {
-        return res.status(403).json({ success: false, error: "您在此议题下的留言数量已达上限 (最多5条)" });
-      }
-
-      const isAnonymous = Boolean(req.body.isAnonymous);
-      const lang = resolveRequestLang(req);
 
       const userInfo = await resolveVoterUserInfo(req, twitterId);
 
-      const newComment = await XHuntHotVoteComment.create({
+      const targetComment = await saveOrUpdateUserComment({
         topicId,
         twitterId,
-        xHuntUserId: userInfo.effectiveUserId,
-        userName: userInfo.userName,
-        displayName: userInfo.displayName,
-        userAvatar: userInfo.userAvatar,
         content: cleanContent,
         isAnonymous,
-        isDeleted: false,
+        userInfo,
+        effectiveUserId: userInfo.effectiveUserId,
+        redisClient: req.redisClient,
       });
-
-      await invalidateTopicCommentsCache(req.redisClient, topicId);
 
       return res.json({
         success: true,
-        data: {
-          id: newComment.id,
-          twitterId: isAnonymous ? "" : newComment.twitterId,
-          userName: isAnonymous ? maskTwitterHandle(newComment.userName) : newComment.userName,
-          displayName: isAnonymous ? (lang === "en" ? "Anonymous User" : "匿名用户") : newComment.displayName,
-          userAvatar: isAnonymous ? getAnonymousAvatar(newComment.id) : (newComment.userAvatar || ""),
-          content: newComment.content,
-          isAnonymous,
-          isSelf: true,
-          createdAt: newComment.createdAt,
-        },
+        data: formatCommentResponse(targetComment, isAnonymous, lang),
       });
     } catch (err) {
       console.error(
@@ -1270,5 +1440,8 @@ router.post(
     }
   }
 );
+
+router.saveOrUpdateUserComment = saveOrUpdateUserComment;
+router.formatCommentResponse = formatCommentResponse;
 
 module.exports = router;

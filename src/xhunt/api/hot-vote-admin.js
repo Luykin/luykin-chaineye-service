@@ -1,6 +1,6 @@
 const express = require("express");
 const { body, param, query } = require("express-validator");
-const { fn, col, Op } = require("sequelize");
+const { fn, col, Op, QueryTypes } = require("sequelize");
 const { validateRequest } = require("../middleware/validate-request");
 const {
   XHuntHotVoteTopic,
@@ -649,14 +649,69 @@ router.get(
         where.isDeleted = req.query.isDeleted === "true" || req.query.isDeleted === true;
       }
 
-      const { count, rows } = await XHuntHotVoteComment.findAndCountAll({
-        where,
-        order: [["createdAt", "DESC"]],
-        limit: pageSize,
-        offset,
-      });
+      let count = 0;
+      let rawRows = [];
 
-      const rawRows = rows.map((r) => (typeof r.toJSON === "function" ? r.toJSON() : r));
+      const isDeletedFilter = req.query.isDeleted !== undefined
+        ? req.query.isDeleted === "true" || req.query.isDeleted === true
+        : null;
+
+      if (XHuntHotVoteComment.sequelize?.getDialect?.() === "postgres") {
+        const deletedClause = isDeletedFilter !== null ? `AND "isDeleted" = :isDeleted` : "";
+        const countResult = await XHuntHotVoteComment.sequelize.query(
+          `SELECT COUNT(DISTINCT "twitterId")::int AS total
+           FROM "XHuntHotVoteComments"
+           WHERE "topicId" = :topicId ${deletedClause}`,
+          {
+            replacements: { topicId, isDeleted: isDeletedFilter },
+            type: QueryTypes.SELECT,
+          }
+        );
+        count = Number(countResult[0]?.total || 0);
+
+        rawRows = await XHuntHotVoteComment.sequelize.query(
+          `SELECT *
+           FROM (
+             SELECT DISTINCT ON ("twitterId")
+               id,
+               "topicId",
+               "twitterId",
+               "xHuntUserId",
+               "userName",
+               "displayName",
+               "userAvatar",
+               content,
+               "isAnonymous",
+               "isDeleted",
+               "createdAt",
+               "updatedAt"
+             FROM "XHuntHotVoteComments"
+             WHERE "topicId" = :topicId ${deletedClause}
+             ORDER BY "twitterId", "createdAt" DESC, id DESC
+           ) sub
+           ORDER BY "createdAt" DESC
+           LIMIT :limit OFFSET :offset`,
+          {
+            replacements: { topicId, isDeleted: isDeletedFilter, limit: pageSize, offset },
+            type: QueryTypes.SELECT,
+          }
+        );
+      } else {
+        const allComments = await XHuntHotVoteComment.findAll({
+          where,
+          order: [["createdAt", "DESC"], ["id", "DESC"]],
+        });
+        const uniqueMap = new Map();
+        for (const c of allComments) {
+          const item = typeof c.toJSON === "function" ? c.toJSON() : c;
+          if (item.twitterId && !uniqueMap.has(item.twitterId)) {
+            uniqueMap.set(item.twitterId, item);
+          }
+        }
+        const uniqueList = Array.from(uniqueMap.values());
+        count = uniqueList.length;
+        rawRows = uniqueList.slice(offset, offset + pageSize);
+      }
 
       // 批量补全非匿名留言中缺失的头像与昵称（调用 Twitter 接口）
       const missingTwIds = rawRows
@@ -691,10 +746,18 @@ router.get(
         );
       }
 
+      const seenTwIds = new Set();
+      const dedupedRows = [];
+      for (const r of rawRows) {
+        if (r.twitterId && seenTwIds.has(r.twitterId)) continue;
+        if (r.twitterId) seenTwIds.add(r.twitterId);
+        dedupedRows.push(r);
+      }
+
       const responseData = {
         success: true,
         data: {
-          list: rawRows,
+          list: dedupedRows,
           pagination: {
             page,
             pageSize,

@@ -17,7 +17,7 @@ function registerAdminRoutes(app) {
   app.use("/admin", adminRoutes);
 
   // 管理后台 - 热点投票管理
-  app.use("/api/admin/hot-vote", adminAuth, requirePermission("nacos_config"), xHuntHotVoteAdminRoutes);
+  app.use("/api/admin/hot-vote", adminAuth, requirePermission("hot-vote"), xHuntHotVoteAdminRoutes);
 
   // 管理后台 - 评论管理
   app.use("/api/admin/reviews", adminAuth, adminReviewsRoutes);

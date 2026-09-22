@@ -400,7 +400,7 @@ export function HotVotePage() {
     },
   ];
 
-  return <PermissionGuard permission="nacos_config"><PageSection title="热点投票" description="创建和维护 XHunt 热点投票议题：配置选项、可见领域与语言、内测名单和上下线状态。"><>{contextHolder}<Card title="议题列表" extra={<Space wrap>
+  return <PermissionGuard permission="hot-vote"><PageSection title="热点投票" description="创建和维护 XHunt 热点投票议题：配置选项、可见领域与语言、内测名单和上下线状态。"><>{contextHolder}<Card title="议题列表" extra={<Space wrap>
     <Select allowClear placeholder="状态" style={{ width: 110 }} options={STATUS_OPTIONS} value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} />
     <Select allowClear placeholder="测试阶段" style={{ width: 110 }} value={testingFilter} onChange={(value) => { setTestingFilter(value); setPage(1); }} options={[{ value: "true", label: "内测中" }, { value: "false", label: "正式" }]} />
     <Button icon={<ReloadOutlined />} onClick={refresh}>刷新</Button>

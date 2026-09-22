@@ -40,6 +40,7 @@ const PERMISSION_OPTIONS = [
   { label: "公告配置", value: "nacos-messages" },
   { label: "活动配置", value: "nacos_config" },
   { label: "活动报名删除", value: "campaign-registrations:delete" },
+  { label: "热点投票", value: "hot-vote" },
   { label: "翻译配置", value: "nacos-i18n" },
   { label: "标签配置", value: "nacos-tags" },
   { label: "净化规则配置", value: "cleaner-config" },

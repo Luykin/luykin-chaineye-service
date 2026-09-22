@@ -105,6 +105,7 @@ function initTabs() {
     "feature-flags": "feature_flags_config",
     "redis-management": "redis-management",
     "llm-test": "llm-test",
+    "hot-vote": "hot-vote",
   };
 
   function hasPermissionForTab(tab) {

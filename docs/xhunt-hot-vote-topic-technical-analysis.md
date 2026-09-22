@@ -500,7 +500,7 @@ module.exports = (sequelize) => {
 ---
 
 ### 6.2 运营管理后台接口（Admin CMS）
-- `GET /api/xhunt/admin/hot-vote/topics`：议题列表（权限：`adminAuth`, `requirePermission('nacos_config')`）。
+- `GET /api/xhunt/admin/hot-vote/topics`：议题列表（权限：`adminAuth`, `requirePermission('hot-vote')`）。
 - `POST /api/xhunt/admin/hot-vote/topics`：新建议题（服务端在入库前必须对 `titleHtml` 执行 `sanitizeVoteTitleHtml`）。
 - `PUT /api/xhunt/admin/hot-vote/topics/:id`：修改议题配置。
 - `DELETE /api/xhunt/admin/hot-vote/topics/:topicId/comments/:commentId`：违规留言屏蔽（置 `isDeleted = true` 并记入 `XhuntAdminAuditLog`）。
