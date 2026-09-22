@@ -37,6 +37,8 @@ export interface HotVoteTopic {
   endTime?: string | null;
   createdAt: string;
   updatedAt: string;
+  voteCount?: number;
+  hasVotes?: boolean;
 }
 
 export interface HotVoteTopicListResult {

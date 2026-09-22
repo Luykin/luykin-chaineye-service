@@ -46,6 +46,12 @@ function buildCleanOptions(options) {
     return null;
   }
 
+  // 检查选项 ID 是否存在重复
+  const idSet = new Set(cleanOptions.map((o) => o.id));
+  if (idSet.size !== cleanOptions.length) {
+    return null;
+  }
+
   return cleanOptions;
 }
 
@@ -159,10 +165,35 @@ router.get(
         offset,
       });
 
+      const topicIds = rows.map((r) => r.id);
+      const voteCounts = topicIds.length > 0
+        ? await XHuntHotVoteRecord.findAll({
+            where: { topicId: { [Op.in]: topicIds } },
+            attributes: ["topicId", [fn("COUNT", col("id")), "count"]],
+            group: ["topicId"],
+            raw: true,
+          })
+        : [];
+
+      const voteCountMap = {};
+      for (const vc of voteCounts) {
+        voteCountMap[vc.topicId] = parseInt(vc.count || "0", 10);
+      }
+
+      const list = rows.map((topic) => {
+        const json = topic.toJSON();
+        const voteCount = voteCountMap[topic.id] || 0;
+        return {
+          ...json,
+          voteCount,
+          hasVotes: voteCount > 0,
+        };
+      });
+
       return res.json({
         success: true,
         data: {
-          list: rows,
+          list,
           pagination: {
             page,
             pageSize,
@@ -191,7 +222,15 @@ router.get(
       if (!topic) {
         return res.status(404).json({ success: false, error: "议题不存在" });
       }
-      return res.json({ success: true, data: topic });
+      const voteCount = await XHuntHotVoteRecord.count({ where: { topicId: topic.id } });
+      return res.json({
+        success: true,
+        data: {
+          ...topic.toJSON(),
+          voteCount,
+          hasVotes: voteCount > 0,
+        },
+      });
     } catch (err) {
       console.error("[HotVoteAdmin] GET /topics/:id error:", err);
       return res.status(500).json({ success: false, error: "获取议题详情失败" });
@@ -271,7 +310,7 @@ router.post(
       // 清洗选项（含 id 字符集校验与自动补吃瓜选项）
       const cleanOptions = buildCleanOptions(options);
       if (!cleanOptions) {
-        return res.status(400).json({ success: false, error: "选项ID仅支持字母、数字、下划线和中划线（1-32字符）" });
+        return res.status(400).json({ success: false, error: "选项ID不合法或存在重复ID（仅支持字母、数字、下划线、中划线，1-32字符）" });
       }
 
       const cleanTestList = Array.isArray(testList)
@@ -310,7 +349,14 @@ router.post(
 
       await recordAdminAudit(req, "CREATE_HOT_VOTE_TOPIC", topic.id, { title: cleanTitle });
 
-      return res.json({ success: true, data: topic });
+      return res.json({
+        success: true,
+        data: {
+          ...topic.toJSON(),
+          voteCount: 0,
+          hasVotes: false,
+        },
+      });
     } catch (err) {
       console.error("[HotVoteAdmin] POST /topics error:", err);
       return res.status(500).json({ success: false, error: "创建议题失败" });
@@ -432,24 +478,37 @@ router.put(
       if (req.body.options !== undefined) {
         const cleanOptions = buildCleanOptions(req.body.options);
         if (!cleanOptions) {
-          return res.status(400).json({ success: false, error: "选项ID仅支持字母、数字、下划线和中划线（1-32字符）" });
+          return res.status(400).json({ success: false, error: "选项ID不合法或存在重复ID（仅支持字母、数字、下划线、中划线，1-32字符）" });
         }
 
-        // 校验历史投票数据：若该议题已有投票，新选项必须保留所有已产生投票的历史选项ID，防止票数孤儿化
-        const existingVoteOptions = await XHuntHotVoteRecord.findAll({
+        // 校验投票数据：若该议题已有投票，不允许删除已有选项，但允许修改和新增
+        const totalVotes = await XHuntHotVoteRecord.count({
           where: { topicId: topic.id },
-          attributes: ["optionId"],
-          group: ["optionId"],
-          raw: true,
         });
 
-        if (existingVoteOptions.length > 0) {
+        if (totalVotes > 0) {
+          const originalOptions = Array.isArray(topic.options) ? topic.options : [];
           const newOptionIds = new Set(cleanOptions.map((o) => o.id));
-          const missingOption = existingVoteOptions.find((v) => !newOptionIds.has(v.optionId));
+          const missingOption = originalOptions.find((o) => !newOptionIds.has(o.id));
           if (missingOption) {
             return res.status(400).json({
               success: false,
-              error: `选项 "${missingOption.optionId}" 已有历史投票记录，不能删除`,
+              error: `该议题已有用户参与投票（共 ${totalVotes} 票），不允许删除已有选项 "${missingOption.name || missingOption.id}"`,
+            });
+          }
+
+          // 额外安全兜底：防止孤儿化历史投票数据
+          const existingVoteOptions = await XHuntHotVoteRecord.findAll({
+            where: { topicId: topic.id },
+            attributes: ["optionId"],
+            group: ["optionId"],
+            raw: true,
+          });
+          const missingVotedOption = existingVoteOptions.find((v) => !newOptionIds.has(v.optionId));
+          if (missingVotedOption) {
+            return res.status(400).json({
+              success: false,
+              error: `选项 "${missingVotedOption.optionId}" 已有历史投票记录，不能删除`,
             });
           }
         }
@@ -477,7 +536,15 @@ router.put(
 
       await recordAdminAudit(req, "UPDATE_HOT_VOTE_TOPIC", topic.id, updates);
 
-      return res.json({ success: true, data: topic });
+      const latestVoteCount = await XHuntHotVoteRecord.count({ where: { topicId: topic.id } });
+      return res.json({
+        success: true,
+        data: {
+          ...topic.toJSON(),
+          voteCount: latestVoteCount,
+          hasVotes: latestVoteCount > 0,
+        },
+      });
     } catch (err) {
       console.error("[HotVoteAdmin] PUT /topics/:id error:", err);
       return res.status(500).json({ success: false, error: "更新议题失败" });

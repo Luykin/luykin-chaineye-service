@@ -1,6 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { Avatar, Button, Card, Checkbox, Col, Collapse, Form, Input, InputNumber, Modal, Popconfirm, Progress, Row, Select, Space, Spin, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
-import { InfoCircleOutlined, MinusCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  InfoCircleOutlined,
+  LockOutlined,
+  MinusCircleOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -75,8 +83,32 @@ export function HotVotePage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [contentLangTab, setContentLangTab] = useState<"zh" | "en">("zh");
   const [scheduleKey, setScheduleKey] = useState<string[]>([]);
+  const [initialOptionIds, setInitialOptionIds] = useState<string[]>([]);
   const [, forceUpdate] = useState({});
   const [form] = Form.useForm();
+
+  const hasVotes = Boolean(editing && ((editing.voteCount ?? 0) > 0 || editing.hasVotes));
+
+  const getNextOptId = () => {
+    const currentOptions = form.getFieldValue("options") || [];
+    const existingIds = new Set(
+      (currentOptions as Array<{ id?: string }>).map((o) => o?.id).filter(Boolean)
+    );
+    let counter = currentOptions.length + 1;
+    while (existingIds.has(`opt_${counter}`)) {
+      counter++;
+    }
+    return `opt_${counter}`;
+  };
+
+  const handleMoveOption = (
+    fromIndex: number,
+    toIndex: number,
+    moveFn: (from: number, to: number) => void
+  ) => {
+    moveFn(fromIndex, toIndex);
+    forceUpdate({});
+  };
 
   const query = useQuery({
     queryKey: ["hot-vote-topics", page, pageSize, statusFilter, testingFilter],
@@ -91,12 +123,19 @@ export function HotVotePage() {
 
   const save = useMutation({
     mutationFn: (values: Record<string, unknown>) => editing ? updateHotVoteTopic(editing.id, values) : createHotVoteTopic(values),
-    onSuccess: () => { messageApi.success("已保存"); setEditorOpen(false); setEditing(null); refresh(); },
+    onSuccess: () => {
+      messageApi.success("已保存");
+      setEditorOpen(false);
+      setEditing(null);
+      setInitialOptionIds([]);
+      refresh();
+    },
     onError: (error: Error) => messageApi.error(error.message),
   });
 
   const openEdit = (item?: HotVoteTopic) => {
     setEditing(item || null);
+    setInitialOptionIds(item ? (item.options || []).map((opt) => opt.id) : []);
     setEditorOpen(true);
     setContentLangTab("zh");
     if (item) {
@@ -309,6 +348,14 @@ export function HotVotePage() {
       render: (value: string) => { const tag = STATUS_TAG[value] || { text: value, color: "default" }; return <Tag color={tag.color}>{tag.text}</Tag>; },
     },
     {
+      title: "投票数", dataIndex: "voteCount", width: 85,
+      render: (value: number | undefined) => (
+        <span style={{ fontWeight: (value || 0) > 0 ? 600 : 400, color: (value || 0) > 0 ? "#1677ff" : "#8c8c8c" }}>
+          {value ?? 0}
+        </span>
+      ),
+    },
+    {
       title: "测试", dataIndex: "testingPhase", width: 76,
       render: (value: boolean, row: HotVoteTopic) => value ? <Tooltip title={(row.testList || []).map((item) => `@${item}`).join("、") || "未配置测试名单"}><Tag color="gold">内测中</Tag></Tooltip> : <Tag>正式</Tag>,
     },
@@ -375,6 +422,7 @@ export function HotVotePage() {
     onCancel={() => {
       setEditorOpen(false);
       setEditing(null);
+      setInitialOptionIds([]);
     }}
     onOk={() => form.submit()}
     confirmLoading={save.isPending}
@@ -522,6 +570,28 @@ export function HotVotePage() {
         />
       </div>
 
+      {hasVotes && (
+        <div
+          style={{
+            marginBottom: 10,
+            padding: "8px 12px",
+            background: "#fffbe6",
+            border: "1px solid #ffe58f",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "#d48806",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <InfoCircleOutlined style={{ color: "#faad14" }} />
+          <span>
+            该议题已有用户参与投票（共 <b>{editing?.voteCount}</b> 票）：已锁定历史选项，不允许删除已有选项；支持修改选项内容、增加新选项及调整选项展示顺序。
+          </span>
+        </div>
+      )}
+
       <Form.Item
         name="options"
         style={{ marginBottom: 12 }}
@@ -532,16 +602,22 @@ export function HotVotePage() {
               if (value.length > 6) throw new Error("最多 6 个选项");
               const guaCount = value.filter((o) => o?.isGua).length;
               if (guaCount > 1) throw new Error("只能同时设置 1 个吃瓜选项");
+              const ids = value.map((o) => o?.id).filter(Boolean);
+              if (new Set(ids).size !== ids.length) throw new Error("选项ID不能重复");
             },
           },
         ]}
       >
         <Form.List name="options">
-          {(fields, { add, remove }, { errors }) => (
+          {(fields, { add, remove, move }, { errors }) => (
             <>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
                 {fields.map((field, idx) => {
                   const isGua = form.getFieldValue(["options", field.name, "isGua"]);
+                  const currentOptId = form.getFieldValue(["options", field.name, "id"]);
+                  const isExistingOption = Boolean(editing && initialOptionIds.includes(currentOptId));
+                  const canDelete = hasVotes ? !isExistingOption : fields.length > 2;
+
                   return (
                     <Card
                       key={field.key}
@@ -554,8 +630,17 @@ export function HotVotePage() {
                       }}
                       bodyStyle={{ padding: "8px 12px" }}
                     >
-                      {/* 选项头部：选项编号/吃瓜标记 + 吃瓜互斥开关 + 删除 */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      {/* 选项头部：选项编号/吃瓜标记 + 顺序调整 + 吃瓜互斥开关 + 删除 */}
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          marginBottom: 6,
+                        }}
+                      >
                         <Space size={6}>
                           <Tag color={isGua ? "gold" : "blue"} style={{ fontWeight: 600, margin: 0 }}>
                             {isGua ? "🍉 吃瓜选项" : `选项 ${idx + 1}`}
@@ -566,16 +651,45 @@ export function HotVotePage() {
                             </Typography.Text>
                           )}
                         </Space>
-                        <Space size={12}>
+                        <Space size={10} wrap>
+                          {/* 顺序调整按钮 */}
+                          <Space size={2}>
+                            <Tooltip title="向上调整展示顺序">
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={<ArrowUpOutlined />}
+                                disabled={idx === 0}
+                                onClick={() => handleMoveOption(idx, idx - 1, move)}
+                                style={{ padding: "0 4px", fontSize: 12 }}
+                              >
+                                上移
+                              </Button>
+                            </Tooltip>
+                            <Tooltip title="向下调整展示顺序">
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={<ArrowDownOutlined />}
+                                disabled={idx === fields.length - 1}
+                                onClick={() => handleMoveOption(idx, idx + 1, move)}
+                                style={{ padding: "0 4px", fontSize: 12 }}
+                              >
+                                下移
+                              </Button>
+                            </Tooltip>
+                          </Space>
+
                           <Space size={4} style={{ fontSize: 12 }}>
                             <span style={{ color: isGua ? "#fa8c16" : "#8c8c8c" }}>吃瓜选项:</span>
                             <Switch
                               size="small"
                               checked={Boolean(isGua)}
-                              onChange={(checked) => handleGuaChange(field.name, checked)}
+                              onChange={(checked) => handleGuaChange(idx, checked)}
                             />
                           </Space>
-                          {fields.length > 2 && (
+
+                          {canDelete ? (
                             <Button
                               size="small"
                               type="text"
@@ -586,23 +700,53 @@ export function HotVotePage() {
                             >
                               删除
                             </Button>
+                          ) : (
+                            hasVotes && isExistingOption && (
+                              <Tooltip title="该议题已有用户参与投票，不可删除已有选项">
+                                <span>
+                                  <Button
+                                    size="small"
+                                    type="text"
+                                    danger
+                                    disabled
+                                    icon={<MinusCircleOutlined />}
+                                    style={{ padding: "0 4px", fontSize: 12 }}
+                                  >
+                                    删除
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                            )
                           )}
                         </Space>
                       </div>
 
-                      {/* 选项输入项：精简去除颜色配置 */}
+                      {/* 选项输入项 */}
                       <Row gutter={10}>
                         <Col xs={12} sm={6} md={5}>
                           <Form.Item
                             name={[field.name, "id"]}
-                            label="选项 ID"
+                            label={
+                              <Space size={4}>
+                                <span>选项 ID</span>
+                                {hasVotes && isExistingOption && (
+                                  <Tooltip title="已有投票，选项ID已锁定以保护历史投票数据">
+                                    <LockOutlined style={{ fontSize: 11, color: "#faad14" }} />
+                                  </Tooltip>
+                                )}
+                              </Space>
+                            }
                             rules={[
                               { required: true, message: "必填" },
                               { pattern: /^[a-zA-Z0-9_-]{1,32}$/, message: "仅字母/数字/_/-" },
                             ]}
                             style={{ marginBottom: isGua ? 0 : 6 }}
                           >
-                            <Input placeholder="如 opt_1" size="small" />
+                            <Input
+                              placeholder="如 opt_1"
+                              size="small"
+                              disabled={Boolean(hasVotes && isExistingOption)}
+                            />
                           </Form.Item>
                         </Col>
                         <Col xs={12} sm={9} md={9}>
@@ -659,7 +803,7 @@ export function HotVotePage() {
                   block
                   type="dashed"
                   icon={<PlusOutlined />}
-                  onClick={() => add({ id: `opt_${fields.length + 1}`, name: "", nameEn: "", isGua: false })}
+                  onClick={() => add({ id: getNextOptId(), name: "", nameEn: "", isGua: false })}
                   size="small"
                   style={{ borderRadius: 6 }}
                 >
