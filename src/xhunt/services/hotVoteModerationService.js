@@ -18,12 +18,12 @@ const MODERATION_SCHEMA = Object.freeze({
     },
     category: {
       type: "string",
-      enum: ["none", "politics", "violence", "pornography", "abuse", "extremism"],
-      description: "违规类别枚举: none(合规), politics(反对政治/涉政敏感), violence(暴力恐怖/伤害他人), pornography(黄色色情/低俗), abuse(辱骂谩骂/人身攻击), extremism(极端言论/仇恨言论)",
+      enum: ["none", "politics", "violence", "pornography", "abuse", "extremism", "spam"],
+      description: "违规类别枚举: none(合规), politics(反对政治/涉政敏感), violence(暴力恐怖/伤害他人), pornography(黄色色情/低俗), abuse(辱骂谩骂/人身攻击), extremism(极端言论/仇恨言论), spam(违规引流/导流广告/带单赚钱/欺诈营销)",
     },
     reason: {
       type: "string",
-      description: "若未通过审核，用简洁的中文给出违规原因（限20字内，例如：'包含人身攻击与辱骂言论'、'包含涉政违规内容'、'包含暴力极端言论'等）；通过则为空字符串",
+      description: "若未通过审核，用简洁的中文给出违规原因（限20字内，例如：'包含违规引流与导流广告'、'包含人身攻击与辱骂言论'、'包含涉政违规内容'、'包含暴力极端言论'等）；通过则为空字符串",
     },
   },
   required: ["passed", "category", "reason"],
@@ -38,9 +38,13 @@ const MODERATION_SYSTEM_PROMPT = `你是一个高标准的中文与英文互联�
 3. 黄色色情 / 低俗淫秽 (pornography)：包含露骨色情描写、性暗示、招嫖、低俗淫秽用语；
 4. 辱骂谩骂 / 人身攻击 (abuse)：直接使用脏话辱骂他人、问候直系亲属、人身攻击、恶意贬损、污言秽语；
 5. 极端言论 / 仇恨言论 (extremism)：种族歧视、地域黑、宗教极端仇恨、极端性别对立、宣扬纳粹或极端反人类思想。
+6. 违规引流 / 商业导流 / 欺诈带单 (spam)：
+   - 诱导添加任何第三方社交账号或私域联系方式，例如：“加我微信”、“加V/VX”、“加QQ”、“私聊/私信我”、“留联系方式”、“进群交流”、“点我主页”等；
+   - 诱导投资、带单、保本、发财带飞，例如：“带你赚钱”、“带你翻倍”、“私聊我带你赚钱”、“稳赚不赔”、“日赚xxx”、“私聊带飞”、“跟单吃肉”等兼职、理财、币圈带单诱导；
+   - 包含微信号、手机号、QQ号、TG/电报链接、群号、微信公众号等任何形式的引流信息。
 
 【合规标准（passed 为 true）】：
-- 对议题正反方观点的激烈辩论、批评分析、调侃吐槽，只要不涉及上述 5 类红线，均属于合规言论，应当予以通过。
+- 对议题正反方观点的激烈辩论、批评分析、调侃吐槽，只要不涉及上述 6 类红线，均属于合规言论，应当予以通过。
 - 仅陈述客观事实、表达技术见解、加密货币/AI 市场观点的，应予以通过。
 
 【输出要求】：
@@ -66,7 +70,7 @@ async function auditCommentContentWithAI(text) {
     return {
       passed: false,
       category: "sensitive_words",
-      reason: "留言内容包含违规敏感词汇或钓鱼链接",
+      reason: "留言内容包含违规引流、敏感词汇或钓鱼链接",
     };
   }
 
@@ -84,7 +88,7 @@ async function auditCommentContentWithAI(text) {
         return {
           passed: false,
           category: result.category || "violation",
-          reason: result.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂或极端言论）",
+          reason: result.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流）",
         };
       }
       return { passed: true, category: "none", reason: "" };

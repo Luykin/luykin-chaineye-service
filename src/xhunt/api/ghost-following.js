@@ -235,7 +235,7 @@ async function checkCrawlerQuota(req, res, next) {
           success: false,
           error: {
             code: "CONCURRENT_LIMIT_EXCEEDED",
-            message: "当前服务使用人数过多，请稍后再试",
+            message: "当前服务使用人数过多，请10分钟后再试",
             data: {
               available_remaining_total: available,
               minRemaining: CRAWLER_QUOTA_CONFIG.minRemaining,
@@ -324,7 +324,7 @@ async function concurrentUserLimit(req, res, next) {
         success: false,
         error: {
           code: "CONCURRENT_LIMIT_EXCEEDED",
-          message: "当前使用人数过多，请稍后再试",
+          message: "当前服务使用人数过多，请10分钟后再试",
           data: {
             total: maxConcurrentUsers,
             used: activeCount,

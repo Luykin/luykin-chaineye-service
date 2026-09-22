@@ -635,7 +635,7 @@ router.post(
           return res.status(400).json({
             success: false,
             error: "COMMENT_CONTENT_VIOLATION",
-            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂或极端言论），请文明发言",
+            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
           });
         }
       }
@@ -829,7 +829,7 @@ router.put(
           return res.status(400).json({
             success: false,
             error: "COMMENT_CONTENT_VIOLATION",
-            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂或极端言论），请文明发言",
+            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
           });
         }
       }
@@ -1167,7 +1167,7 @@ router.post(
         return res.status(400).json({
           success: false,
           error: "COMMENT_CONTENT_VIOLATION",
-          message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂或极端言论），请文明发言",
+          message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
         });
       }
 

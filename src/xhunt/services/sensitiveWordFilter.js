@@ -31,6 +31,19 @@ const PHISHING_PATTERNS = [
   /(领取空投|空投领取|免费送|充值返利|刷单兼职)/i,
 ];
 
+// 引流/导流/带单兼职等违规营销与欺诈话术正则
+const SPAM_PATTERNS = [
+  // 引流与诱导添加联系方式（加我微信、加v、加vx、加好友、进群等）
+  /(加|留|联系|滴滴|找|关注)\s*(我|个人|助理)?\s*(微|v|vx|微信|qq|tg|电报|飞机|扣扣|好友|群)/i,
+  /(微|v|vx|微信|qq|tg|电报|飞机|扣扣)\s*(号|号是|搜索|搜)?\s*[:：\s]\s*[a-zA-Z0-9_-]{5,}/i,
+  // 带单赚钱、私聊引流话术（带你赚钱、私聊我带你赚钱、教你赚钱、带飞、吃肉等）
+  /(带|教|帮|跟)\s*(你|大家|老铁|兄弟|姐妹|新人)?\s*(赚钱|暴富|回本|发财|吃肉|翻倍|带飞|盈利)/i,
+  /(私聊|私信|私戳|私我|加我|联系我).*(赚钱|暴富|回本|发财|吃肉|翻倍|带单|带飞|盈利|做单|翻本)/i,
+  /(想|要|带你|教你).*(赚钱|暴富|回本|吃肉).*(私聊|私信|私我|加我|联系我)/i,
+  /(稳赚不赔|包赚不赔|日赚[0-9万千百]+|躺赚|日入[0-9万千百]+)/i,
+  /(带单|跟单|喊单)\s*(群|团队|老师|内部|上车)/i,
+];
+
 let cachedWordSet = null;
 
 function loadExtraWordsFromEnv() {
@@ -87,7 +100,8 @@ function containsSensitiveWord(text) {
   for (const word of getWordSet()) {
     if (word && lowered.includes(word)) return true;
   }
-  return PHISHING_PATTERNS.some((pattern) => pattern.test(text));
+  if (PHISHING_PATTERNS.some((pattern) => pattern.test(text))) return true;
+  return SPAM_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 module.exports = {
