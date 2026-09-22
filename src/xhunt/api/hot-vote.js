@@ -477,6 +477,7 @@ router.get(
       // 批量查询当前用户在所有进行中议题下的投票流水
       const visibleTopicIds = visibleTopics.map((t) => t.id);
       const userRecordsByTopicId = {};
+      const userLastCommentByTopicId = {};
       if (twitterId) {
         const records = await XHuntHotVoteRecord.findAll({
           where: {
@@ -486,6 +487,22 @@ router.get(
         });
         for (const r of records) {
           userRecordsByTopicId[r.topicId] = r;
+        }
+
+        // 批量查询当前用户在各议题下的最新一条留言（用于前端改票时反显）
+        const myComments = await XHuntHotVoteComment.findAll({
+          where: {
+            topicId: { [Op.in]: visibleTopicIds },
+            twitterId,
+            isDeleted: false,
+          },
+          order: [["createdAt", "DESC"]],
+          attributes: ["topicId", "content"],
+        });
+        for (const c of myComments) {
+          if (!userLastCommentByTopicId[c.topicId]) {
+            userLastCommentByTopicId[c.topicId] = c.content;
+          }
         }
       }
 
@@ -499,6 +516,7 @@ router.get(
                 votedOptionId: record.optionId,
                 remainingRevotes: Math.max(0, t.maxRevotes - record.revoteCount),
                 isAnonymous: Boolean(record.isAnonymous),
+                lastComment: userLastCommentByTopicId[t.id] || null,
               }
             : {
                 hasVoted: false,
