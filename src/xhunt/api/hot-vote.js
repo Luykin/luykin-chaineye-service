@@ -21,7 +21,6 @@ const { auditCommentContentWithAI } = require("../services/hotVoteModerationServ
 const {
   handleNegotiatedCache,
   invalidateTopicCommentsCache,
-  invalidateTopicVotesCache,
   getCachedTopicCommentsPage,
 } = require("../utils/hot-vote-cache");
 const { queryTwitterProfile } = require("./stats-routes/twitter-id-handler-lookup");
@@ -721,7 +720,6 @@ router.post(
       }
 
       const results = await getTopicVoteDistribution(topicId, options, req.redisClient);
-      await invalidateTopicVotesCache(req.redisClient, topicId);
 
       return res.json({
         success: true,
@@ -1089,8 +1087,8 @@ router.get(
 
       if (
         handleNegotiatedCache(req, res, responseData, {
-          isPrivate: false,
-          maxAge: 30, // 30秒短强缓存防频刷
+          isPrivate: true,
+          maxAge: 0, // 个性化 isSelf 字段采用 private 协商缓存，防止公有共享缓存跨用户污染
           staleWhileRevalidate: 300, // 5分钟容灾/后台静默刷新
         })
       ) {

@@ -363,66 +363,95 @@ function resetCrawlerQuotaCacheForTest() {
   inflightCrawlerQuotaPromise = null;
 }
 
- // ======== 并发用户限制配置 ========
- const CONCURRENT_LIMIT_CONFIG = {
+// ======== 并发用户限制配置 ========
+const CONCURRENT_LIMIT_CONFIG = {
   maxConcurrentUsers: 6,       // 最大并发用户数6人
   userActivityTTL: 60,          // 用户活跃状态保持时间（秒）
   redisKeyPrefix: "xhunt:ghost:concurrent",  // Redis key前缀
 };
 
+// ======== 并发用户原子滑动窗口 Lua 脚本 ========
+// KEYS[1]: zsetKey (活跃用户 ZSet)
+// ARGV[1]: 当前时间戳 (毫秒)
+// ARGV[2]: 超时阈值时间戳 (毫秒，now - userActivityTTL * 1000)
+// ARGV[3]: 最大并发用户数
+// ARGV[4]: 用户ID
+// ARGV[5]: ZSet 兜底过期时间 (秒)
+const CONCURRENT_USER_LIMIT_LUA = `
+local zsetKey = KEYS[1]
+local now = tonumber(ARGV[1])
+local expireBefore = tonumber(ARGV[2])
+local maxUsers = tonumber(ARGV[3])
+local userId = ARGV[4]
+local ttlSeconds = tonumber(ARGV[5])
+
+-- 1. 清理已超时的活跃用户（Score <= expireBefore）
+redis.call('zremrangebyscore', zsetKey, 0, expireBefore)
+
+-- 2. 检查该用户是否已在活跃集合中
+local score = redis.call('zscore', zsetKey, userId)
+if score then
+  -- 已在活跃列表中，刷新时间戳与 TTL
+  redis.call('zadd', zsetKey, now, userId)
+  redis.call('expire', zsetKey, ttlSeconds)
+  local currentCount = redis.call('zcard', zsetKey)
+  return {1, currentCount}
+end
+
+-- 3. 用户不在活跃列表中，检查并发数是否超限
+local currentCount = redis.call('zcard', zsetKey)
+if currentCount >= maxUsers then
+  return {0, currentCount}
+end
+
+-- 4. 未超限，加入活跃集合并设置 TTL
+redis.call('zadd', zsetKey, now, userId)
+redis.call('expire', zsetKey, ttlSeconds)
+return {1, currentCount + 1}
+`;
+
 /**
  * 并发用户限制中间件
- * 基于Redis实现，60秒内有请求视为"在用"，每次请求重置倒计时
+ * 基于 Redis Sorted Set 实现原子滑动窗口并发控制：
+ * 消除 SCAN 轮询与单 key TTL 网络往返延迟（RTT），杜绝竞态超限与死循环隐患
  */
 async function concurrentUserLimit(req, res, next) {
   const redisClient = req.redisClient || global.__xhuntRedis;
-  
+
   if (!redisClient) {
     console.error("[concurrent-limit] Redis client not available");
-    // Redis不可用时放行，不阻塞业务
+    // Redis 不可用时放行，不阻塞业务
     return next();
   }
 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      // 未登录用户不限制（理论上不会走到这里，因为有authenticateToken前置）
       return next();
     }
 
     const { maxConcurrentUsers, userActivityTTL, redisKeyPrefix } = CONCURRENT_LIMIT_CONFIG;
-    const userKey = `${redisKeyPrefix}:user:${userId}`;
+    const zsetKey = `${redisKeyPrefix}:active_users`;
+    const now = Date.now();
+    const expireBefore = now - userActivityTTL * 1000;
+    const ttlSeconds = userActivityTTL * 2;
 
-    // 1. 检查该用户是否已经在活跃列表中
-    const userExists = await redisClient.exists(userKey);
+    const result = await redisClient.eval(CONCURRENT_USER_LIMIT_LUA, {
+      keys: [zsetKey],
+      arguments: [
+        now.toString(),
+        expireBefore.toString(),
+        maxConcurrentUsers.toString(),
+        userId.toString(),
+        ttlSeconds.toString(),
+      ],
+    });
 
-    if (userExists) {
-      // 用户已在活跃列表中，刷新TTL（重置60秒倒计时）
-      await redisClient.expire(userKey, userActivityTTL);
-      return next();
-    }
+    const allowed = Array.isArray(result) ? Number(result[0]) : 1;
+    const activeCount = Array.isArray(result) ? Number(result[1]) : 0;
 
-    // 2. 用户不在活跃列表中，需要检查当前活跃用户数
-    const pattern = `${redisKeyPrefix}:user:*`;
-    let activeCount = 0;
-    let cursor = 0;
-    
-    do {
-      const result = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
-      cursor = result.cursor;
-      // 过滤掉即将过期的key（TTL <= 0 表示已过期）
-      for (const key of result.keys) {
-        const ttl = await redisClient.ttl(key);
-        if (ttl > 0) {
-          activeCount++;
-        }
-      }
-    } while (cursor !== 0);
-
-    if (activeCount >= maxConcurrentUsers) {
-      // 已达上限，返回特殊错误码
-      const now = Date.now();
-      const nextApplyAt = now + userActivityTTL * 1000; // retryAfter 秒后重试
+    if (allowed !== 1) {
+      const nextApplyAt = now + userActivityTTL * 1000;
       return res.status(200).json({
         success: false,
         error: {
@@ -435,7 +464,7 @@ async function concurrentUserLimit(req, res, next) {
           data: {
             total: maxConcurrentUsers,
             used: activeCount,
-            nextApplyAt: nextApplyAt,
+            nextApplyAt,
             waitDays: 0,
             waitHours: 0,
             maxConcurrentUsers,
@@ -446,12 +475,9 @@ async function concurrentUserLimit(req, res, next) {
       });
     }
 
-    // 3. 未满员，加入活跃列表
-    await redisClient.set(userKey, Date.now().toString(), { EX: userActivityTTL });
-    
     next();
   } catch (error) {
-    // 中间件出错时不阻塞请求，放行
+    console.warn("[concurrent-limit] error, skipping limit check:", error.message);
     next();
   }
 }
@@ -615,6 +641,47 @@ async function getUserQuota(redisClient, userId) {
  * 使用 Lua 脚本保证「检查 + 扣除 + 自动申请」的原子性
  * @returns {Object} { success, remaining, total, appliedAt, isNewQuota, error }
  */
+
+// ======== 额度返还 Lua 脚本 (仅当当前 remaining < total 时返还 1 次，避免超出上限) ========
+const ATOMIC_REFUND_QUOTA_LUA = `
+local quotaKey = KEYS[1]
+local remaining = redis.call('hGet', quotaKey, 'remaining')
+local total = redis.call('hGet', quotaKey, 'total')
+
+if remaining and total then
+  local remNum = tonumber(remaining)
+  local totalNum = tonumber(total)
+  if remNum and totalNum then
+    local newRemaining = remNum + 1
+    if newRemaining > totalNum then
+      newRemaining = totalNum
+    end
+    redis.call('hSet', quotaKey, 'remaining', tostring(newRemaining))
+    return newRemaining
+  end
+end
+return -1
+`;
+
+/**
+ * 回滚/返还额度（当分析失败时调用）
+ */
+async function atomicRefundQuota(redisClient, userId) {
+  if (!redisClient || !userId) return;
+  const quotaKey = getQuotaKey(userId);
+  try {
+    const keyType = await redisClient.type(quotaKey);
+    if (keyType === "hash") {
+      await redisClient.eval(ATOMIC_REFUND_QUOTA_LUA, {
+        keys: [quotaKey],
+        arguments: [],
+      });
+    }
+  } catch (err) {
+    console.warn("[ghost-following] atomicRefundQuota error:", err.message);
+  }
+}
+
 async function atomicDeductQuota(redisClient, userId, isVip) {
   const quotaKey = getQuotaKey(userId);
   const historyKey = getHistoryKey(userId);
@@ -777,59 +844,9 @@ router.post(
         });
       }
 
-      // 2. 原子化扣除额度（检查 + 扣除 + 自动申请）
-      const quotaResult = await atomicDeductQuota(redisClient, userId, isVip);
-      console.info("[ghost-following/analyze] quota deducted", {
-        ...logCtx,
-        total: quotaResult.total,
-        remaining: quotaResult.remaining,
-        isNewQuota: quotaResult.isNewQuota,
-      });
-      
-      if (!quotaResult.success) {
-        // 额度不足且无法申请新额度
-        const { waitDays, waitHours, nextApplyAt } = calculateWaitTime(
-          quotaResult.lastAppliedAt
-        );
-        const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
-        console.warn("[ghost-following/analyze] quota exhausted", {
-          ...logCtx,
-          total,
-          lastAppliedAt: quotaResult.lastAppliedAt,
-          nextApplyAt,
-          waitDays,
-          waitHours,
-        });
-        
-        return res.status(200).json({
-          success: false,
-          error: {
-            code: "CONCURRENT_LIMIT_EXCEEDED",
-            message: getText(
-              req,
-              "本月额度已用完",
-              "Monthly quota exhausted"
-            ),
-            data: {
-              total,
-              used: total,
-              nextApplyAt,
-              waitDays,
-              waitHours,
-              retryAfter: 60000,
-            },
-          },
-        });
-      }
-      
-      const { remaining: newRemaining, total, appliedAt, isNewQuota } = quotaResult;
-      const currentQuota = { total, remaining: quotaResult.remaining, appliedAt };
-
-      // 4. 调用外部 API 获取推文数据（带熔断器保护）
+      // 1. 检查熔断器状态（在扣除额度前检查，避免熔断时白白扣除用户额度）
       let analysisResult;
       const circuitBreaker = getCircuitBreaker('ghost-following-api');
-      
-      // 检查熔断器状态
       const cbCheck = circuitBreaker.canExecute();
       if (!cbCheck.allowed) {
         console.warn("[ghost-following/analyze] circuit breaker open", {
@@ -851,11 +868,60 @@ router.post(
               nextApplyAt: Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
               waitDays: 0,
               waitHours: 0,
-              retryAfter:Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
+              retryAfter: Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
             },
           },
         });
       }
+
+      // 2. 原子化扣除额度（检查 + 扣除 + 自动申请）
+      const quotaResult = await atomicDeductQuota(redisClient, userId, isVip);
+      console.info("[ghost-following/analyze] quota deducted", {
+        ...logCtx,
+        total: quotaResult.total,
+        remaining: quotaResult.remaining,
+        isNewQuota: quotaResult.isNewQuota,
+      });
+
+      if (!quotaResult.success) {
+        // 额度不足且无法申请新额度
+        const { waitDays, waitHours, nextApplyAt } = calculateWaitTime(
+          quotaResult.lastAppliedAt
+        );
+        const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
+        console.warn("[ghost-following/analyze] quota exhausted", {
+          ...logCtx,
+          total,
+          lastAppliedAt: quotaResult.lastAppliedAt,
+          nextApplyAt,
+          waitDays,
+          waitHours,
+        });
+
+        return res.status(200).json({
+          success: false,
+          error: {
+            code: "CONCURRENT_LIMIT_EXCEEDED",
+            message: getText(
+              req,
+              "本月额度已用完",
+              "Monthly quota exhausted"
+            ),
+            data: {
+              total,
+              used: total,
+              nextApplyAt,
+              waitDays,
+              waitHours,
+              retryAfter: 60000,
+            },
+          },
+        });
+      }
+
+      let quotaDeducted = true;
+      const { remaining: newRemaining, total, appliedAt, isNewQuota } = quotaResult;
+      const currentQuota = { total, remaining: quotaResult.remaining, appliedAt };
       
       try {
         // 调用 /tweet/kol_tweets 获取推文（使用前端传入的 handle）
@@ -952,6 +1018,8 @@ router.post(
         durationMs: Date.now() - startedAt,
       });
 
+      quotaDeducted = false; // 分析成功，确认消费额度，无需回滚
+
       return res.json({
         success: true,
         data: {
@@ -968,6 +1036,20 @@ router.post(
       });
     } catch (error) {
       const logCtx = createAnalyzeLogContext(req, req.body?.user_id, req.body?.handle);
+
+      // 若此前已扣除额度但在外部接口调用/分析阶段失败，执行回滚返还
+      if (quotaDeducted && redisClient) {
+        try {
+          await atomicRefundQuota(redisClient, userId);
+          console.info("[ghost-following/analyze] quota refunded due to failure", logCtx);
+        } catch (refundError) {
+          console.error("[ghost-following/analyze] quota refund failed", {
+            ...logCtx,
+            error: refundError.message,
+          });
+        }
+      }
+
       // 如果有状态码（来自外部API），透传；否则返回500
       const statusCode = error.statusCode || 500;
       console.error("[ghost-following/analyze] failed", {
@@ -1564,5 +1646,8 @@ router.resetCrawlerQuotaCacheForTest = resetCrawlerQuotaCacheForTest;
 router.resolveLanguage = resolveLanguage;
 router.getText = getText;
 router.localizeErrorMessage = localizeErrorMessage;
+router.concurrentUserLimit = concurrentUserLimit;
+router.CONCURRENT_LIMIT_CONFIG = CONCURRENT_LIMIT_CONFIG;
+router.atomicRefundQuota = atomicRefundQuota;
 
 module.exports = router;
