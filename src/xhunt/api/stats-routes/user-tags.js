@@ -8,9 +8,10 @@ const { XhuntUserTag } = require("../../../models/postgres-start");
 const { logAdminAction } = require("./shared");
 const { refreshUserTagsCache } = require("../../services/userTagsCache");
 const { getNacosConfigContent } = require("../../services/nacosConfigClient");
+const { DATA_SERVICE_BASE_URL } = require("../../constants/dataService");
 
 const router = express.Router();
-const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
 const TAG_DATA_IDS = {
   zh: "xhunt_built_in_tag",
   en: "xhunt_built_in_tag_en",

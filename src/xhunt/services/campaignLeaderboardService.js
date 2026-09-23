@@ -1,10 +1,11 @@
 const axios = require("axios");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
 const CUSTOM_LEADERBOARD_TIMEOUT_MS = 10000;
 const SELF_CUSTOM_LEADERBOARD_PATH = "/api/xhunt/campaigns/custom-leaderboard";
 const SELF_CUSTOM_USER_ACTIVITY_PATH = "/api/xhunt/campaigns/custom-user-activity";
 const YZILABS_PROJECT = "yzilabs";
-const YZILABS_LEADERBOARD_URL = "https://data.cryptohunt.ai/info/board/top";
+const YZILABS_LEADERBOARD_URL = `${DATA_SERVICE_BASE_URL}/info/board/top`;
 const YZILABS_FETCH_TYPE = "mind_share";
 const YZILABS_DETAIL_FETCH_TYPE = "mind_detail";
 const YZILABS_CACHE_TTL_MS = 5 * 60 * 1000;

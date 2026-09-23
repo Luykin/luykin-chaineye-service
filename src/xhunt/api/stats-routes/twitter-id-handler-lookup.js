@@ -1,10 +1,11 @@
 const express = require("express");
 const axios = require("axios");
 const { adminAuth, requirePermission } = require("../../../admin/middleware/adminAuth");
+const { DATA_SERVICE_BASE_URL } = require("../../constants/dataService");
 
 const router = express.Router();
 const LOOKUP_PERMISSION = "twitter-id-handler";
-const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
 
 function normalizeHandle(value) {
   return String(value || "")

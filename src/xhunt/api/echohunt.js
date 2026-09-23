@@ -7,6 +7,7 @@ function cleanUrlOrNull(val) {
 
 const express = require("express");
 const axios = require("axios");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const { Op } = require("sequelize");
 const {
   pgInstance,
@@ -1033,7 +1034,7 @@ async function fetchEchohuntRankSummary(twitterId) {
 
 async function fetchTwitterProfile(twitterId, lang) {
   if (!twitterId) return null;
-  const response = await axios.get("https://data.cryptohunt.ai/fetch/twitter/user", {
+  const response = await axios.get(`${DATA_SERVICE_BASE_URL}/fetch/twitter/user`, {
     params: { user_id: twitterId, "x-language": normalizeUpstreamLang(lang) },
     timeout: 8000,
   });
@@ -1042,7 +1043,7 @@ async function fetchTwitterProfile(twitterId, lang) {
 
 async function fetchSoulProfile(twitterId, lang) {
   if (!twitterId) return null;
-  const response = await axios.get("https://data.cryptohunt.ai/pro/api/soul_by_user_id", {
+  const response = await axios.get(`${DATA_SERVICE_BASE_URL}/pro/api/soul_by_user_id`, {
     params: { user_id: twitterId, "x-language": normalizeUpstreamLang(lang) },
     timeout: 8000,
   });

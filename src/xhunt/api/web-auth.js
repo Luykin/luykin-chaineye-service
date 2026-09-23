@@ -16,6 +16,7 @@ const {
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateWebToken } = require("../middleware/web-auth");
 const { isValidSiteSource, getSiteDisplayName } = require("../constants/web-sites");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
 const router = express.Router();
 
@@ -188,7 +189,7 @@ router.post(
             async (bail) => {
               try {
                 const res = await axios.get(
-                  `https://data.cryptohunt.ai/fetch/twitter/user?username=${twitterUser.username}`,
+                  `${DATA_SERVICE_BASE_URL}/fetch/twitter/user?username=${twitterUser.username}`,
                   { timeout: 5000 }
                 );
 

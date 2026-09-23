@@ -6,6 +6,7 @@ const {
   isVersionGreaterOrEqual,
 } = require("../utils/version");
 const { checkProStatus } = require("../middleware/pro-status");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
 // 最小版本号：只有 >= 0.4.05 的版本才启用 Pro 检查
 const MIN_VERSION_FOR_PRO = "0.4.05";
@@ -84,7 +85,7 @@ function hasNewMessages(oldData, newData) {
 async function fetchFeedData() {
   try {
     const timestamp = getTimestamp();
-    const url = `https://data.cryptohunt.ai/fetch/twitter/feed?timestamp=${timestamp}`;
+    const url = `${DATA_SERVICE_BASE_URL}/fetch/twitter/feed?timestamp=${timestamp}`;
 
     const response = await fetch(url);
 
@@ -107,7 +108,7 @@ async function fetchFeedData() {
 async function fetchTopTweetData() {
   try {
     const timestamp = getTimestamp();
-    const url = `https://data.cryptohunt.ai/fetch/twitter/top_tweet?group=cn&days=1&by_view=false&filter_tag=gossip&timestamp=${timestamp}`;
+    const url = `${DATA_SERVICE_BASE_URL}/fetch/twitter/top_tweet?group=cn&days=1&by_view=false&filter_tag=gossip&timestamp=${timestamp}`;
 
     const response = await fetch(url);
 

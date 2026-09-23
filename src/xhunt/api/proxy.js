@@ -9,6 +9,7 @@ const { checkProStatus } = require("../middleware/pro-status");
 const { applyProDataFiltering } = require("../utils/pro-data-filtering");
 const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 const { handleUserCreateGiftCredits } = require("../services/giftCreditsService");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ const URL_MAPPINGS = {
   kota: "https://kota.chaineye.tools",
   kb: "http://127.0.0.1:8087",
   kota_temporary: "http://172.31.0.8:16531",
-  k8s_kota: "https://data.cryptohunt.ai",
+  k8s_kota: DATA_SERVICE_BASE_URL,
   github_moo: "https://github-daily.moo.kim",
 };
 

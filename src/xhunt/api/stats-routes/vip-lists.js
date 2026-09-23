@@ -7,12 +7,13 @@ const {
 const { XhuntVipTestUser } = require("../../../models/postgres-start");
 const { loadVipLists, notifyRefresh } = require("../../constants/xhuntVip");
 const { logAdminAction } = require("./shared");
+const { DATA_SERVICE_BASE_URL } = require("../../constants/dataService");
 
 const router = express.Router();
-const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
-const TWITTER_RANK_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/rank";
-const CREATOR_AUTH_URL = "https://data.cryptohunt.ai/front/auth/creator";
-const CREATOR_SUBMIT_URL = "https://data.cryptohunt.ai/front/auth/creator_submit";
+const TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
+const TWITTER_RANK_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/rank`;
+const CREATOR_AUTH_URL = `${DATA_SERVICE_BASE_URL}/front/auth/creator`;
+const CREATOR_SUBMIT_URL = `${DATA_SERVICE_BASE_URL}/front/auth/creator_submit`;
 const CREATOR_SUBMIT_AUTH = process.env.XHUNT_CREATOR_SUBMIT_AUTH || "cd3c59e6-451d-44a8-9355-f4ead498b712";
 const CREATOR_STATUS_LABELS = {
   0: "未认证",

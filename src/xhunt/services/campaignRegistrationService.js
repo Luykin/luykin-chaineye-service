@@ -3,15 +3,16 @@ const { Op } = require("sequelize");
 const { CampaignRegistration } = require("../../models/postgres-start");
 const { getManagedCampaignPayloadByKey } = require("./websiteCampaignService");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
-const INITIALIZE_CAMPAIGN_URL = "https://data.cryptohunt.ai/pro/api/initialize_campaign";
+const INITIALIZE_CAMPAIGN_URL = `${DATA_SERVICE_BASE_URL}/pro/api/initialize_campaign`;
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400;
 const SPECIAL_AUTHORED_RANK = 9999999;
 
 const CAMPAIGN_DISPLAY_DOMAINS = new Set(["web3", "ai"]);
 const RANK_API_BY_DOMAIN = {
-  web3: "https://data.cryptohunt.ai/fetch/twitter/rank",
-  ai: "https://data.cryptohunt.ai/fetch/ai/rank",
+  web3: `${DATA_SERVICE_BASE_URL}/fetch/twitter/rank`,
+  ai: `${DATA_SERVICE_BASE_URL}/fetch/ai/rank`,
 };
 
 function campaignRegistrationError(code, status = 400, publicMessage, details) {
@@ -166,7 +167,7 @@ async function validateTwitterProfileQuality(req, twitterId) {
   if (isRequestXHuntVip(req)) return null;
   try {
     const response = await axios.post(
-      "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid",
+      `${DATA_SERVICE_BASE_URL}/pro/api/inner/profile_by_userid`,
       { user_id: String(twitterId) },
       { timeout: 7000 }
     );

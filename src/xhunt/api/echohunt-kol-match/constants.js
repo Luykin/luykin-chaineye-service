@@ -1,3 +1,4 @@
+const { DATA_SERVICE_BASE_URL } = require("../../constants/dataService");
 const QUOTA_TIMEZONE = "Asia/Shanghai";
 const AI_QUOTA_BUCKET = "aiMatch";
 const FILTER_QUOTA_BUCKET = "filterSearch";
@@ -6,7 +7,7 @@ const RESULT_CACHE_PREFIX = "echohunt:kol-match:result";
 const IDEMPOTENCY_CACHE_PREFIX = "echohunt:kol-match:idempotency";
 const STRATEGY_TTL_SECONDS = 30 * 60;
 const RESULT_TTL_SECONDS = 7 * 24 * 60 * 60;
-const INTERNAL_TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const INTERNAL_TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
 const INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS = 7000;
 const DEFAULT_AI_DAILY_LIMIT = 3;
 const DEFAULT_FILTER_DAILY_LIMIT = 10;

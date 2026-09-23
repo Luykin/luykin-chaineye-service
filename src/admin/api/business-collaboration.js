@@ -13,6 +13,7 @@ const {
   pgInstance,
 } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
+const { DATA_SERVICE_BASE_URL } = require("../../xhunt/constants/dataService");
 
 const router = express.Router();
 const MANAGE_PERMISSION = "business_collaboration_manage";
@@ -20,7 +21,7 @@ const ACTIVITY_STATUSES = new Set(["draft", "open", "paused", "archived"]);
 const ACCESS_ROLES = new Set(["project_manager", "agency_manager"]);
 const ACCESS_STATUSES = new Set(["active", "paused", "revoked"]);
 const REVIEWER_MODES = new Set(["echohunt", "project"]);
-const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
 
 router.use(express.json({ limit: "1mb" }));
 router.use(requirePermission(MANAGE_PERMISSION));

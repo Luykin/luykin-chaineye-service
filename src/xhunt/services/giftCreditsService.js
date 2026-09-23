@@ -6,8 +6,10 @@ function buildDailyActiveUserIds({ username, twitterId }) {
   return Array.from(new Set([username, twitterId ? `tw:${twitterId}` : null].filter(Boolean)));
 }
 
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+
 // 积分赠送 API 配置
-const ADD_CREDITS_API_URL = "https://data.cryptohunt.ai/pro/admin/user/addCredits";
+const ADD_CREDITS_API_URL = `${DATA_SERVICE_BASE_URL}/pro/admin/user/addCredits`;
 
 /**
  * 计算用户应赠送的积分

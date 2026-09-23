@@ -1,5 +1,6 @@
 const express = require("express");
 const axios = require("axios");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const { Op } = require("sequelize");
 const crypto = require("crypto");
 const {
@@ -1060,7 +1061,7 @@ router.get(
       if (req.user && req.user.username) {
         try {
           const response = await axios.post(
-            "https://data.cryptohunt.ai/pro/api/hunter_by_handle",
+            `${DATA_SERVICE_BASE_URL}/pro/api/hunter_by_handle`,
             {
               campaign: normalizedCampaign,
               handle: req.user.username,

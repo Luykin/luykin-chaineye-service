@@ -16,6 +16,7 @@ const { authenticateToken } = require("../middleware/auth");
 const axios = require("axios");
 const retry = require("async-retry");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const {
   sanitizePlainText,
   sanitizeSafeUrl,
@@ -256,7 +257,7 @@ router.post(
           async (bail) => {
             try {
               const res = await axios.get(
-                `https://data.cryptohunt.ai/fetch/twitter/user?username=${twitterUser.username}`,
+                `${DATA_SERVICE_BASE_URL}/fetch/twitter/user?username=${twitterUser.username}`,
                 {
                   timeout: 5000, // 设置5秒超时
                 }

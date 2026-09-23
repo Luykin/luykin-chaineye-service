@@ -10,11 +10,12 @@ const {
   markGiftCreditsAsGifted,
 } = require("../services/giftCreditsService");
 const { XHuntUser } = require("../../models/postgres-start");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
 const router = express.Router();
 
 // 目标服务器配置（k8s_kota）
-const TARGET_BASE_URL = "https://data.cryptohunt.ai";
+const TARGET_BASE_URL = DATA_SERVICE_BASE_URL;
 
 /**
  * 查询外部 Pro API 用户信息

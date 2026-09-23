@@ -17,6 +17,7 @@ const { Op } = require("sequelize");
 
 const router = express.Router();
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
 function generateInviteCode(length = 10) {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -153,7 +154,7 @@ router.post(
       if (!isSpecialUser) {
         try {
           const apiUrl =
-            "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid";
+            `${DATA_SERVICE_BASE_URL}/pro/api/inner/profile_by_userid`;
           const payload = { user_id: String(user.twitterId) };
           const response = await axios.post(apiUrl, payload, { timeout: 7000 });
 
@@ -387,7 +388,7 @@ router.get(
       if (req.user && req.user.username) {
         try {
           const response = await axios.post(
-            "https://data.cryptohunt.ai/pro/api/hunter_by_handle",
+            `${DATA_SERVICE_BASE_URL}/pro/api/hunter_by_handle`,
             {
               campaign: "mantle2",
               handle: req.user.username,

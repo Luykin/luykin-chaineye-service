@@ -3,6 +3,7 @@ const { Op, literal } = require("sequelize");
 const axios = require("axios");
 const { adminAuth } = require("../../admin/middleware/adminAuth");
 const { authenticateTokenOptional } = require("../middleware/auth");
+const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const router = express.Router();
 
 // 爬虫队列服务（双重验证机制）
@@ -1671,7 +1672,7 @@ router.get("/search", async (req, res) => {
       setImmediate(async () => {
         try {
           const usernames = Array.from(need);
-          const apiURL = `https://data.cryptohunt.ai/fetch/twitter/users?usernames=${usernames.join(
+          const apiURL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/users?usernames=${usernames.join(
             ","
           )}`;
           const response = await axios.get(apiURL);
