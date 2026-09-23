@@ -304,3 +304,18 @@ export async function fetchNacosAdminConfigSnapshot(id: number) {
     `/api/xhunt/stats/nacos/admin/config/history/${encodeURIComponent(String(id))}`
   );
 }
+
+export async function suggestCleanerRegexWithAi(params: {
+  text: string;
+  groupKey?: string;
+  groupName?: string;
+  notes?: string;
+}) {
+  return apiRequest<import("@/types/nacos").CleanerAiRegexSuggestResponse>(
+    "/api/xhunt/stats/nacos/admin/cleaner/ai-suggest-regex",
+    {
+      method: "POST",
+      body: params,
+    }
+  );
+}

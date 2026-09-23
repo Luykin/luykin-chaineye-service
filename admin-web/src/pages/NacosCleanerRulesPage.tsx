@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Col,
   Descriptions,
   Divider,
@@ -31,6 +32,9 @@ import {
   CloseCircleOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
+  CopyOutlined,
+  BulbOutlined,
+  ThunderboltOutlined,
   HistoryOutlined,
   PlayCircleOutlined,
   QuestionCircleOutlined,
@@ -51,8 +55,10 @@ import {
   fetchNacosAdminConfigHistory,
   fetchNacosAdminConfigSnapshot,
   publishNacosAdminConfig,
+  suggestCleanerRegexWithAi,
 } from "@/services/nacos";
 import type {
+  CleanerAiRegexSuggestion,
   CleanerRemoteConfig,
   CleanerRuleGroup,
   NacosAdminConfigSnapshot,
@@ -144,6 +150,26 @@ function normalizeSandboxText(raw: string): { normalized: string; stripped: stri
   return { normalized: s, stripped };
 }
 
+
+const AI_SAMPLE_PRESETS = [
+  {
+    label: "微信/联系方式引流",
+    text: "私信我看完整无码合集福利，加微: abc_8888",
+  },
+  {
+    label: "置顶推文门槛群",
+    text: "想看更多高清自拍移步我主页置顶，门槛群自取福利，可约可空降",
+  },
+  {
+    label: "Telegram/纸飞机导流",
+    text: "老司机进内部吃瓜裙，TG纸飞机搜索: @sweet_girl66 免费自取",
+  },
+  {
+    label: "同城品茶约拍",
+    text: "全国一二线同城可空降品茶安排，加主页v看简界照片预约",
+  },
+];
+
 export function NacosCleanerRulesPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [activeTab, setActiveTab] = useState<string>("adult_traffic");
@@ -164,6 +190,15 @@ export function NacosCleanerRulesPage() {
   const [regexModalVisible, setRegexModalVisible] = useState(false);
   const [regexInput, setRegexInput] = useState("");
   const [regexEditIndex, setRegexEditIndex] = useState<number | null>(null);
+  const [regexModalTab, setRegexModalTab] = useState<"ai" | "manual">("ai");
+
+  // AI 正则生成状态
+  const [aiSampleText, setAiSampleText] = useState("");
+  const [aiNotes, setAiNotes] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<CleanerAiRegexSuggestion[]>([]);
+  const [aiAnalysis, setAiAnalysis] = useState("");
+  const [selectedAiPatterns, setSelectedAiPatterns] = useState<string[]>([]);
 
   // 沙箱测试器状态
   const [sandboxAuthor, setSandboxAuthor] = useState("");
@@ -402,6 +437,143 @@ export function NacosCleanerRulesPage() {
     setRegexInput("");
     setRegexEditIndex(null);
   };
+
+  // AI 生成正则建议
+  const handleGenerateAiRegex = async () => {
+    const text = aiSampleText.trim();
+    if (!text) {
+      messageApi.warning("请输入违规样本语句或引流话术");
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const resp = await suggestCleanerRegexWithAi({
+        text,
+        groupKey: activeTab,
+        groupName: currentGroup?.name,
+        notes: aiNotes.trim(),
+      });
+
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || "生成建议正则失败");
+      }
+
+      const suggestions = resp.data.suggestions || [];
+      setAiSuggestions(suggestions);
+      setAiAnalysis(resp.data.analysis || "");
+
+      // 默认全选尚未存在于规则组中的正则
+      const existing = new Set(currentGroup?.regexPatterns || []);
+      const defaultSelected = suggestions
+        .map((s) => s.pattern)
+        .filter((p) => !existing.has(p));
+      setSelectedAiPatterns(defaultSelected);
+
+      if (suggestions.length === 0) {
+        messageApi.info("未生成到匹配的正则，请补充更多样本特征");
+      } else {
+        messageApi.success(`已成功分析并生成 ${suggestions.length} 条建议正则`);
+      }
+    } catch (err: any) {
+      messageApi.error(`AI 生成建议失败: ${err.message || err}`);
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  // 批量保存选中的 AI 正则
+  const handleSaveSelectedAiRegex = () => {
+    if (selectedAiPatterns.length === 0) {
+      messageApi.warning("请至少选择一个正则表达式保存");
+      return;
+    }
+
+    const validPatterns: string[] = [];
+    for (const pattern of selectedAiPatterns) {
+      try {
+        new RegExp(pattern, "i");
+        validPatterns.push(pattern);
+      } catch (e: any) {
+        messageApi.error(`正则表达式语法错误: /${pattern}/i (${e.message})`);
+        return;
+      }
+    }
+
+    let addedCount = 0;
+    setConfig((prev) => {
+      const group = prev.rules[activeTab];
+      if (!group) return prev;
+      const patterns = [...(group.regexPatterns || [])];
+      for (const pattern of validPatterns) {
+        if (!patterns.includes(pattern)) {
+          patterns.push(pattern);
+          addedCount++;
+        }
+      }
+      return {
+        ...prev,
+        rules: {
+          ...prev.rules,
+          [activeTab]: {
+            ...group,
+            regexPatterns: patterns,
+          },
+        },
+      };
+    });
+
+    messageApi.success(`已成功保存 ${addedCount} 个正则表达式至【${currentGroup?.name || activeTab}】（重复项已去重）`);
+    setRegexModalVisible(false);
+    setRegexInput("");
+    setRegexEditIndex(null);
+    setSelectedAiPatterns([]);
+  };
+
+  // 单独保存单条 AI 建议正则
+  const handleAddSingleAiRegex = (pattern: string) => {
+    try {
+      new RegExp(pattern, "i");
+    } catch (e: any) {
+      messageApi.error(`正则表达式语法错误: ${e.message}`);
+      return;
+    }
+
+    let isNew = false;
+    setConfig((prev) => {
+      const group = prev.rules[activeTab];
+      if (!group) return prev;
+      const patterns = [...(group.regexPatterns || [])];
+      if (!patterns.includes(pattern)) {
+        patterns.push(pattern);
+        isNew = true;
+      }
+      return {
+        ...prev,
+        rules: {
+          ...prev.rules,
+          [activeTab]: {
+            ...group,
+            regexPatterns: patterns,
+          },
+        },
+      };
+    });
+
+    if (isNew) {
+      messageApi.success(`已添加正则: /${pattern}/i`);
+    } else {
+      messageApi.info("该正则表达式已存在于规则库中");
+    }
+  };
+
+  // 填入手工编辑框微调
+  const handleUseInManual = (pattern: string) => {
+    setRegexInput(pattern);
+    setRegexModalTab("manual");
+    messageApi.info("已将正则填入手工编辑模式，您可自由微调");
+  };
+
 
   // 运行沙箱测试
   const runSandboxTest = () => {
@@ -793,18 +965,35 @@ export function NacosCleanerRulesPage() {
                       识别微信号引流、TG 群组链接、复杂同音变体
                     </Text>
                   </div>
-                  <Button
-                    size="small"
-                    type="dashed"
-                    icon={<PlusOutlined />}
-                    onClick={() => {
-                      setRegexInput("");
-                      setRegexEditIndex(null);
-                      setRegexModalVisible(true);
-                    }}
-                  >
-                    新增正则表达式
-                  </Button>
+                  <Space>
+                    <Button
+                      size="small"
+                      type="primary"
+                      ghost
+                      icon={<ThunderboltOutlined />}
+                      onClick={() => {
+                        setRegexInput("");
+                        setRegexEditIndex(null);
+                        setRegexModalTab("ai");
+                        setRegexModalVisible(true);
+                      }}
+                    >
+                      AI 推荐正则
+                    </Button>
+                    <Button
+                      size="small"
+                      type="dashed"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        setRegexInput("");
+                        setRegexEditIndex(null);
+                        setRegexModalTab("manual");
+                        setRegexModalVisible(true);
+                      }}
+                    >
+                      新增正则表达式
+                    </Button>
+                  </Space>
                 </div>
                 <Table
                   size="small"
@@ -1124,29 +1313,407 @@ export function NacosCleanerRulesPage() {
 
         {/* 正则新增/编辑 Modal */}
         <Modal
-          title={regexEditIndex !== null ? "编辑正则表达式" : "新增正则表达式"}
+          title={
+            regexEditIndex !== null ? (
+              "编辑正则表达式"
+            ) : (
+              <Space>
+                <ThunderboltOutlined style={{ color: "#1677ff" }} />
+                <span>新增正则表达式</span>
+                <Tag color="blue">{currentGroup?.name || activeTab}</Tag>
+              </Space>
+            )
+          }
           open={regexModalVisible}
-          onOk={handleSaveRegex}
+          width={regexEditIndex !== null ? 600 : 780}
           onCancel={() => {
             setRegexModalVisible(false);
             setRegexInput("");
             setRegexEditIndex(null);
+            setSelectedAiPatterns([]);
           }}
-          okText="保存正则"
-          cancelText="取消"
+          footer={
+            regexEditIndex !== null ? (
+              <Space>
+                <Button
+                  onClick={() => {
+                    setRegexModalVisible(false);
+                    setRegexInput("");
+                    setRegexEditIndex(null);
+                  }}
+                >
+                  取消
+                </Button>
+                <Button type="primary" onClick={handleSaveRegex}>
+                  保存修改
+                </Button>
+              </Space>
+            ) : regexModalTab === "ai" ? (
+              <Space>
+                <Button
+                  onClick={() => {
+                    setRegexModalVisible(false);
+                    setRegexInput("");
+                    setRegexEditIndex(null);
+                    setSelectedAiPatterns([]);
+                  }}
+                >
+                  取消
+                </Button>
+                {aiSuggestions.length > 0 ? (
+                  <Button
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    disabled={selectedAiPatterns.length === 0}
+                    onClick={handleSaveSelectedAiRegex}
+                  >
+                    保存选中的正则 ({selectedAiPatterns.length})
+                  </Button>
+                ) : (
+                  <Button
+                    type="primary"
+                    icon={<ThunderboltOutlined />}
+                    loading={aiGenerating}
+                    disabled={!aiSampleText.trim()}
+                    onClick={handleGenerateAiRegex}
+                  >
+                    AI 生成正则建议
+                  </Button>
+                )}
+              </Space>
+            ) : (
+              <Space>
+                <Button
+                  onClick={() => {
+                    setRegexModalVisible(false);
+                    setRegexInput("");
+                    setRegexEditIndex(null);
+                  }}
+                >
+                  取消
+                </Button>
+                <Button type="primary" onClick={handleSaveRegex}>
+                  保存正则
+                </Button>
+              </Space>
+            )
+          }
         >
-          <Form layout="vertical">
-            <Form.Item
-              label="正则表达式字符串 (系统自动应用 /i 忽略大小写标志)"
-              extra="请勿包含首尾的反斜杠 /，直接填写模式字符串，如：(?:加|微)[：:\s]*[a-zA-Z0-9_-]{5,20}"
-            >
-              <Input
-                placeholder="例如: (?:加|微)[：:\s]*[a-zA-Z0-9_-]{5,20}"
-                value={regexInput}
-                onChange={(e) => setRegexInput(e.target.value)}
+          {regexEditIndex !== null ? (
+            /* 编辑单条正则模式 */
+            <Form layout="vertical">
+              <Form.Item
+                label="正则表达式字符串 (系统自动应用 /i 忽略大小写标志)"
+                extra="请勿包含首尾的反斜杠 /，直接填写模式字符串，如：(?:加|微)[：:\s]*[a-zA-Z0-9_-]{5,20}"
+              >
+                <Input
+                  placeholder="例如: (?:加|微)[：:\s]*[a-zA-Z0-9_-]{5,20}"
+                  value={regexInput}
+                  onChange={(e) => setRegexInput(e.target.value)}
+                />
+              </Form.Item>
+            </Form>
+          ) : (
+            /* 新增正则：支持 AI 推荐生成与手工录入 */
+            <div>
+              <Tabs
+                activeKey={regexModalTab}
+                onChange={(k) => setRegexModalTab(k as "ai" | "manual")}
+                items={[
+                  {
+                    key: "ai",
+                    label: (
+                      <span>
+                        <ThunderboltOutlined style={{ color: "#faad14" }} />
+                        AI 智能生成建议 (推荐)
+                      </span>
+                    ),
+                    children: (
+                      <div>
+                        <Alert
+                          message="AI 辅助生成说明"
+                          description="直接粘贴推文违规引流、暗语或黄推话术样本，AI 将深度提炼引流句式、同音变体与联系方式特征，生成多条候选正则表达式供您勾选保存。"
+                          type="info"
+                          showIcon
+                          style={{ marginBottom: 14 }}
+                        />
+
+                        <div style={{ marginBottom: 10 }}>
+                          <Space wrap size={[6, 8]}>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              快捷话术样本：
+                            </Text>
+                            {AI_SAMPLE_PRESETS.map((preset, idx) => (
+                              <Tag
+                                key={idx}
+                                color="blue"
+                                style={{ cursor: "pointer", userSelect: "none" }}
+                                onClick={() => setAiSampleText(preset.text)}
+                              >
+                                {preset.label}
+                              </Tag>
+                            ))}
+                          </Space>
+                        </div>
+
+                        <div style={{ marginBottom: 12 }}>
+                          <Text strong style={{ display: "block", marginBottom: 6 }}>
+                            违规推文样本语句 / 引流话术：
+                          </Text>
+                          <TextArea
+                            rows={3}
+                            placeholder="在此粘贴你想拦截的推文垃圾评论、引流暗号或整句样本，例如：私信我看完整版无码合集福利，加微: abc_8888"
+                            value={aiSampleText}
+                            onChange={(e) => setAiSampleText(e.target.value)}
+                            maxLength={2000}
+                            showCount
+                          />
+                        </div>
+
+                        <Row gutter={12} align="middle" style={{ marginBottom: 16 }}>
+                          <Col flex="auto">
+                            <Input
+                              placeholder="选填补充要求，例如：重点匹配微信号变体、严格防误伤长文、针对TG群组等"
+                              value={aiNotes}
+                              onChange={(e) => setAiNotes(e.target.value)}
+                            />
+                          </Col>
+                          <Col>
+                            <Button
+                              type="primary"
+                              icon={<ThunderboltOutlined />}
+                              loading={aiGenerating}
+                              disabled={!aiSampleText.trim()}
+                              onClick={handleGenerateAiRegex}
+                            >
+                              AI 分析并生成
+                            </Button>
+                          </Col>
+                        </Row>
+
+                        {/* AI 建议列表展示 */}
+                        {aiSuggestions.length > 0 && (
+                          <div style={{ marginTop: 16 }}>
+                            <Divider style={{ margin: "14px 0" }} />
+
+                            {aiAnalysis && (
+                              <Alert
+                                message={
+                                  <Space>
+                                    <BulbOutlined style={{ color: "#faad14" }} />
+                                    <span>
+                                      <strong>特征分析：</strong>
+                                      {aiAnalysis}
+                                    </span>
+                                  </Space>
+                                }
+                                type="success"
+                                style={{ marginBottom: 14 }}
+                              />
+                            )}
+
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 10,
+                              }}
+                            >
+                              <Space>
+                                <Checkbox
+                                  indeterminate={
+                                    selectedAiPatterns.length > 0 &&
+                                    selectedAiPatterns.length < aiSuggestions.length
+                                  }
+                                  checked={
+                                    aiSuggestions.length > 0 &&
+                                    selectedAiPatterns.length === aiSuggestions.length
+                                  }
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedAiPatterns(aiSuggestions.map((s) => s.pattern));
+                                    } else {
+                                      setSelectedAiPatterns([]);
+                                    }
+                                  }}
+                                >
+                                  <strong>全选候选正则</strong>
+                                </Checkbox>
+                                <Text type="secondary" style={{ fontSize: 13 }}>
+                                  (已选 {selectedAiPatterns.length} / {aiSuggestions.length} 项)
+                                </Text>
+                              </Space>
+
+                              <Space>
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  onClick={() => {
+                                    const existing = new Set(currentGroup?.regexPatterns || []);
+                                    setSelectedAiPatterns(
+                                      aiSuggestions.map((s) => s.pattern).filter((p) => !existing.has(p))
+                                    );
+                                  }}
+                                >
+                                  仅选未入库项
+                                </Button>
+                              </Space>
+                            </div>
+
+                            <Space direction="vertical" style={{ width: "100%" }} size={12}>
+                              {aiSuggestions.map((sug, idx) => {
+                                const isSelected = selectedAiPatterns.includes(sug.pattern);
+                                const isAlreadyInGroup = (currentGroup?.regexPatterns || []).includes(sug.pattern);
+
+                                let matchedText = "";
+                                try {
+                                  const m = aiSampleText.match(new RegExp(sug.pattern, "i"));
+                                  if (m) matchedText = m[0];
+                                } catch (_) {}
+
+                                return (
+                                  <Card
+                                    key={idx}
+                                    size="small"
+                                    style={{
+                                      borderColor: isSelected ? "#1677ff" : "#d9d9d9",
+                                      backgroundColor: isSelected ? "#f0f7ff" : "#ffffff",
+                                      transition: "all 0.2s",
+                                    }}
+                                  >
+                                    <Row justify="space-between" align="top" gutter={[12, 8]}>
+                                      <Col flex="auto">
+                                        <Space align="center" wrap style={{ marginBottom: 6 }}>
+                                          <Checkbox
+                                            checked={isSelected}
+                                            onChange={(e) => {
+                                              const checked = e.target.checked;
+                                              setSelectedAiPatterns((prev) =>
+                                                checked
+                                                  ? [...prev, sug.pattern]
+                                                  : prev.filter((p) => p !== sug.pattern)
+                                              );
+                                            }}
+                                          >
+                                            <Text strong style={{ fontSize: 14 }}>
+                                              {sug.title}
+                                            </Text>
+                                          </Checkbox>
+                                          {sug.recommended && <Tag color="gold">⭐ 重点推荐</Tag>}
+                                          {sug.strictness === "precise" && <Tag color="blue">高精度</Tag>}
+                                          {sug.strictness === "balanced" && <Tag color="green">均衡模式</Tag>}
+                                          {sug.strictness === "broad" && <Tag color="orange">广谱拦截</Tag>}
+                                          {isAlreadyInGroup && <Tag color="default">已在规则库</Tag>}
+                                        </Space>
+
+                                        <div style={{ marginBottom: 8 }}>
+                                          <Space wrap>
+                                            <code
+                                              style={{
+                                                background: isSelected ? "#e6f4ff" : "#f5f5f5",
+                                                padding: "3px 8px",
+                                                borderRadius: 4,
+                                                fontFamily: "monospace",
+                                                fontSize: 13,
+                                                color: "#cf1322",
+                                                wordBreak: "break-all",
+                                              }}
+                                            >
+                                              /{sug.pattern}/i
+                                            </code>
+                                            <Tooltip title="复制正则表达式">
+                                              <Button
+                                                size="small"
+                                                type="text"
+                                                icon={<CopyOutlined />}
+                                                onClick={() => {
+                                                  navigator.clipboard?.writeText(sug.pattern);
+                                                  messageApi.success("已复制到剪贴板");
+                                                }}
+                                              />
+                                            </Tooltip>
+                                            {matchedText ? (
+                                              <Tag color="cyan">已命中样本片段: "{matchedText}"</Tag>
+                                            ) : (
+                                              <Tag color="default">未直接命中当前样本 (泛化规则)</Tag>
+                                            )}
+                                          </Space>
+                                        </div>
+
+                                        <Paragraph
+                                          type="secondary"
+                                          style={{ margin: 0, fontSize: 12, lineHeight: 1.5 }}
+                                        >
+                                          {sug.description}
+                                        </Paragraph>
+                                      </Col>
+
+                                      <Col>
+                                        <Space direction="vertical" align="end" size={4}>
+                                          <Button
+                                            size="small"
+                                            type="link"
+                                            onClick={() => handleUseInManual(sug.pattern)}
+                                          >
+                                            填入手工编辑
+                                          </Button>
+                                          {!isAlreadyInGroup && (
+                                            <Button
+                                              size="small"
+                                              type="link"
+                                              onClick={() => handleAddSingleAiRegex(sug.pattern)}
+                                            >
+                                              单独添加
+                                            </Button>
+                                          )}
+                                        </Space>
+                                      </Col>
+                                    </Row>
+                                  </Card>
+                                );
+                              })}
+                            </Space>
+                          </div>
+                        )}
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "manual",
+                    label: <span>✍️ 手工输入模式</span>,
+                    children: (
+                      <Form layout="vertical" style={{ marginTop: 8 }}>
+                        <Form.Item
+                          label="正则表达式模式字符串 (系统自动应用 /i 忽略大小写标志)"
+                          extra="请勿包含首尾的反斜杠 /，直接填写模式字符串，如：(?:加|微)[：:\s]*[a-zA-Z0-9_-]{5,20}"
+                        >
+                          <Input
+                            placeholder="例如: (?:加|微)[：:\s]*[a-zA-Z0-9_-]{5,20}"
+                            value={regexInput}
+                            onChange={(e) => setRegexInput(e.target.value)}
+                          />
+                        </Form.Item>
+                        {regexInput.trim() && (
+                          <div style={{ marginTop: 8 }}>
+                            <Text type="secondary">语法预览：</Text>
+                            {(() => {
+                              try {
+                                new RegExp(regexInput.trim(), "i");
+                                return <Tag color="green">语法合法 /{regexInput.trim()}/i</Tag>;
+                              } catch (err: any) {
+                                return <Tag color="red">语法错误: {err.message}</Tag>;
+                              }
+                            })()}
+                          </div>
+                        )}
+                      </Form>
+                    ),
+                  },
+                ]}
               />
-            </Form.Item>
-          </Form>
+            </div>
+          )}
         </Modal>
 
         {/* 发布上线确认 Modal */}

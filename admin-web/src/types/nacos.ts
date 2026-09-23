@@ -405,3 +405,22 @@ export interface CleanerRemoteConfig {
   };
   globalExemptHandles: string[];
 }
+
+export interface CleanerAiRegexSuggestion {
+  pattern: string;
+  title: string;
+  description: string;
+  matchedSample?: string;
+  strictness: "precise" | "balanced" | "broad";
+  recommended: boolean;
+}
+
+export interface CleanerAiRegexSuggestResponse {
+  success: boolean;
+  data?: {
+    analysis?: string;
+    suggestions: CleanerAiRegexSuggestion[];
+    source?: string;
+  };
+  error?: string;
+}

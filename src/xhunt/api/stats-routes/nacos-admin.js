@@ -7,6 +7,7 @@ const {
 const { logAdminAction } = require("./shared");
 const { nacosRequest } = require("../../services/nacosConfigClient");
 const { XhuntNacosConfigSnapshot } = require("../../../models/postgres-start");
+const { suggestCleanerRegex } = require("../../services/cleanerAiRegexService");
 const router = express.Router();
 const DEFAULT_GROUP = "DEFAULT_GROUP";
 const DEFAULT_TYPE = "json";
@@ -652,6 +653,45 @@ router.post(
         message: error.message || "failed",
       }).catch(() => {});
       res.status(error.status || 500).json({ success: false, error: error.message || "发布配置失败", required: error.required });
+    }
+  }
+);
+
+
+/**
+ * POST /nacos/admin/cleaner/ai-suggest-regex
+ * 净化规则 - AI 正则表达式智能推荐
+ */
+router.post(
+  "/nacos/admin/cleaner/ai-suggest-regex",
+  adminAuth,
+  express.json(),
+  async (req, res) => {
+    try {
+      assertConfigPermission(req, "xhunt_cleaner_rules");
+      const { text, groupKey, groupName, notes } = req.body || {};
+      if (!text || typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ success: false, error: "请输入待分析的违规样本语句或引流话术" });
+      }
+
+      const result = await suggestCleanerRegex({
+        text: text.trim().slice(0, 3000),
+        groupKey,
+        groupName,
+        notes: typeof notes === "string" ? notes.slice(0, 500) : "",
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      console.error("[nacos-admin/cleaner/ai-suggest-regex] error:", error);
+      res.status(error.status || 500).json({
+        success: false,
+        error: error.message || "生成建议正则失败",
+        required: error.required,
+      });
     }
   }
 );
