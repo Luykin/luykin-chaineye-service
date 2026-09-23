@@ -1649,5 +1649,6 @@ router.localizeErrorMessage = localizeErrorMessage;
 router.concurrentUserLimit = concurrentUserLimit;
 router.CONCURRENT_LIMIT_CONFIG = CONCURRENT_LIMIT_CONFIG;
 router.atomicRefundQuota = atomicRefundQuota;
+router.PRO_API_CONFIG = PRO_API_CONFIG;
 
 module.exports = router;

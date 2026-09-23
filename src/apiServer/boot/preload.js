@@ -52,6 +52,7 @@ const MODULES_TO_PRELOAD = [
   './admin/api/reviews',
   './admin/api/tampermonkey',
   './admin/api/kol-marketing',
+  './admin/api/api-debugger',
 
   // 币安广场
   './binance-square/api/binance-square',

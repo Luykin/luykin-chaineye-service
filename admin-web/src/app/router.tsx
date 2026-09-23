@@ -49,6 +49,7 @@ import { BusinessCollaborationPage } from "@/pages/BusinessCollaborationPage";
 import { HotVotePage } from "@/pages/HotVotePage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { TwitterIdHandlerPage } from "@/pages/TwitterIdHandlerPage";
+import { ApiDebuggerPage } from "@/pages/ApiDebuggerPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
 const implementedRouteElements: Record<string, ReactNode> = {
@@ -97,6 +98,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "business-collaboration": <BusinessCollaborationPage />,
   "hot-vote": <HotVotePage />,
   "twitter-id-handler": <TwitterIdHandlerPage />,
+  "api-debugger": <ApiDebuggerPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {

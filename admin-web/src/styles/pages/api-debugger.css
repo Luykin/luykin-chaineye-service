@@ -1,0 +1,339 @@
+.api-debugger-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* 顶部概览 Banner */
+.api-debugger-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.05) 100%);
+  border: 1px solid var(--admin-border, #e2e8f0);
+  border-radius: 12px;
+}
+
+.api-debugger-hero-content {
+  max-width: 800px;
+}
+
+.api-debugger-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--admin-primary, #1890ff);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.api-debugger-hero-title {
+  margin: 0 0 6px !important;
+  font-size: 22px !important;
+  color: var(--admin-text, #0f172a);
+}
+
+.api-debugger-hero-desc {
+  margin: 0 !important;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--admin-text-muted, #64748b);
+}
+
+.api-debugger-hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 顶部工具栏与接口快捷跳转 */
+.api-debugger-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  background: var(--admin-surface, #ffffff);
+  border: 1px solid var(--admin-border, #e2e8f0);
+  border-radius: 10px;
+}
+
+.api-debugger-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.api-debugger-nav-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--admin-text-muted, #64748b);
+  margin-right: 4px;
+}
+
+/* 接口区域列表 */
+.api-debugger-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.api-debugger-endpoint-card {
+  border: 1px solid var(--admin-border, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  background: var(--admin-surface, #ffffff);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.api-debugger-endpoint-card:hover {
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.07);
+}
+
+/* 接口卡片头部 */
+.api-debugger-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--admin-border, #e2e8f0);
+}
+
+.api-debugger-header-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.api-debugger-method-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: none;
+}
+
+.api-debugger-method-get {
+  background: #e6f7ff;
+  color: #0050b3;
+}
+
+.api-debugger-method-post {
+  background: #f6ffed;
+  color: #237804;
+}
+
+.api-debugger-endpoint-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--admin-text, #0f172a);
+}
+
+.api-debugger-endpoint-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--admin-text-muted, #64748b);
+  background: #edf2f7;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* 接口说明与固定参数提示 */
+.api-debugger-card-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.api-debugger-desc {
+  font-size: 13px;
+  color: var(--admin-text-muted, #64748b);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.api-debugger-preset-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #fafafa;
+  border: 1px dashed var(--admin-border, #d9d9d9);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.api-debugger-preset-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: #595959;
+}
+
+.api-debugger-preset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 主调试工作区：左右双栏网格 */
+.api-debugger-workbench {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 992px) {
+  .api-debugger-workbench {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 左侧参数区 */
+.api-debugger-params-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid var(--admin-border, #f0f0f0);
+  border-radius: 8px;
+}
+
+.api-debugger-panel-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--admin-text, #1f2937);
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.api-debugger-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.api-debugger-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.api-debugger-label-required {
+  color: #ff4d4f;
+  margin-left: 2px;
+}
+
+.api-debugger-field-hint {
+  font-size: 11px;
+  color: #8c8c8c;
+  line-height: 1.4;
+}
+
+.api-debugger-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 右侧响应结果区 */
+.api-debugger-response-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  background: #1e1e1e;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+.api-debugger-response-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3d3d3d;
+}
+
+.api-debugger-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.api-debugger-duration {
+  font-size: 12px;
+  color: #a0aec0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.api-debugger-response-body {
+  position: relative;
+  flex: 1;
+  padding: 14px 16px;
+  min-height: 220px;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.api-debugger-pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.api-debugger-empty-response {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #718096;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.api-debugger-loading-response {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #90cdf4;
+  font-size: 13px;
+  gap: 12px;
+}

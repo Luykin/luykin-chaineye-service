@@ -6,6 +6,7 @@ const adminKolMarketingRoutes = require("../../admin/api/kol-marketing");
 const adminBusinessCollaborationRoutes = require("../../admin/api/business-collaboration");
 const adminSocialListeningRoutes = require("../../xhunt/social-listening/api/admin");
 const binanceSquareRoutes = require("../../binance-square/api/binance-square");
+const adminApiDebuggerRoutes = require("../../admin/api/api-debugger");
 const xHuntHotVoteAdminRoutes = require("../../xhunt/api/hot-vote-admin");
 const { adminAuth, requirePermission } = require("../../admin/middleware/adminAuth");
 
@@ -39,6 +40,9 @@ function registerAdminRoutes(app) {
 
   // 管理后台 - 币安广场
   app.use("/api/admin/binance-square", adminAuth, binanceSquareRoutes.router);
+
+  // 管理后台 - 接口调试工具 API
+  app.use("/api/admin/api-debugger", adminAuth, requirePermission("api-debugger"), adminApiDebuggerRoutes);
 }
 
 module.exports = {
