@@ -4,7 +4,7 @@ const { adminAuth, requirePermission } = require("../../../admin/middleware/admi
 const { DATA_SERVICE_BASE_URL } = require("../../constants/dataService");
 
 const router = express.Router();
-const LOOKUP_PERMISSION = "twitter-id-handler";
+const LOOKUP_PERMISSION = ["twitter-id-handler", "api-debugger"];
 const TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
 
 function normalizeHandle(value) {
