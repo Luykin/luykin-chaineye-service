@@ -760,14 +760,20 @@ router.post(
       const rawComment = req.body.comment || req.body.content || req.body.commentContent;
       const cleanComment = rawComment ? sanitizePlainText(rawComment, 200).trim() : "";
 
-      // 用户投票时若附带了留言，调用 AI 大模型进行安全审核（不能是反对政治、暴力、色情、辱骂或极端言论）
+      // 用户投票时若附带了留言，调用 AI 大模型进行安全审核（结合议题与选项上下文，主要限制政治、色情、引流，放宽正常观点讨论）
       if (cleanComment) {
-        const audit = await auditCommentContentWithAI(cleanComment);
+        const selectedOption = options.find((opt) => opt.id === optionId);
+        const topicTitle = topic.title || topic.titleI18n?.zh || "";
+        const optionName = selectedOption?.name || selectedOption?.nameI18n?.zh || "";
+        const audit = await auditCommentContentWithAI(cleanComment, {
+          topicTitle,
+          optionName,
+        });
         if (!audit.passed) {
           return res.status(400).json({
             success: false,
             error: "COMMENT_CONTENT_VIOLATION",
-            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
+            message: audit.reason || "留言内容未通过安全合规审核（涉政/色情/违规引流），请文明发言",
           });
         }
       }
@@ -950,14 +956,20 @@ router.put(
       const rawRevoteComment = req.body.comment || req.body.content || req.body.commentContent;
       const cleanRevoteComment = rawRevoteComment ? sanitizePlainText(rawRevoteComment, 200).trim() : "";
 
-      // 用户改票时若附带了留言，调用 AI 大模型进行安全审核（不能是反对政治、暴力、色情、辱骂或极端言论）
+      // 用户改票时若附带了留言，调用 AI 大模型进行安全审核（结合议题与选项上下文，主要限制政治、色情、引流，放宽正常观点讨论）
       if (cleanRevoteComment) {
-        const audit = await auditCommentContentWithAI(cleanRevoteComment);
+        const selectedOption = options.find((opt) => opt.id === newOptionId);
+        const topicTitle = topic.title || topic.titleI18n?.zh || "";
+        const optionName = selectedOption?.name || selectedOption?.nameI18n?.zh || "";
+        const audit = await auditCommentContentWithAI(cleanRevoteComment, {
+          topicTitle,
+          optionName,
+        });
         if (!audit.passed) {
           return res.status(400).json({
             success: false,
             error: "COMMENT_CONTENT_VIOLATION",
-            message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
+            message: audit.reason || "留言内容未通过安全合规审核（涉政/色情/违规引流），请文明发言",
           });
         }
       }
@@ -1402,13 +1414,24 @@ router.post(
         }
       }
 
-      // AI 大模型安全审核（包含内置敏感词与钓鱼预检）
-      const audit = await auditCommentContentWithAI(cleanContent);
+      // AI 大模型安全审核（包含内置敏感词与钓鱼预检，结合议题与用户投票上下文宽松审核）
+      const topicTitle = topic.title || topic.titleI18n?.zh || "";
+      const userVote = await XHuntHotVoteRecord.findOne({
+        where: { topicId, twitterId },
+      });
+      const options = Array.isArray(topic.options) ? topic.options : [];
+      const userVotedOption = userVote ? options.find((opt) => opt.id === userVote.optionId) : null;
+      const optionName = userVotedOption?.name || userVotedOption?.nameI18n?.zh || "";
+
+      const audit = await auditCommentContentWithAI(cleanContent, {
+        topicTitle,
+        optionName,
+      });
       if (!audit.passed) {
         return res.status(400).json({
           success: false,
           error: "COMMENT_CONTENT_VIOLATION",
-          message: audit.reason || "留言内容未通过安全合规审核（涉政/暴力/色情/辱骂/极端言论或违规引流），请文明发言",
+          message: audit.reason || "留言内容未通过安全合规审核（涉政/色情/违规引流），请文明发言",
         });
       }
 
