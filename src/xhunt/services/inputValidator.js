@@ -137,6 +137,73 @@ function sanitizePlainText(text, maxLength = 255) {
 	return xss(normalized, PLAIN_TEXT_XSS_OPTIONS);
 }
 
+/**
+ * 严格过滤纯文本留言评论（彻底防范 XSS 攻击，禁止存储和返回任何 HTML/富文本标签）
+ * 存储入库与接口返回时均必须调用，确保全链路只传输与展示安全的纯文本。
+ *
+ * 1. 移除非打印控制字符与空字符
+ * 2. 解码常见实体，防止以实体编码形式混淆绕过标签检测（如 &lt;script&gt;）
+ * 3. 递归剥离 HTML 注释与 CDATA
+ * 4. 递归剥离所有危险块级标签（含其内部脚本代码和样式）
+ * 5. 剥离所有 HTML/XML 标签（包含未闭合残片）
+ * 6. 清理 javascript:, vbscript:, data: 等危险伪协议
+ * 7. 清理独立事件属性残片（如 onclick=...）
+ * 8. 规范化空格并截断到指定长度（默认 200 字符）
+ *
+ * @param {unknown} input 待过滤的留言文本
+ * @param {number} [maxLength=200] 最大长度
+ * @returns {string} 纯文本字符串
+ */
+function sanitizeCommentPlainText(input, maxLength = 200) {
+	if (input == null) return '';
+	let str = String(input);
+
+	// 1. 移除非打印控制字符与空字符 (\0, \x01-\x08, \x0B, \x0C, \x0E-\x1F, \x7F)
+	str = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+	// 2. 解码常见实体，防止以实体编码形式混淆绕过标签检测（如 &lt;script&gt;）
+	str = str
+		.replace(/&amp;/gi, '&')
+		.replace(/&lt;/gi, '<')
+		.replace(/&gt;/gi, '>')
+		.replace(/&quot;/gi, '"')
+		.replace(/&#39;/gi, "'")
+		.replace(/&#x([0-9a-f]{1,6});/gi, (_, hex) => {
+			try { return String.fromCodePoint(parseInt(hex, 16)); } catch { return ''; }
+		})
+		.replace(/&#([0-9]{1,7});/g, (_, dec) => {
+			try { return String.fromCodePoint(parseInt(dec, 10)); } catch { return ''; }
+		});
+
+	// 3. 递归剥离 HTML 注释与 CDATA
+	str = str.replace(/<!--[\s\S]*?-->/g, '');
+	str = str.replace(/<!--[\s\S]*$/g, '');
+	str = str.replace(/<!\[CDATA\[[\s\S]*?\]\]>/gi, '');
+
+	// 4. 递归剥离所有危险块级标签（含其内部脚本代码和样式）与普通 HTML 标签
+	let prev;
+	do {
+		prev = str;
+		str = str.replace(/<\s*(script|style|iframe|object|embed|svg|math|textarea|noembed|noframes|form|input|button|select|video|audio|marquee|details|dialog)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
+		str = str.replace(/<\s*(script|style|iframe|object|embed|svg|math|textarea|noembed|noframes|form|input|button|select|video|audio|marquee|details|dialog)\b[^>]*>/gi, '');
+		str = str.replace(/<\/?([a-zA-Z][a-zA-Z0-9_-]*)[^>]*>?/gi, '');
+		str = str.replace(/<[a-zA-Z][^>]*$/g, '');
+	} while (str !== prev && /<[a-zA-Z\/]/i.test(str));
+
+	// 5. 清除残留的伪协议
+	str = str.replace(/(?:javascript|vbscript|data):[^\s]*/gi, '');
+
+	// 6. 清除孤立的事件属性模式
+	str = str.replace(/\bon[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+
+	// 7. 规范化空格并截断
+	str = str.replace(/\s+/g, ' ').trim();
+	if (maxLength && str.length > maxLength) {
+		str = str.substring(0, maxLength).trim();
+	}
+	return str;
+}
+
 function isSafeHttpUrl(value) {
 	if (typeof value !== 'string') return false;
 	const trimmed = value.trim();
@@ -270,6 +337,7 @@ module.exports = {
 	sanitizeNote,
 	sanitizeComment,
 	sanitizePlainText,
+	sanitizeCommentPlainText,
 	sanitizeSafeUrl,
 	sanitizeRichTextHtml,
 	sanitizeJsonStringsDeep,

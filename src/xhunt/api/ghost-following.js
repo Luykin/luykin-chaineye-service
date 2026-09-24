@@ -246,11 +246,8 @@ const CRAWLER_QUOTA_CONFIG = {
   url:
     process.env.GHOST_FOLLOWING_CRAWLER_QUOTA_URL ||
     "http://172.31.0.2:3001/api/crawler/quota-current?endpoint=user_tweets",
-  apiKey:
-    process.env.GHOST_FOLLOWING_CRAWLER_QUOTA_API_KEY ||
-    PRO_API_CONFIG.apiKey,
-  minRemaining:
-    parseInt(process.env.GHOST_FOLLOWING_CRAWLER_MIN_QUOTA, 10) || 200,
+  apiKey: PRO_API_CONFIG.apiKey,
+  minRemaining: 5000,
   timeoutMs: 3000,
   defaultCacheSeconds: 3,
 };

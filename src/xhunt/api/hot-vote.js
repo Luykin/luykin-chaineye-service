@@ -15,7 +15,7 @@ const {
   XHuntUser,
   pgInstance,
 } = require("../../models/postgres-start");
-const { sanitizePlainText, sanitizeSafeUrl } = require("../services/inputValidator");
+const { sanitizePlainText, sanitizeSafeUrl, sanitizeCommentPlainText } = require("../services/inputValidator");
 const { containsSensitiveWord } = require("../services/sensitiveWordFilter");
 const { auditCommentContentWithAI } = require("../services/hotVoteModerationService");
 const {
@@ -208,7 +208,7 @@ function formatCommentResponse(comment, isAnonymous, lang = "zh") {
     userName: isAnon ? maskTwitterHandle(comment.userName) : comment.userName,
     displayName: isAnon ? (lang === "en" ? "Anonymous User" : "匿名用户") : comment.displayName,
     userAvatar: isAnon ? getAnonymousAvatar(comment.id) : (comment.userAvatar || ""),
-    content: comment.content,
+    content: sanitizeCommentPlainText(comment.content, 200),
     isAnonymous: isAnon,
     isSelf: true,
     createdAt: comment.createdAt,
@@ -229,6 +229,7 @@ async function saveOrUpdateUserComment({
   redisClient = null,
 }) {
   const isAnon = Boolean(isAnonymous);
+  const safeContent = sanitizeCommentPlainText(content, 200);
   const now = new Date();
 
   // 查询当前用户在该议题下的所有留言记录（按 createdAt 降序取最新的一条）
@@ -244,7 +245,7 @@ async function saveOrUpdateUserComment({
 
   if (existingComments && existingComments.length > 0) {
     targetComment = existingComments[0];
-    targetComment.content = content;
+    targetComment.content = safeContent;
     targetComment.isAnonymous = isAnon;
     targetComment.isDeleted = false;
     targetComment.createdAt = now;
@@ -274,7 +275,7 @@ async function saveOrUpdateUserComment({
         userName: userInfo.userName || "",
         displayName: userInfo.displayName || null,
         userAvatar: userInfo.userAvatar || "",
-        content,
+        content: safeContent,
         isAnonymous: isAnon,
         isDeleted: false,
       });
@@ -285,7 +286,7 @@ async function saveOrUpdateUserComment({
           where: { topicId, twitterId },
         });
         if (targetComment) {
-          targetComment.content = content;
+          targetComment.content = safeContent;
           targetComment.isAnonymous = isAnon;
           targetComment.isDeleted = false;
           targetComment.createdAt = now;
@@ -616,7 +617,7 @@ router.get(
         });
         for (const c of myComments) {
           if (!userLastCommentByTopicId[c.topicId]) {
-            userLastCommentByTopicId[c.topicId] = c.content;
+            userLastCommentByTopicId[c.topicId] = sanitizeCommentPlainText(c.content, 200);
           }
         }
       }
@@ -758,7 +759,7 @@ router.post(
 
       // 提取附带留言观点
       const rawComment = req.body.comment || req.body.content || req.body.commentContent;
-      const cleanComment = rawComment ? sanitizePlainText(rawComment, 200).trim() : "";
+      const cleanComment = rawComment ? sanitizeCommentPlainText(rawComment, 200) : "";
 
       // 用户投票时若附带了留言，调用 AI 大模型进行安全审核（结合议题与选项上下文，主要限制政治、色情、引流，放宽正常观点讨论）
       if (cleanComment) {
@@ -954,7 +955,7 @@ router.put(
 
       // 提取附带改票留言观点
       const rawRevoteComment = req.body.comment || req.body.content || req.body.commentContent;
-      const cleanRevoteComment = rawRevoteComment ? sanitizePlainText(rawRevoteComment, 200).trim() : "";
+      const cleanRevoteComment = rawRevoteComment ? sanitizeCommentPlainText(rawRevoteComment, 200) : "";
 
       // 用户改票时若附带了留言，调用 AI 大模型进行安全审核（结合议题与选项上下文，主要限制政治、色情、引流，放宽正常观点讨论）
       if (cleanRevoteComment) {
@@ -1261,7 +1262,7 @@ router.get(
             userName: maskTwitterHandle(c.userName),
             displayName: lang === "en" ? "Anonymous User" : "匿名用户",
             userAvatar: getAnonymousAvatar(c.id),
-            content: c.content,
+            content: sanitizeCommentPlainText(c.content, 200),
             isAnonymous: true,
             isSelf,
             createdAt: c.createdAt,
@@ -1273,7 +1274,7 @@ router.get(
             userName: c.userName,
             displayName: c.displayName,
             userAvatar: c.userAvatar || "", // 真实头像；若无头像则留空，绝不替换为匿名彩色剪影！
-            content: c.content,
+            content: sanitizeCommentPlainText(c.content, 200),
             isAnonymous: false,
             isSelf,
             createdAt: c.createdAt,
@@ -1332,7 +1333,8 @@ router.post(
   async (req, res) => {
     try {
       const { topicId } = req.params;
-      const cleanContent = sanitizePlainText(req.body.content, 200);
+      const rawContent = req.body.content || req.body.comment || req.body.commentContent;
+      const cleanContent = sanitizeCommentPlainText(rawContent, 200);
 
       if (!cleanContent || cleanContent.trim().length === 0) {
         return res.status(400).json({ success: false, error: "留言内容不能为空" });

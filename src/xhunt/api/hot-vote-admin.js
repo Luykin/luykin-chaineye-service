@@ -12,6 +12,7 @@ const {
 const {
   sanitizeVoteTitleHtml,
   sanitizePlainText,
+  sanitizeCommentPlainText,
   sanitizeSafeUrl,
 } = require("../services/inputValidator");
 const {
@@ -751,7 +752,10 @@ router.get(
       for (const r of rawRows) {
         if (r.twitterId && seenTwIds.has(r.twitterId)) continue;
         if (r.twitterId) seenTwIds.add(r.twitterId);
-        dedupedRows.push(r);
+        dedupedRows.push({
+          ...(typeof r.toJSON === "function" ? r.toJSON() : r),
+          content: sanitizeCommentPlainText(r.content, 200),
+        });
       }
 
       const responseData = {
@@ -946,7 +950,7 @@ router.get(
           revoteCount: r.revoteCount,
           isAnonymous: isAnon,
           clientIp: r.clientIp,
-          commentContent: comment ? comment.content : null,
+          commentContent: comment ? sanitizeCommentPlainText(comment.content, 200) : null,
           commentDeleted: comment ? Boolean(comment.isDeleted) : false,
           commentId: comment ? comment.id : null,
           createdAt: r.createdAt,
