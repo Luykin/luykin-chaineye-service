@@ -46,12 +46,23 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "上一次支持的选项ID",
       },
-      revoteCount: {
+     revoteCount: {
+       type: DataTypes.INTEGER,
+       defaultValue: 0,
+       comment: "已修改次数",
+     },
+      voteWeight: {
         type: DataTypes.INTEGER,
-        defaultValue: 0,
-        comment: "已修改次数",
+        defaultValue: 1,
+        allowNull: false,
+        comment: "投票加权分值 (根据投票时刻XHunt排名决定)",
       },
-      isAnonymous: {
+      voterRankSnapshot: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: "投票瞬间用户的 XHunt 排名快照",
+      },
+     isAnonymous: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
         allowNull: false,

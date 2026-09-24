@@ -1095,8 +1095,8 @@ export function HotVotePage() {
                             strokeColor={opt.isGua ? "#94a3b8" : OPTION_PALETTE[optIdx % OPTION_PALETTE.length]}
                             style={{ flex: 1, margin: 0 }}
                           />
-                          <span style={{ width: 80, fontSize: 12, color: "#8c8c8c", textAlign: "right" }}>
-                            {opt.count} 票 ({opt.percentage})
+                          <span style={{ minWidth: 110, fontSize: 12, color: "#8c8c8c", textAlign: "right" }}>
+                            {opt.count} 人 {opt.weight !== undefined ? `(${opt.weight} 权重 · ${opt.percentage})` : `(${opt.percentage})`}
                           </span>
                           {isSuperAdmin && activeDetailTopic && (
                             <Popconfirm
@@ -1214,6 +1214,23 @@ export function HotVotePage() {
                       title: "修改次数",
                       dataIndex: "revoteCount",
                       width: 80,
+                    },
+                    {
+                      title: "投票权重",
+                      dataIndex: "voteWeight",
+                      width: 95,
+                      render: (val: number, record: HotVoteAdminVoteRecord) => (
+                        <Space size={4}>
+                          <Tag color={(val || 1) >= 10 ? "gold" : (val || 1) >= 6 ? "purple" : (val || 1) >= 4 ? "blue" : "default"}>
+                            {val || 1}
+                          </Tag>
+                          {record.voterRankSnapshot ? (
+                            <Typography.Text type="secondary" style={{ fontSize: 10 }}>
+                              #{record.voterRankSnapshot}
+                            </Typography.Text>
+                          ) : null}
+                        </Space>
+                      ),
                     },
                     {
                       title: "附带留言",

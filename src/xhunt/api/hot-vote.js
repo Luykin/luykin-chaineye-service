@@ -24,6 +24,10 @@ const {
   getCachedTopicCommentsPage,
 } = require("../utils/hot-vote-cache");
 const { queryTwitterProfile } = require("./stats-routes/twitter-id-handler-lookup");
+const {
+  resolveVoterRankAndWeight,
+  calculateVoteWeight,
+} = require("../utils/hot-vote-weight");
 
 const router = express.Router();
 /**
@@ -422,20 +426,29 @@ function localizeVoteOptions(optionsList, lang) {
 async function getTopicVoteDistribution(topicId, optionsList, redisClient) {
   const cacheKey = `hotvote:counts:${topicId}`;
   let participants = 0;
+  let totalWeight = 0;
   let cacheHit = false;
   const countsMap = {};
+  const weightsMap = {};
 
   try {
     if (redisClient?.hGetAll) {
       const cached = await redisClient.hGetAll(cacheKey);
-      if (cached && Object.keys(cached).length > 0 && cached.participants !== undefined) {
+      if (
+        cached &&
+        Object.keys(cached).length > 0 &&
+        cached.participants !== undefined &&
+        cached.total_weight !== undefined
+      ) {
         participants = parseInt(cached.participants || "0", 10);
+        totalWeight = parseInt(cached.total_weight || "0", 10);
         let allOptionsPresent = true;
         for (const opt of optionsList) {
-          if (cached[`opt:${opt.id}`] === undefined) {
+          if (cached[`opt_weight:${opt.id}`] === undefined) {
             allOptionsPresent = false;
             break;
           }
+          weightsMap[opt.id] = parseInt(cached[`opt_weight:${opt.id}`] || "0", 10);
           countsMap[opt.id] = parseInt(cached[`opt:${opt.id}`] || "0", 10);
         }
         if (allOptionsPresent) {
@@ -447,28 +460,45 @@ async function getTopicVoteDistribution(topicId, optionsList, redisClient) {
     console.warn("[HotVote] Redis read error:", err.message);
   }
 
-  // If cache miss, calculate from DB and populate Redis
+  // If cache miss or legacy cache without weights, calculate from DB and populate Redis
   if (!cacheHit) {
     const totalCount = await XHuntHotVoteRecord.count({ where: { topicId } });
     participants = totalCount;
 
-    const groupCounts = await XHuntHotVoteRecord.findAll({
+    const groupStats = await XHuntHotVoteRecord.findAll({
       where: { topicId },
-      attributes: ["optionId", [fn("COUNT", col("id")), "count"]],
+      attributes: [
+        "optionId",
+        [fn("COUNT", col("id")), "count"],
+        [fn("SUM", fn("COALESCE", col("voteWeight"), 1)), "totalWeight"],
+      ],
       group: ["optionId"],
       raw: true,
     });
 
-    const dbMap = {};
-    for (const g of groupCounts) {
-      dbMap[g.optionId] = parseInt(g.count || "0", 10);
+    const dbCountsMap = {};
+    const dbWeightsMap = {};
+    let dbTotalWeight = 0;
+    for (const g of groupStats) {
+      const w = parseInt(g.totalWeight || "0", 10);
+      const c = parseInt(g.count || "0", 10);
+      dbCountsMap[g.optionId] = c;
+      dbWeightsMap[g.optionId] = w;
+      dbTotalWeight += w;
     }
 
-    const redisPayload = { participants: String(participants) };
+    totalWeight = dbTotalWeight;
+    const redisPayload = {
+      participants: String(participants),
+      total_weight: String(totalWeight),
+    };
     for (const opt of optionsList) {
-      const count = dbMap[opt.id] || 0;
+      const count = dbCountsMap[opt.id] || 0;
+      const weight = dbWeightsMap[opt.id] || 0;
       countsMap[opt.id] = count;
+      weightsMap[opt.id] = weight;
       redisPayload[`opt:${opt.id}`] = String(count);
+      redisPayload[`opt_weight:${opt.id}`] = String(weight);
     }
 
     try {
@@ -484,16 +514,19 @@ async function getTopicVoteDistribution(topicId, optionsList, redisClient) {
   const distribution = {};
   for (const opt of optionsList) {
     const count = countsMap[opt.id] || 0;
+    const weight = weightsMap[opt.id] || 0;
     const percentage =
-      participants > 0 ? `${Math.round((count / participants) * 100)}%` : "0%";
+      totalWeight > 0 ? `${Math.round((weight / totalWeight) * 100)}%` : "0%";
     distribution[opt.id] = {
       count,
+      weight,
       percentage,
     };
   }
 
   return {
     totalParticipants: participants,
+    totalWeight,
     distribution,
   };
 }
@@ -784,6 +817,13 @@ router.post(
       const effectiveUserId = userInfo.effectiveUserId;
       const safeClientIp = req.ip ? String(req.ip).substring(0, 64) : null;
 
+      // 解析瞬时 XHunt 排名与投票权重
+      const { rank: voterRank, weight: voterWeight } = await resolveVoterRankAndWeight({
+        twitterId,
+        effectiveUserId,
+        redisClient: req.redisClient,
+      });
+
       // 事务写入并防重
       let created = false;
       await pgInstance.transaction(async (t) => {
@@ -804,6 +844,8 @@ router.post(
             xHuntUserId: effectiveUserId,
             optionId,
             revoteCount: 0,
+            voteWeight: voterWeight,
+            voterRankSnapshot: voterRank,
             isAnonymous,
             clientIp: safeClientIp,
           },
@@ -848,7 +890,9 @@ router.post(
             : false;
           if (cacheExists && req.redisClient.hIncrBy) {
             await req.redisClient.hIncrBy(cacheKey, "participants", 1);
+            await req.redisClient.hIncrBy(cacheKey, "total_weight", voterWeight);
             await req.redisClient.hIncrBy(cacheKey, `opt:${optionId}`, 1);
+            await req.redisClient.hIncrBy(cacheKey, `opt_weight:${optionId}`, voterWeight);
             await ensureVoteCacheTtl(req.redisClient, cacheKey);
           }
         } catch (e) {
@@ -982,6 +1026,7 @@ router.put(
       let oldOptionId = null;
       let newRevoteCount = 0;
       let isRecordAnonymous = false;
+      let appliedVoteWeight = 1;
 
       await pgInstance.transaction(async (t) => {
         const record = await XHuntHotVoteRecord.findOne({
@@ -1003,9 +1048,11 @@ router.put(
         }
 
         oldOptionId = record.optionId;
+        appliedVoteWeight = Number(record.voteWeight || 1);
         record.previousOptionId = oldOptionId;
         record.optionId = newOptionId;
         record.revoteCount += 1;
+        // 方案 A：继承历史瞬时投票权重快照，权重保持守恒
         if (req.body.isAnonymous !== undefined) {
           record.isAnonymous = Boolean(req.body.isAnonymous);
         }
@@ -1054,7 +1101,7 @@ router.put(
         }
       }
 
-      // 原子更新 Redis 缓存（旧选项 -1，新选项 +1；仅在缓存存在时自增，防止产生负数与脏数据）
+      // 原子更新 Redis 缓存（旧选项 -1/-weight，新选项 +1/+weight；仅在缓存存在时自增，防止产生负数与脏数据）
       const cacheKey = `hotvote:counts:${topicId}`;
       if (req.redisClient && oldOptionId) {
         try {
@@ -1064,6 +1111,8 @@ router.put(
           if (cacheExists && req.redisClient.hIncrBy) {
             await req.redisClient.hIncrBy(cacheKey, `opt:${oldOptionId}`, -1);
             await req.redisClient.hIncrBy(cacheKey, `opt:${newOptionId}`, 1);
+            await req.redisClient.hIncrBy(cacheKey, `opt_weight:${oldOptionId}`, -appliedVoteWeight);
+            await req.redisClient.hIncrBy(cacheKey, `opt_weight:${newOptionId}`, appliedVoteWeight);
             await ensureVoteCacheTtl(req.redisClient, cacheKey);
           }
         } catch (e) {

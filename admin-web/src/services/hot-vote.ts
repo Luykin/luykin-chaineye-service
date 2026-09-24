@@ -112,6 +112,8 @@ export interface HotVoteAdminVoteRecord {
   optionName?: string;
   previousOptionId?: string;
   revoteCount: number;
+  voteWeight?: number;
+  voterRankSnapshot?: number | null;
   isAnonymous: boolean;
   clientIp?: string;
   commentContent?: string | null;
@@ -123,12 +125,14 @@ export interface HotVoteAdminVoteRecord {
 
 export interface HotVoteAdminVotesSummary {
   totalParticipants: number;
+  totalWeight?: number;
   distribution: Array<{
     id: string;
     name: string;
     color: string;
     isGua: boolean;
     count: number;
+    weight?: number;
     percentage: string;
   }>;
 }

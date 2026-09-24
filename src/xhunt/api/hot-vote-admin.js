@@ -1033,25 +1033,36 @@ router.get(
         optionMap[opt.id] = opt.name || opt.id;
       }
 
-      // 统计总参与人数与各选项分布
+      // 统计总参与人数、总权重与各选项分布
       const totalParticipants = await XHuntHotVoteRecord.count({ where: { topicId } });
       const groupCounts = await XHuntHotVoteRecord.findAll({
         where: { topicId },
-        attributes: ["optionId", [fn("COUNT", col("id")), "count"]],
+        attributes: [
+          "optionId",
+          [fn("COUNT", col("id")), "count"],
+          [fn("SUM", fn("COALESCE", col("voteWeight"), 1)), "totalWeight"],
+        ],
         group: ["optionId"],
         raw: true,
       });
 
       const countMap = {};
+      const weightMap = {};
+      let totalWeight = 0;
       for (const g of groupCounts) {
-        countMap[g.optionId] = parseInt(g.count || "0", 10);
+        const w = parseInt(g.totalWeight || "0", 10);
+        const c = parseInt(g.count || "0", 10);
+        countMap[g.optionId] = c;
+        weightMap[g.optionId] = w;
+        totalWeight += w;
       }
 
       const distribution = optionsList.map((opt) => {
         const count = countMap[opt.id] || 0;
+        const weight = weightMap[opt.id] || 0;
         const percentage =
-          totalParticipants > 0
-            ? `${Math.round((count / totalParticipants) * 100)}%`
+          totalWeight > 0
+            ? `${Math.round((weight / totalWeight) * 100)}%`
             : "0%";
         return {
           id: opt.id,
@@ -1059,6 +1070,7 @@ router.get(
           color: opt.color || "#1677ff",
           isGua: !!opt.isGua,
           count,
+          weight,
           percentage,
         };
       });
@@ -1123,6 +1135,8 @@ router.get(
           optionName: optionMap[r.optionId] || r.optionId,
           previousOptionId: r.previousOptionId,
           revoteCount: r.revoteCount,
+          voteWeight: r.voteWeight || 1,
+          voterRankSnapshot: r.voterRankSnapshot || null,
           isAnonymous: isAnon,
           clientIp: r.clientIp,
           commentContent: comment ? sanitizeCommentPlainText(comment.content, 200) : null,
@@ -1138,6 +1152,7 @@ router.get(
         data: {
           summary: {
             totalParticipants,
+            totalWeight,
             distribution,
           },
           list,
