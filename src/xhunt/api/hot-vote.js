@@ -1115,6 +1115,7 @@ router.put(
             await req.redisClient.hIncrBy(cacheKey, `opt_weight:${newOptionId}`, appliedVoteWeight);
             await ensureVoteCacheTtl(req.redisClient, cacheKey);
           }
+          await invalidateTopicCommentsCache(req.redisClient, topicId);
         } catch (e) {
           console.warn("[HotVote] Redis revote hIncrBy error:", e.message);
         }
@@ -1294,6 +1295,31 @@ router.get(
         }
       );
 
+      // 解析议题选项信息以匹配每条留言的站队立场
+      const topic = await XHuntHotVoteTopic.findByPk(topicId, { attributes: ["options"] });
+      const rawOptions = Array.isArray(topic?.options) ? topic.options : [];
+      const localizedOptions = localizeVoteOptions(rawOptions, lang);
+      const optionMap = {};
+      for (const opt of localizedOptions) {
+        optionMap[opt.id] = opt;
+      }
+
+      // 批量查询留言者的最新投票站队情况
+      const twitterIds = rows.map((c) => c.twitterId).filter(Boolean);
+      const voterRecordsByTwId = {};
+      if (twitterIds.length > 0) {
+        const voteRecords = await XHuntHotVoteRecord.findAll({
+          where: {
+            topicId,
+            twitterId: { [Op.in]: twitterIds },
+          },
+          attributes: ["twitterId", "optionId", "voteWeight"],
+        });
+        for (const vr of voteRecords) {
+          voterRecordsByTwId[vr.twitterId] = vr;
+        }
+      }
+
       const seenTwitterIds = new Set();
       const list = [];
       for (const c of rows) {
@@ -1304,6 +1330,15 @@ router.get(
           seenTwitterIds.add(c.twitterId);
         }
         const isSelf = Boolean(currentTwitterId && c.twitterId === currentTwitterId);
+        const userVote = c.twitterId ? voterRecordsByTwId[c.twitterId] : null;
+        const opt = userVote?.optionId ? optionMap[userVote.optionId] : null;
+        const optionId = opt?.id || null;
+        const optionName = opt?.name || null;
+        const optionAvatar = opt?.avatar || null;
+        const optionColor = opt?.color || null;
+        const isGua = Boolean(opt?.isGua);
+        const voteWeight = userVote?.voteWeight || 1;
+
         if (c.isAnonymous) {
           list.push({
             id: c.id,
@@ -1314,6 +1349,12 @@ router.get(
             content: sanitizeCommentPlainText(c.content, 200),
             isAnonymous: true,
             isSelf,
+            optionId,
+            optionName,
+            optionAvatar,
+            optionColor,
+            isGua,
+            voteWeight,
             createdAt: c.createdAt,
           });
         } else {
@@ -1326,6 +1367,12 @@ router.get(
             content: sanitizeCommentPlainText(c.content, 200),
             isAnonymous: false,
             isSelf,
+            optionId,
+            optionName,
+            optionAvatar,
+            optionColor,
+            isGua,
+            voteWeight,
             createdAt: c.createdAt,
           });
         }
@@ -1358,6 +1405,202 @@ router.get(
     } catch (err) {
       console.error("[HotVote] GET /comments error:", err);
       return res.status(500).json({ success: false, error: "获取留言失败" });
+    }
+  }
+);
+
+/**
+ * GET /api/xhunt/hot-vote/topics/:topicId/all-votes
+ * 获取全量选民与留言动态流（支持按选项Tab筛选，包含有留言与未留言的全部选民）
+ */
+router.get(
+  "/topics/:topicId/all-votes",
+  [
+    authenticateTokenOptional,
+    param("topicId").isUUID().withMessage("无效的议题ID"),
+    query("optionId").optional().trim().matches(/^[a-zA-Z0-9_-]{1,32}$/).withMessage("无效的选项ID"),
+    query("page").optional().isInt({ min: 1, max: 1000 }).toInt(),
+    query("pageSize").optional().isInt({ min: 1, max: 100 }).toInt(),
+    query("lang").optional().trim(),
+    query("x-language").optional().trim(),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const { topicId } = req.params;
+      const lang = resolveRequestLang(req);
+      const page = req.query.page || 1;
+      const pageSize = req.query.pageSize || 20;
+      const offset = (page - 1) * pageSize;
+      const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
+      const currentTwitterId = rawTwitterId ? String(rawTwitterId).trim() : null;
+
+      const topic = await XHuntHotVoteTopic.findByPk(topicId);
+      if (!topic) {
+        return res.status(404).json({ success: false, error: "议题不存在或已下线" });
+      }
+
+      const options = Array.isArray(topic.options) ? topic.options : [];
+      const localizedOptions = localizeVoteOptions(options, lang);
+      const optionMap = {};
+      for (const opt of localizedOptions) {
+        optionMap[opt.id] = opt;
+      }
+
+      // 构建筛选条件
+      const recordWhere = { topicId };
+      if (req.query.optionId && optionMap[req.query.optionId]) {
+        recordWhere.optionId = req.query.optionId;
+      }
+
+      // 统计各选项的参与人次总数 (用于前端顶部各个 Tab 的徽标展示)
+      const groupCounts = await XHuntHotVoteRecord.findAll({
+        where: { topicId },
+        attributes: ["optionId", [fn("COUNT", col("id")), "count"]],
+        group: ["optionId"],
+        raw: true,
+      });
+
+      const totalParticipants = await XHuntHotVoteRecord.count({ where: { topicId } });
+      const byOption = {};
+      for (const opt of localizedOptions) {
+        byOption[opt.id] = 0;
+      }
+      for (const g of groupCounts) {
+        byOption[g.optionId] = parseInt(g.count || "0", 10);
+      }
+
+      // 分页查询投票流水
+      const { count, rows } = await XHuntHotVoteRecord.findAndCountAll({
+        where: recordWhere,
+        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        limit: pageSize,
+        offset,
+      });
+
+      // 批量检索留言表中对应推特用户的最新未删除留言
+      const voterTwitterIds = Array.from(new Set(rows.map((r) => r.twitterId).filter(Boolean)));
+      const commentsByTwitterId = {};
+      if (voterTwitterIds.length > 0) {
+        const comments = await XHuntHotVoteComment.findAll({
+          where: {
+            topicId,
+            twitterId: { [Op.in]: voterTwitterIds },
+            isDeleted: false,
+          },
+          order: [["createdAt", "DESC"]],
+        });
+        for (const c of comments) {
+          if (!commentsByTwitterId[c.twitterId]) {
+            commentsByTwitterId[c.twitterId] = c;
+          }
+        }
+      }
+
+      // 批量查询 XHuntUser 或补齐无留言选民的展示资料
+      const missingProfileTwIds = voterTwitterIds.filter((twId) => !commentsByTwitterId[twId]);
+      const xhuntUserMap = {};
+      if (missingProfileTwIds.length > 0) {
+        try {
+          const xUsers = await XHuntUser.findAll({
+            where: { twitterId: { [Op.in]: missingProfileTwIds } },
+            attributes: ["twitterId", "username", "displayName", "avatar"],
+          });
+          for (const u of xUsers) {
+            xhuntUserMap[u.twitterId] = u;
+          }
+        } catch (_) {}
+      }
+
+      // 如果既没有留言又没有 XHuntUser，尝试从 Twitter profile 缓存获取
+      const stillMissingTwIds = missingProfileTwIds.filter((twId) => !xhuntUserMap[twId]);
+      const profileMap = {};
+      if (stillMissingTwIds.length > 0) {
+        await Promise.all(
+          stillMissingTwIds.map(async (twId) => {
+            const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
+            if (profile) {
+              profileMap[twId] = profile;
+            }
+          })
+        );
+      }
+
+      // 组合全量选民列表
+      const list = rows.map((r) => {
+        const comment = commentsByTwitterId[r.twitterId];
+        const xUser = xhuntUserMap[r.twitterId];
+        const profile = profileMap[r.twitterId];
+        const opt = optionMap[r.optionId];
+
+        // 匿名判定：若投票记录本身勾选了匿名，或其关联的最新留言勾选了匿名
+        const isAnon = Boolean(r.isAnonymous || comment?.isAnonymous);
+        const isSelf = Boolean(currentTwitterId && r.twitterId === currentTwitterId);
+
+        let userName = comment?.userName || xUser?.username || profile?.handler || null;
+        let displayName = comment?.displayName || xUser?.displayName || profile?.displayName || userName;
+        let userAvatar = comment?.userAvatar || xUser?.avatar || profile?.avatar || null;
+
+        if (isAnon) {
+          userName = maskTwitterHandle(userName || r.twitterId);
+          displayName = lang === "en" ? "Anonymous User" : "匿名用户";
+          userAvatar = getAnonymousAvatar(r.id);
+        } else if (!userAvatar) {
+          userAvatar = getAnonymousAvatar(r.twitterId || r.id);
+        }
+
+        return {
+          id: r.id,
+          twitterId: isAnon ? "" : r.twitterId,
+          userName: userName || (isAnon ? "user***" : `user_${r.twitterId.slice(-4)}`),
+          displayName: displayName || (isAnon ? (lang === "en" ? "Anonymous User" : "匿名用户") : "User"),
+          userAvatar,
+          isAnonymous: isAnon,
+          isSelf,
+          optionId: r.optionId,
+          optionName: opt?.name || r.optionId,
+          optionAvatar: opt?.avatar || null,
+          optionColor: opt?.color || null,
+          isGua: Boolean(opt?.isGua),
+          voteWeight: r.voteWeight || 1,
+          hasComment: Boolean(comment && !comment.isDeleted),
+          commentContent: comment && !comment.isDeleted ? sanitizeCommentPlainText(comment.content, 200) : null,
+          createdAt: comment?.createdAt || r.createdAt,
+          votedAt: r.createdAt,
+        };
+      });
+
+      const responseData = {
+        success: true,
+        data: {
+          list,
+          summary: {
+            total: totalParticipants,
+            byOption,
+          },
+          pagination: {
+            page,
+            pageSize,
+            total: count,
+            totalPages: Math.ceil(count / pageSize),
+          },
+        },
+      };
+
+      if (
+        handleNegotiatedCache(req, res, responseData, {
+          isPrivate: true,
+          maxAge: 0,
+          staleWhileRevalidate: 300,
+        })
+      ) {
+        return;
+      }
+
+      return res.json(responseData);
+    } catch (err) {
+      console.error("[HotVote] GET /all-votes error:", err);
+      return res.status(500).json({ success: false, error: "获取投票详情失败" });
     }
   }
 );
