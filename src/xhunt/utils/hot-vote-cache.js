@@ -157,6 +157,42 @@ async function getCachedTopicCommentsPage(redisClient, topicId, page, pageSize, 
   return result;
 }
 
+
+/**
+ * 将用户推特公开档案缓存到 Redis（30天），供只读动态流与留言极速命中，彻底避免读时调用外部网络接口
+ */
+async function setTwitterProfileCache(redisClient, twitterId, profile) {
+  if (!redisClient?.set || !twitterId || !profile) return;
+  const cleanTwId = String(twitterId).trim();
+  const cacheKey = `hotvote:twitter:profile:${cleanTwId}`;
+  try {
+    const payload = {
+      twitterId: cleanTwId,
+      handler: profile.handler || profile.userName || profile.username || "",
+      displayName: profile.displayName || profile.name || "",
+      avatar: profile.avatar || profile.userAvatar || "",
+      source: "write-cache",
+    };
+    await redisClient.set(cacheKey, JSON.stringify(payload), { EX: 30 * 86400 });
+  } catch (_) {}
+}
+
+/**
+ * 仅从 Redis 读取已缓存的推特用户公开档案（零外部网络 I/O）
+ */
+async function getCachedTwitterProfile(redisClient, twitterId) {
+  if (!redisClient?.get || !twitterId) return null;
+  const cleanTwId = String(twitterId).trim();
+  const cacheKey = `hotvote:twitter:profile:${cleanTwId}`;
+  try {
+    const cached = await redisClient.get(cacheKey);
+    if (cached && cached !== "__NOT_FOUND__") {
+      return JSON.parse(cached);
+    }
+  } catch (_) {}
+  return null;
+}
+
 module.exports = {
   handleNegotiatedCache,
   matchesEtag,
@@ -165,4 +201,6 @@ module.exports = {
   invalidateTopicVotesCache,
   invalidateTopicsCache,
   getCachedTopicCommentsPage,
+  setTwitterProfileCache,
+  getCachedTwitterProfile,
 };

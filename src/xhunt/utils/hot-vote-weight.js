@@ -50,11 +50,18 @@ async function getVoteWeightConfig(redisClient = null) {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.rules)) {
+          const sortedRules = [...parsed.rules].sort(
+            (a, b) => Number(a.maxRank || 0) - Number(b.maxRank || 0)
+          );
+          const config = {
+            ...parsed,
+            rules: sortedRules,
+          };
           memoryConfigCache = {
-            data: parsed,
+            data: config,
             cachedAt: now,
           };
-          return parsed;
+          return config;
         }
       }
     } catch (err) {
@@ -80,7 +87,7 @@ async function getVoteWeightConfig(redisClient = null) {
  * @returns {number}
  */
 function calculateVoteWeight(rank, config = null) {
-  const rules = config?.rules || DEFAULT_WEIGHT_RULES;
+  const rawRules = config?.rules || DEFAULT_WEIGHT_RULES;
   const defaultWeight =
     typeof config?.defaultWeight === "number" ? config.defaultWeight : DEFAULT_BASE_WEIGHT;
 
@@ -89,8 +96,12 @@ function calculateVoteWeight(rank, config = null) {
     return defaultWeight;
   }
 
+  const rules = Array.isArray(rawRules)
+    ? [...rawRules].sort((a, b) => Number(a.maxRank || 0) - Number(b.maxRank || 0))
+    : DEFAULT_WEIGHT_RULES;
+
   for (const rule of rules) {
-    if (numericRank <= rule.maxRank) {
+    if (numericRank <= Number(rule.maxRank)) {
       return Number(rule.weight) || defaultWeight;
     }
   }

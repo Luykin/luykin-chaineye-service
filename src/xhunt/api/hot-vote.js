@@ -22,6 +22,8 @@ const {
   handleNegotiatedCache,
   invalidateTopicCommentsCache,
   getCachedTopicCommentsPage,
+  setTwitterProfileCache,
+  getCachedTwitterProfile,
 } = require("../utils/hot-vote-cache");
 const { queryTwitterProfile } = require("./stats-routes/twitter-id-handler-lookup");
 const {
@@ -43,6 +45,9 @@ async function fetchTwitterProfileSafe(twitterId, redisClient = null) {
     try {
       const cached = await redisClient.get(cacheKey);
       if (cached) {
+        if (cached === "__NOT_FOUND__") {
+          return null;
+        }
         return JSON.parse(cached);
       }
     } catch (_) {}
@@ -60,6 +65,13 @@ async function fetchTwitterProfileSafe(twitterId, redisClient = null) {
     }
   } catch (err) {
     console.warn(`[HotVote] 查询 Twitter 用户资料失败 (twitterId=${cleanTwId}):`, err.message);
+  }
+
+  // 负缓存：查无资料或接口异常时缓存 10 分钟空标记，防止高频翻页持续穿透打爆外部接口
+  if (redisClient?.set) {
+    try {
+      await redisClient.set(cacheKey, "__NOT_FOUND__", { EX: 600 });
+    } catch (_) {}
   }
 
   return null;
@@ -110,24 +122,34 @@ async function resolveVoterUserInfo(req, twitterId) {
   if (!displayName) displayName = bodyDisplayName || headerDisplayName || userName;
   if (!userAvatar) userAvatar = bodyAvatar || headerAvatar;
 
-  // 3. 若缺少头像或昵称，调用 Twitter ID 查询接口
+  // 3. 若缺少头像或昵称，优先查 Redis 写时档案缓存；若依然缺少才调外部 Twitter 接口兜底
   const cleanTwitterId = twitterId ? String(twitterId).trim() : null;
   if (cleanTwitterId && (!userAvatar || !displayName || !userName || displayName === "Anonymous")) {
-    const profile = await fetchTwitterProfileSafe(cleanTwitterId, req.redisClient);
-    if (profile) {
-      if (!userAvatar && profile.avatar) {
-        userAvatar = profile.avatar;
-      }
-      if ((!displayName || displayName === "Anonymous") && profile.displayName) {
-        displayName = profile.displayName;
-      }
-      if ((!userName || userName === "Anonymous") && profile.handler) {
-        userName = profile.handler;
+    const cachedProfile = await getCachedTwitterProfile(req.redisClient, cleanTwitterId);
+    if (cachedProfile) {
+      if (!userAvatar && cachedProfile.avatar) userAvatar = cachedProfile.avatar;
+      if ((!displayName || displayName === "Anonymous") && cachedProfile.displayName) displayName = cachedProfile.displayName;
+      if ((!userName || userName === "Anonymous") && cachedProfile.handler) userName = cachedProfile.handler;
+    } else {
+      const profile = await fetchTwitterProfileSafe(cleanTwitterId, req.redisClient);
+      if (profile) {
+        if (!userAvatar && profile.avatar) userAvatar = profile.avatar;
+        if ((!displayName || displayName === "Anonymous") && profile.displayName) displayName = profile.displayName;
+        if ((!userName || userName === "Anonymous") && profile.handler) userName = profile.handler;
       }
     }
   }
 
-  // 4. 报错或查无头像时回退使用默认头像
+  // 4. 写时同步沉淀到 Redis 档案缓存（30天），供只读动态流与留言列表直接复用，彻底解除读接口对外部服务的依赖
+  if (cleanTwitterId && (userAvatar || displayName || userName)) {
+    setTwitterProfileCache(req.redisClient, cleanTwitterId, {
+      userName,
+      displayName,
+      userAvatar,
+    });
+  }
+
+  // 5. 报错或查无头像时回退使用默认头像
   if (!userAvatar) {
     userAvatar = getAnonymousAvatar(cleanTwitterId || "default");
   }
@@ -226,14 +248,14 @@ function formatCommentResponse(comment, isAnonymous, lang = "zh") {
 async function saveOrUpdateUserComment({
   topicId,
   twitterId,
-  content,
+  content = "",
   isAnonymous = false,
   userInfo = {},
   effectiveUserId = null,
   redisClient = null,
 }) {
   const isAnon = Boolean(isAnonymous);
-  const safeContent = sanitizeCommentPlainText(content, 200);
+  const safeContent = content ? sanitizeCommentPlainText(content, 200) : "";
   const now = new Date();
 
   // 查询当前用户在该议题下的所有留言记录（按 createdAt 降序取最新的一条）
@@ -249,10 +271,13 @@ async function saveOrUpdateUserComment({
 
   if (existingComments && existingComments.length > 0) {
     targetComment = existingComments[0];
-    targetComment.content = safeContent;
+    // 若传入非空新内容则更新内容与时间；纯投票同步时保留原内容
+    if (safeContent) {
+      targetComment.content = safeContent;
+      targetComment.createdAt = now;
+      targetComment.isDeleted = false;
+    }
     targetComment.isAnonymous = isAnon;
-    targetComment.isDeleted = false;
-    targetComment.createdAt = now;
     if (userInfo.userName) targetComment.userName = userInfo.userName;
     if (userInfo.displayName) targetComment.displayName = userInfo.displayName;
     if (userInfo.userAvatar) targetComment.userAvatar = userInfo.userAvatar;
@@ -290,10 +315,12 @@ async function saveOrUpdateUserComment({
           where: { topicId, twitterId },
         });
         if (targetComment) {
-          targetComment.content = safeContent;
+          if (safeContent) {
+            targetComment.content = safeContent;
+            targetComment.createdAt = now;
+            targetComment.isDeleted = false;
+          }
           targetComment.isAnonymous = isAnon;
-          targetComment.isDeleted = false;
-          targetComment.createdAt = now;
           if (userInfo.userName) targetComment.userName = userInfo.userName;
           if (userInfo.displayName) targetComment.displayName = userInfo.displayName;
           if (userInfo.userAvatar) targetComment.userAvatar = userInfo.userAvatar;
@@ -649,7 +676,7 @@ router.get(
           attributes: ["topicId", "content"],
         });
         for (const c of myComments) {
-          if (!userLastCommentByTopicId[c.topicId]) {
+          if (!userLastCommentByTopicId[c.topicId] && c.content && c.content.trim()) {
             userLastCommentByTopicId[c.topicId] = sanitizeCommentPlainText(c.content, 200);
           }
         }
@@ -859,26 +886,24 @@ router.post(
         return res.status(400).json({ success: false, error: "您已参与过该投票，请使用修改选择功能" });
       }
 
-      // 若投票请求同时携带了留言观点，则写入或更新留言表（单人单议题唯一留言）
-      if (cleanComment) {
-        try {
-          await saveOrUpdateUserComment({
-            topicId,
-            twitterId,
-            content: cleanComment,
-            isAnonymous,
-            userInfo,
-            effectiveUserId,
-            redisClient: req.redisClient,
-          });
-        } catch (commentErr) {
-          console.error(
-            "[HotVote] 留言写入异常 (未阻塞主投票流水):",
-            commentErr.name,
-            commentErr.message,
-            commentErr.parent?.detail || commentErr.original?.message || ""
-          );
-        }
+      // 无论是否带文字留言，均将选民身份与档案沉淀落库到 XHuntHotVoteComments 表，供全屏选民流完整展示
+      try {
+        await saveOrUpdateUserComment({
+          topicId,
+          twitterId,
+          content: cleanComment || "",
+          isAnonymous,
+          userInfo,
+          effectiveUserId,
+          redisClient: req.redisClient,
+        });
+      } catch (commentErr) {
+        console.error(
+          "[HotVote] 选民档案/留言写入异常 (未阻塞主投票流水):",
+          commentErr.name,
+          commentErr.message,
+          commentErr.parent?.detail || commentErr.original?.message || ""
+        );
       }
 
       // 更新 Redis 缓存原子自增（仅在缓存存在时自增；若缓存失效切勿直接自增，交由 getTopicVoteDistribution 从 DB 全量回填）
@@ -1085,19 +1110,37 @@ router.put(
             commentErr.parent?.detail || commentErr.original?.message || ""
           );
         }
-      } else if (req.body.isAnonymous !== undefined) {
-        // 未改发言仅切换匿名状态时，同步更新既有留言的匿名状态
+      } else {
+        // 未改发言时，同步更新既有留言的匿名状态及最新头像昵称资料到评论表
         try {
           const existingComment = await XHuntHotVoteComment.findOne({
             where: { topicId, twitterId, isDeleted: false },
           });
-          if (existingComment && Boolean(existingComment.isAnonymous) !== isRecordAnonymous) {
-            existingComment.isAnonymous = isRecordAnonymous;
-            await existingComment.save();
-            await invalidateTopicCommentsCache(req.redisClient, topicId);
+          if (existingComment) {
+            let changed = false;
+            if (req.body.isAnonymous !== undefined && Boolean(existingComment.isAnonymous) !== isRecordAnonymous) {
+              existingComment.isAnonymous = isRecordAnonymous;
+              changed = true;
+            }
+            if (userInfo.userAvatar && existingComment.userAvatar !== userInfo.userAvatar) {
+              existingComment.userAvatar = userInfo.userAvatar;
+              changed = true;
+            }
+            if (userInfo.displayName && existingComment.displayName !== userInfo.displayName) {
+              existingComment.displayName = userInfo.displayName;
+              changed = true;
+            }
+            if (userInfo.userName && existingComment.userName !== userInfo.userName) {
+              existingComment.userName = userInfo.userName;
+              changed = true;
+            }
+            if (changed) {
+              await existingComment.save();
+              await invalidateTopicCommentsCache(req.redisClient, topicId);
+            }
           }
         } catch (anonSyncErr) {
-          console.warn("[HotVote] 改票同步留言匿名状态异常:", anonSyncErr.message);
+          console.warn("[HotVote] 改票同步留言状态与资料异常:", anonSyncErr.message);
         }
       }
 
@@ -1195,7 +1238,7 @@ router.get(
             const countResult = await XHuntHotVoteComment.sequelize.query(
               `SELECT COUNT(DISTINCT "twitterId")::int AS total
                FROM "XHuntHotVoteComments"
-               WHERE "topicId" = :topicId AND "isDeleted" = false`,
+               WHERE "topicId" = :topicId AND "isDeleted" = false AND TRIM("content") != ''`,
               {
                 replacements: { topicId },
                 type: QueryTypes.SELECT,
@@ -1216,7 +1259,7 @@ router.get(
                    "isAnonymous",
                    "createdAt"
                  FROM "XHuntHotVoteComments"
-                 WHERE "topicId" = :topicId AND "isDeleted" = false
+                 WHERE "topicId" = :topicId AND "isDeleted" = false AND TRIM("content") != ''
                  ORDER BY "twitterId", "createdAt" DESC, id DESC
                ) sub
                ORDER BY "createdAt" DESC
@@ -1231,6 +1274,7 @@ router.get(
               where: {
                 topicId,
                 isDeleted: false,
+                content: { [Op.and]: [{ [Op.ne]: "" }, { [Op.ne]: null }] },
               },
               order: [["createdAt", "DESC"], ["id", "DESC"]],
               attributes: [
@@ -1257,21 +1301,34 @@ router.get(
             rawRows = uniqueList.slice(offset, offset + pageSize);
           }
 
-          // 补全非匿名留言中缺失的头像（调用 Twitter ID 接口，报错使用默认头像）
+          // 补全非匿名留言中缺失的头像（优先查本地 XHuntUser 与 Redis 写时缓存，零外部网络 I/O）
           const missingTwIds = rawRows
             .filter((r) => !r.isAnonymous && !r.userAvatar && r.twitterId)
             .map((r) => r.twitterId);
 
           if (missingTwIds.length > 0) {
             const uniqueTwIds = Array.from(new Set(missingTwIds));
+            let xUsers = [];
+            try {
+              xUsers = await XHuntUser.findAll({
+                where: { twitterId: { [Op.in]: uniqueTwIds } },
+                attributes: ["twitterId", "displayName", "avatar"],
+              });
+            } catch (_) {}
+            const xUserMap = {};
+            for (const u of xUsers) {
+              xUserMap[u.twitterId] = u;
+            }
+
             await Promise.all(
               uniqueTwIds.map(async (twId) => {
-                const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
-                const avatar = profile?.avatar || getAnonymousAvatar(twId);
-                const name = profile?.displayName || null;
+                const u = xUserMap[twId];
+                const cachedProfile = u?.avatar ? null : await getCachedTwitterProfile(req.redisClient, twId);
+                const avatar = u?.avatar || cachedProfile?.avatar || "";
+                const name = u?.displayName || cachedProfile?.displayName || null;
                 for (const r of rawRows) {
                   if (r.twitterId === twId && !r.isAnonymous) {
-                    if (!r.userAvatar) {
+                    if (!r.userAvatar && avatar) {
                       r.userAvatar = avatar;
                       // 异步自愈数据库历史数据
                       XHuntHotVoteComment.update(
@@ -1289,7 +1346,7 @@ router.get(
           }
 
           return {
-            count: res.count,
+            count,
             rows: rawRows,
           };
         }
@@ -1449,25 +1506,23 @@ router.get(
 
       // 构建筛选条件
       const recordWhere = { topicId };
-      if (req.query.optionId && optionMap[req.query.optionId]) {
+      if (req.query.optionId) {
+        if (!optionMap[req.query.optionId]) {
+          return res.status(400).json({ success: false, error: "无效或不存在的选项ID" });
+        }
         recordWhere.optionId = req.query.optionId;
       }
 
-      // 统计各选项的参与人次总数 (用于前端顶部各个 Tab 的徽标展示)
-      const groupCounts = await XHuntHotVoteRecord.findAll({
-        where: { topicId },
-        attributes: ["optionId", [fn("COUNT", col("id")), "count"]],
-        group: ["optionId"],
-        raw: true,
-      });
-
-      const totalParticipants = await XHuntHotVoteRecord.count({ where: { topicId } });
+      // 统计各选项的参与人次总数 (优先复用 Redis 计数缓存，避免每次分页全表聚合)
+      const voteDistribution = await getTopicVoteDistribution(
+        topicId,
+        localizedOptions,
+        req.redisClient
+      );
+      const totalParticipants = voteDistribution.totalParticipants || 0;
       const byOption = {};
       for (const opt of localizedOptions) {
-        byOption[opt.id] = 0;
-      }
-      for (const g of groupCounts) {
-        byOption[g.optionId] = parseInt(g.count || "0", 10);
+        byOption[opt.id] = voteDistribution.distribution?.[opt.id]?.count || 0;
       }
 
       // 分页查询投票流水
@@ -1497,8 +1552,13 @@ router.get(
         }
       }
 
-      // 批量查询 XHuntUser 或补齐无留言选民的展示资料
-      const missingProfileTwIds = voterTwitterIds.filter((twId) => !commentsByTwitterId[twId]);
+      // 批量查询 XHuntUser 或补齐无留言公开选民的展示资料 (跳过已明确匿名的记录，避免无意义的外部查询与配额浪费)
+      const anonymousRecordTwIds = new Set(
+        rows.filter((r) => r.isAnonymous).map((r) => r.twitterId)
+      );
+      const missingProfileTwIds = voterTwitterIds.filter(
+        (twId) => !commentsByTwitterId[twId] && !anonymousRecordTwIds.has(twId)
+      );
       const xhuntUserMap = {};
       if (missingProfileTwIds.length > 0) {
         try {
@@ -1512,13 +1572,13 @@ router.get(
         } catch (_) {}
       }
 
-      // 如果既没有留言又没有 XHuntUser，尝试从 Twitter profile 缓存获取
+      // 如果既没有留言又没有 XHuntUser，仅从 Redis 写时缓存读取（零外部网络 I/O，绝不阻塞读接口）
       const stillMissingTwIds = missingProfileTwIds.filter((twId) => !xhuntUserMap[twId]);
       const profileMap = {};
       if (stillMissingTwIds.length > 0) {
         await Promise.all(
           stillMissingTwIds.map(async (twId) => {
-            const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
+            const profile = await getCachedTwitterProfile(req.redisClient, twId);
             if (profile) {
               profileMap[twId] = profile;
             }
@@ -1545,9 +1605,18 @@ router.get(
           userName = maskTwitterHandle(userName || r.twitterId);
           displayName = lang === "en" ? "Anonymous User" : "匿名用户";
           userAvatar = getAnonymousAvatar(r.id);
-        } else if (!userAvatar) {
-          userAvatar = getAnonymousAvatar(r.twitterId || r.id);
+        } else {
+          // 非匿名用户若无真实头像则保持留空，与 /comments 接口规则一致，绝不替换为匿名彩色剪影！
+          userAvatar = userAvatar || "";
         }
+
+        const hasComment = Boolean(
+          comment && !comment.isDeleted && comment.content && comment.content.trim() !== ""
+        );
+        const commentContent = hasComment
+          ? sanitizeCommentPlainText(comment.content, 200)
+          : null;
+        const commentCreatedAt = hasComment ? comment.createdAt : null;
 
         return {
           id: r.id,
@@ -1563,9 +1632,10 @@ router.get(
           optionColor: opt?.color || null,
           isGua: Boolean(opt?.isGua),
           voteWeight: r.voteWeight || 1,
-          hasComment: Boolean(comment && !comment.isDeleted),
-          commentContent: comment && !comment.isDeleted ? sanitizeCommentPlainText(comment.content, 200) : null,
-          createdAt: comment?.createdAt || r.createdAt,
+          hasComment,
+          commentContent,
+          commentCreatedAt,
+          createdAt: r.createdAt,
           votedAt: r.createdAt,
         };
       });

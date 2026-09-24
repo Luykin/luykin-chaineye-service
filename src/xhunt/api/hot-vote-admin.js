@@ -7,6 +7,7 @@ const {
   XHuntHotVoteTopic,
   XHuntHotVoteRecord,
   XHuntHotVoteComment,
+  XHuntUser,
   XhuntVipTestUser,
   XhuntAdminAuditLog,
 } = require("../../models/postgres-start");
@@ -21,6 +22,7 @@ const {
   invalidateTopicsCache,
   invalidateTopicVotesCache,
   invalidateTopicCommentsCache,
+  getCachedTwitterProfile,
 } = require("../utils/hot-vote-cache");
 const { queryTwitterProfile } = require("./stats-routes/twitter-id-handler-lookup");
 
@@ -837,7 +839,7 @@ router.get(
         const countResult = await XHuntHotVoteComment.sequelize.query(
           `SELECT COUNT(DISTINCT "twitterId")::int AS total
            FROM "XHuntHotVoteComments"
-           WHERE "topicId" = :topicId ${deletedClause}`,
+           WHERE "topicId" = :topicId ${deletedClause} AND TRIM("content") != ''`,
           {
             replacements: { topicId, isDeleted: isDeletedFilter },
             type: QueryTypes.SELECT,
@@ -862,7 +864,7 @@ router.get(
                "createdAt",
                "updatedAt"
              FROM "XHuntHotVoteComments"
-             WHERE "topicId" = :topicId ${deletedClause}
+             WHERE "topicId" = :topicId ${deletedClause} AND TRIM("content") != ''
              ORDER BY "twitterId", "createdAt" DESC, id DESC
            ) sub
            ORDER BY "createdAt" DESC
@@ -874,7 +876,10 @@ router.get(
         );
       } else {
         const allComments = await XHuntHotVoteComment.findAll({
-          where,
+          where: {
+            ...where,
+            content: { [Op.and]: [{ [Op.ne]: "" }, { [Op.ne]: null }] },
+          },
           order: [["createdAt", "DESC"], ["id", "DESC"]],
         });
         const uniqueMap = new Map();
@@ -889,32 +894,46 @@ router.get(
         rawRows = uniqueList.slice(offset, offset + pageSize);
       }
 
-      // 批量补全非匿名留言中缺失的头像与昵称（调用 Twitter 接口）
+      // 批量补全非匿名留言中缺失的头像与昵称（优先查本地 XHuntUser 与 Redis 写时缓存，零外部网络 I/O）
       const missingTwIds = rawRows
         .filter((r) => !r.isAnonymous && (!r.userAvatar || r.userName === "Anonymous") && r.twitterId)
         .map((r) => r.twitterId);
 
       if (missingTwIds.length > 0) {
         const uniqueTwIds = Array.from(new Set(missingTwIds));
+        let xUsers = [];
+        try {
+          xUsers = await XHuntUser.findAll({
+            where: { twitterId: { [Op.in]: uniqueTwIds } },
+            attributes: ["twitterId", "username", "displayName", "avatar"],
+          });
+        } catch (_) {}
+        const xUserMap = {};
+        for (const u of xUsers) {
+          xUserMap[u.twitterId] = u;
+        }
+
         await Promise.all(
           uniqueTwIds.map(async (twId) => {
-            const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
-            if (profile) {
-              for (const r of rawRows) {
-                if (r.twitterId === twId && !r.isAnonymous) {
-                  if (!r.userAvatar && profile.avatar) {
-                    r.userAvatar = profile.avatar;
-                    XHuntHotVoteComment.update(
-                      { userAvatar: profile.avatar },
-                      { where: { id: r.id } }
-                    ).catch(() => {});
-                  }
-                  if ((!r.displayName || r.displayName === "Anonymous") && profile.displayName) {
-                    r.displayName = profile.displayName;
-                  }
-                  if ((!r.userName || r.userName === "Anonymous") && profile.handler) {
-                    r.userName = profile.handler;
-                  }
+            const u = xUserMap[twId];
+            const cachedProfile = u?.avatar ? null : await getCachedTwitterProfile(req.redisClient, twId);
+            const avatar = u?.avatar || cachedProfile?.avatar || "";
+            const displayName = u?.displayName || cachedProfile?.displayName || null;
+            const userName = u?.username || cachedProfile?.handler || null;
+            for (const r of rawRows) {
+              if (r.twitterId === twId && !r.isAnonymous) {
+                if (!r.userAvatar && avatar) {
+                  r.userAvatar = avatar;
+                  XHuntHotVoteComment.update(
+                    { userAvatar: avatar },
+                    { where: { id: r.id } }
+                  ).catch(() => {});
+                }
+                if ((!r.displayName || r.displayName === "Anonymous") && displayName) {
+                  r.displayName = displayName;
+                }
+                if ((!r.userName || r.userName === "Anonymous") && userName) {
+                  r.userName = userName;
                 }
               }
             }
@@ -1106,15 +1125,47 @@ router.get(
           }
         }
 
+        // 优先从已有留言、XHuntUser 与 Redis 写时缓存补齐选民展示资料（零外部网络 I/O）
+        const missingTwIds = voterTwitterIds.filter((twId) => !commentsByTwitterId[twId]);
+        let xUsers = [];
+        if (missingTwIds.length > 0) {
+          try {
+            xUsers = await XHuntUser.findAll({
+              where: { twitterId: { [Op.in]: missingTwIds } },
+              attributes: ["twitterId", "username", "displayName", "avatar"],
+            });
+          } catch (_) {}
+        }
+        const xUserMap = {};
+        for (const u of xUsers) {
+          xUserMap[u.twitterId] = u;
+        }
+
         await Promise.all(
           voterTwitterIds.map(async (twId) => {
-            const profile = await fetchTwitterProfileSafe(twId, req.redisClient);
-            if (profile) {
+            const c = commentsByTwitterId[twId];
+            const u = xUserMap[twId];
+            if (c) {
               voterUserMap[twId] = {
-                avatar: profile.avatar || "",
-                displayName: profile.displayName || "",
-                userName: profile.handler || "",
+                avatar: c.userAvatar || "",
+                displayName: c.displayName || "",
+                userName: c.userName || "",
               };
+            } else if (u) {
+              voterUserMap[twId] = {
+                avatar: u.avatar || "",
+                displayName: u.displayName || "",
+                userName: u.username || "",
+              };
+            } else {
+              const cached = await getCachedTwitterProfile(req.redisClient, twId);
+              if (cached) {
+                voterUserMap[twId] = {
+                  avatar: cached.avatar || "",
+                  displayName: cached.displayName || "",
+                  userName: cached.handler || "",
+                };
+              }
             }
           })
         );
@@ -1139,9 +1190,9 @@ router.get(
           voterRankSnapshot: r.voterRankSnapshot || null,
           isAnonymous: isAnon,
           clientIp: r.clientIp,
-          commentContent: comment ? sanitizeCommentPlainText(comment.content, 200) : null,
-          commentDeleted: comment ? Boolean(comment.isDeleted) : false,
-          commentId: comment ? comment.id : null,
+          commentContent: comment && comment.content && comment.content.trim() !== "" ? sanitizeCommentPlainText(comment.content, 200) : null,
+          commentDeleted: comment && comment.content && comment.content.trim() !== "" ? Boolean(comment.isDeleted) : false,
+          commentId: comment && comment.content && comment.content.trim() !== "" ? comment.id : null,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
         };
