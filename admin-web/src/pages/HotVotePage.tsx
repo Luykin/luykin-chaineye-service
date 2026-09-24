@@ -10,11 +10,14 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { RichTitleEditor, isRichTitleEmpty, sanitizeRichTitleHtml } from "@/components/ui/RichTitleEditor";
 import {
   createHotVoteTopic,
+  deleteHotVoteOption,
+  deleteHotVoteTopic,
   deleteHotVoteAdminComment,
   deleteHotVoteAdminVote,
   fetchHotVoteAdminComments,
@@ -74,6 +77,8 @@ function InfoLabel({ label, info }: { label: ReactNode; info: string }) {
 }
 
 export function HotVotePage() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super";
   const [messageApi, contextHolder] = message.useMessage();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -310,6 +315,32 @@ export function HotVotePage() {
     onError: (error: Error) => messageApi.error(error.message),
   });
 
+  const deleteTopicMutation = useMutation({
+    mutationFn: (id: string) => deleteHotVoteTopic(id),
+    onSuccess: (res) => {
+      messageApi.success(res.message || "议题已删除");
+      refresh();
+    },
+    onError: (error: Error) => messageApi.error(error.message),
+  });
+
+  const deleteOptionMutation = useMutation({
+    mutationFn: ({ topicId, optionId }: { topicId: string; optionId: string }) =>
+      deleteHotVoteOption(topicId, optionId),
+    onSuccess: (res, variables) => {
+      messageApi.success(res.message || "选项已删除");
+      if (res.data) {
+        setActiveDetailTopic(res.data);
+      }
+      if (voteOptionFilter === variables.optionId) {
+        setVoteOptionFilter(undefined);
+      }
+      void votesQuery.refetch();
+      refresh();
+    },
+    onError: (error: Error) => messageApi.error(error.message),
+  });
+
   const openDetail = (item: HotVoteTopic, tab: "votes" | "comments" = "votes") => {
     setActiveDetailTopic(item);
     setActiveDetailTab(tab);
@@ -386,7 +417,7 @@ export function HotVotePage() {
       render: (value: string) => new Date(value).toLocaleString(),
     },
     {
-      title: "操作", width: 145, fixed: "right" as const,
+      title: "操作", width: isSuperAdmin ? 190 : 145, fixed: "right" as const,
       render: (_: unknown, row: HotVoteTopic) => (
         <Space size={8}>
           <Button size="small" type="link" style={{ padding: 0 }} onClick={() => openDetail(row, "votes")}>
@@ -395,6 +426,24 @@ export function HotVotePage() {
           <Button size="small" onClick={() => openEdit(row)}>
             编辑
           </Button>
+          {isSuperAdmin && (
+            <Popconfirm
+              title="确定删除该议题？"
+              description={
+                (row.voteCount ?? 0) > 0
+                  ? `该议题已有 ${row.voteCount} 人投票${row.status === "published" ? "（正在进行中）" : ""}。删除议题将一并清除所有关联投票与留言数据，此操作不可恢复！`
+                  : (row.status === "published" ? "该议题当前为已发布状态，确定删除吗？" : "删除后不可恢复，确定删除吗？")
+              }
+              okText="确定删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true, loading: deleteTopicMutation.isPending }}
+              onConfirm={() => deleteTopicMutation.mutate(row.id)}
+            >
+              <Button size="small" danger type="link" style={{ padding: 0 }}>
+                删除
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -406,7 +455,7 @@ export function HotVotePage() {
     <Button icon={<ReloadOutlined />} onClick={refresh}>刷新</Button>
     <Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit()}>新建议题</Button>
   </Space>}>
-    {query.isLoading ? <div style={{ padding: 48, textAlign: "center" }}><Spin /></div> : <Table rowKey="id" size="small" columns={columns} dataSource={topics} scroll={{ x: 1450 }} pagination={{
+    {query.isLoading ? <div style={{ padding: 48, textAlign: "center" }}><Spin /></div> : <Table rowKey="id" size="small" columns={columns} dataSource={topics} scroll={{ x: isSuperAdmin ? 1500 : 1450 }} pagination={{
       current: page,
       pageSize,
       total: pagination?.total || 0,
@@ -426,6 +475,50 @@ export function HotVotePage() {
     }}
     onOk={() => form.submit()}
     confirmLoading={save.isPending}
+    footer={
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          {editing && isSuperAdmin && (
+            <Popconfirm
+              title="确定删除此议题？"
+              description={
+                (editing.voteCount ?? 0) > 0
+                  ? `该议题已有 ${editing.voteCount} 人投票。删除后将同时清理该议题的所有投票与留言记录！`
+                  : "删除后不可恢复，确定删除吗？"
+              }
+              okText="确定删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true, loading: deleteTopicMutation.isPending }}
+              onConfirm={() => {
+                deleteTopicMutation.mutate(editing.id, {
+                  onSuccess: () => {
+                    setEditorOpen(false);
+                    setEditing(null);
+                    setInitialOptionIds([]);
+                  },
+                });
+              }}
+            >
+              <Button danger>删除议题</Button>
+            </Popconfirm>
+          )}
+        </div>
+        <Space>
+          <Button
+            onClick={() => {
+              setEditorOpen(false);
+              setEditing(null);
+              setInitialOptionIds([]);
+            }}
+          >
+            取消
+          </Button>
+          <Button type="primary" loading={save.isPending} onClick={() => form.submit()}>
+            保存
+          </Button>
+        </Space>
+      </div>
+    }
     destroyOnClose
   >
     <Form form={form} layout="vertical" onFinish={submit} size="middle">
@@ -587,7 +680,9 @@ export function HotVotePage() {
         >
           <InfoCircleOutlined style={{ color: "#faad14" }} />
           <span>
-            该议题已有用户参与投票（共 <b>{editing?.voteCount}</b> 票）：已锁定历史选项，不允许删除已有选项；支持修改选项内容、增加新选项及调整选项展示顺序。
+            {isSuperAdmin
+              ? `该议题已有用户参与投票（共 ${editing?.voteCount} 票）：超级管理员可删除已有选项（保存后将同步清理已删除选项的历史选票并重算票数），请谨慎操作。`
+              : `该议题已有用户参与投票（共 ${editing?.voteCount} 票）：已锁定历史选项，不允许删除已有选项；支持修改选项内容、增加新选项及调整选项展示顺序。`}
           </span>
         </div>
       )}
@@ -616,7 +711,9 @@ export function HotVotePage() {
                   const isGua = form.getFieldValue(["options", field.name, "isGua"]);
                   const currentOptId = form.getFieldValue(["options", field.name, "id"]);
                   const isExistingOption = Boolean(editing && initialOptionIds.includes(currentOptId));
-                  const canDelete = hasVotes ? !isExistingOption : fields.length > 2;
+                  const canDelete = isSuperAdmin
+                    ? fields.length > 2
+                    : (hasVotes ? !isExistingOption && fields.length > 2 : fields.length > 2);
 
                   return (
                     <Card
@@ -701,22 +798,28 @@ export function HotVotePage() {
                               删除
                             </Button>
                           ) : (
-                            hasVotes && isExistingOption && (
-                              <Tooltip title="该议题已有用户参与投票，不可删除已有选项">
-                                <span>
-                                  <Button
-                                    size="small"
-                                    type="text"
-                                    danger
-                                    disabled
-                                    icon={<MinusCircleOutlined />}
-                                    style={{ padding: "0 4px", fontSize: 12 }}
-                                  >
-                                    删除
-                                  </Button>
-                                </span>
-                              </Tooltip>
-                            )
+                            <Tooltip
+                              title={
+                                fields.length <= 2
+                                  ? "议题至少需要保留 2 个选项"
+                                  : hasVotes && isExistingOption && !isSuperAdmin
+                                  ? "该议题已有用户参与投票，仅超级管理员可删除已有选项"
+                                  : "不可删除"
+                              }
+                            >
+                              <span>
+                                <Button
+                                  size="small"
+                                  type="text"
+                                  danger
+                                  disabled
+                                  icon={<MinusCircleOutlined />}
+                                  style={{ padding: "0 4px", fontSize: 12 }}
+                                >
+                                  删除
+                                </Button>
+                              </span>
+                            </Tooltip>
                           )}
                         </Space>
                       </div>
@@ -995,6 +1098,45 @@ export function HotVotePage() {
                           <span style={{ width: 80, fontSize: 12, color: "#8c8c8c", textAlign: "right" }}>
                             {opt.count} 票 ({opt.percentage})
                           </span>
+                          {isSuperAdmin && activeDetailTopic && (
+                            <Popconfirm
+                              title="确定删除此选项？"
+                              description={
+                                (votesQuery.data?.data?.summary?.distribution?.length || 0) <= 2
+                                  ? "议题至少需保留 2 个选项，若无需该议题请直接删除议题"
+                                  : `确定删除选项 "${opt.name}"？删除后将同时清除该选项下的 ${opt.count} 票历史选票，此操作不可撤回！`
+                              }
+                              disabled={(votesQuery.data?.data?.summary?.distribution?.length || 0) <= 2}
+                              okText="确定删除"
+                              cancelText="取消"
+                              okButtonProps={{ danger: true, loading: deleteOptionMutation.isPending }}
+                              onConfirm={() =>
+                                deleteOptionMutation.mutate({
+                                  topicId: activeDetailTopic.id,
+                                  optionId: opt.id,
+                                })
+                              }
+                            >
+                              <Tooltip
+                                title={
+                                  (votesQuery.data?.data?.summary?.distribution?.length || 0) <= 2
+                                    ? "议题至少需保留 2 个选项"
+                                    : undefined
+                                }
+                              >
+                                <Button
+                                  size="small"
+                                  type="text"
+                                  danger
+                                  disabled={(votesQuery.data?.data?.summary?.distribution?.length || 0) <= 2}
+                                  icon={<MinusCircleOutlined />}
+                                  style={{ padding: "0 4px", fontSize: 12 }}
+                                >
+                                  删除选项
+                                </Button>
+                              </Tooltip>
+                            </Popconfirm>
+                          )}
                         </div>
                       ))}
                     </div>

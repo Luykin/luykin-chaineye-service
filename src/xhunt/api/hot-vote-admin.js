@@ -2,6 +2,7 @@ const express = require("express");
 const { body, param, query } = require("express-validator");
 const { fn, col, Op, QueryTypes } = require("sequelize");
 const { validateRequest } = require("../middleware/validate-request");
+const { requireRole } = require("../../admin/middleware/adminAuth");
 const {
   XHuntHotVoteTopic,
   XHuntHotVoteRecord,
@@ -558,34 +559,77 @@ router.put(
         }
 
         // 校验投票数据：若该议题已有投票，不允许删除已有选项，但允许修改和新增
+        const isSuperAdmin = req.adminUser?.role === "super";
         const totalVotes = await XHuntHotVoteRecord.count({
           where: { topicId: topic.id },
         });
+        const originalOptions = Array.isArray(topic.options) ? topic.options : [];
+        const newOptionIds = new Set(cleanOptions.map((o) => o.id));
+        const deletedOptionIds = originalOptions
+          .map((o) => o.id)
+          .filter((id) => !newOptionIds.has(id));
 
-        if (totalVotes > 0) {
-          const originalOptions = Array.isArray(topic.options) ? topic.options : [];
-          const newOptionIds = new Set(cleanOptions.map((o) => o.id));
-          const missingOption = originalOptions.find((o) => !newOptionIds.has(o.id));
-          if (missingOption) {
-            return res.status(400).json({
+        if (totalVotes > 0 && deletedOptionIds.length > 0) {
+          if (!isSuperAdmin) {
+            const missingOption = originalOptions.find((o) => deletedOptionIds.includes(o.id));
+            return res.status(403).json({
               success: false,
-              error: `该议题已有用户参与投票（共 ${totalVotes} 票），不允许删除已有选项 "${missingOption.name || missingOption.id}"`,
+              error: `该议题已有用户参与投票（共 ${totalVotes} 票），仅超级管理员可删除已有选项 "${missingOption?.name || missingOption?.id || deletedOptionIds[0]}"`,
             });
           }
 
-          // 额外安全兜底：防止孤儿化历史投票数据
+          // 超级管理员删除选项：清理被删除选项的投票记录并重置历史引用
+          await XHuntHotVoteRecord.destroy({
+            where: {
+              topicId: topic.id,
+              optionId: { [Op.in]: deletedOptionIds },
+            },
+          });
+          await XHuntHotVoteRecord.update(
+            { previousOptionId: null },
+            {
+              where: {
+                topicId: topic.id,
+                previousOptionId: { [Op.in]: deletedOptionIds },
+              },
+            }
+          );
+          await invalidateTopicVotesCache(req.redisClient, topic.id);
+        }
+
+        if (totalVotes > 0) {
           const existingVoteOptions = await XHuntHotVoteRecord.findAll({
             where: { topicId: topic.id },
             attributes: ["optionId"],
             group: ["optionId"],
             raw: true,
           });
-          const missingVotedOption = existingVoteOptions.find((v) => !newOptionIds.has(v.optionId));
-          if (missingVotedOption) {
-            return res.status(400).json({
-              success: false,
-              error: `选项 "${missingVotedOption.optionId}" 已有历史投票记录，不能删除`,
+          const orphanedOptionIds = existingVoteOptions
+            .map((v) => v.optionId)
+            .filter((id) => !newOptionIds.has(id));
+          if (orphanedOptionIds.length > 0) {
+            if (!isSuperAdmin) {
+              return res.status(403).json({
+                success: false,
+                error: `选项 "${orphanedOptionIds[0]}" 已有历史投票记录，仅超级管理员可删除`,
+              });
+            }
+            await XHuntHotVoteRecord.destroy({
+              where: {
+                topicId: topic.id,
+                optionId: { [Op.in]: orphanedOptionIds },
+              },
             });
+            await XHuntHotVoteRecord.update(
+              { previousOptionId: null },
+              {
+                where: {
+                  topicId: topic.id,
+                  previousOptionId: { [Op.in]: orphanedOptionIds },
+                },
+              }
+            );
+            await invalidateTopicVotesCache(req.redisClient, topic.id);
           }
         }
 
@@ -622,6 +666,137 @@ router.put(
     } catch (err) {
       console.error("[HotVoteAdmin] PUT /topics/:id error:", err);
       return res.status(500).json({ success: false, error: "更新议题失败" });
+    }
+  }
+);
+
+/**
+ * DELETE /topics/:id
+ * 超级管理员删除议题（无论是否进行中、是否有投票，级联清理关联选票与留言）
+ */
+router.delete(
+  "/topics/:id",
+  requireRole("super"),
+  [param("id").isUUID().withMessage("无效的议题ID"), validateRequest],
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const topic = await XHuntHotVoteTopic.findByPk(id);
+      if (!topic) {
+        return res.status(404).json({ success: false, error: "议题不存在" });
+      }
+
+      const voteCount = await XHuntHotVoteRecord.count({ where: { topicId: id } });
+      const commentCount = await XHuntHotVoteComment.count({ where: { topicId: id } });
+
+      // 数据库事务级联删除投票记录、留言以及议题本体
+      await XHuntHotVoteTopic.sequelize.transaction(async (t) => {
+        await XHuntHotVoteRecord.destroy({
+          where: { topicId: id },
+          transaction: t,
+        });
+        await XHuntHotVoteComment.destroy({
+          where: { topicId: id },
+          transaction: t,
+        });
+        await topic.destroy({ transaction: t });
+      });
+
+      await invalidateTopicsCache(req.redisClient, id);
+
+      await recordAdminAudit(req, "DELETE_HOT_VOTE_TOPIC", id, {
+        title: topic.title,
+        status: topic.status,
+        voteCount,
+        commentCount,
+      });
+
+      return res.json({
+        success: true,
+        message: `议题 "${topic.title}" 已成功删除（已清理 ${voteCount} 条投票和 ${commentCount} 条留言）`,
+      });
+    } catch (err) {
+      console.error("[HotVoteAdmin] DELETE /topics/:id error:", err);
+      return res.status(500).json({ success: false, error: "删除议题失败" });
+    }
+  }
+);
+
+/**
+ * DELETE /topics/:id/options/:optionId
+ * 超级管理员删除议题中的指定选项（无论是否有投票或是否进行中）
+ */
+router.delete(
+  "/topics/:id/options/:optionId",
+  requireRole("super"),
+  [
+    param("id").isUUID().withMessage("无效的议题ID"),
+    param("optionId").trim().matches(OPTION_ID_PATTERN).withMessage("无效的选项ID"),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const { id, optionId } = req.params;
+      const topic = await XHuntHotVoteTopic.findByPk(id);
+      if (!topic) {
+        return res.status(404).json({ success: false, error: "议题不存在" });
+      }
+
+      const options = Array.isArray(topic.options) ? topic.options : [];
+      const targetOption = options.find((o) => o.id === optionId);
+      if (!targetOption) {
+        return res.status(404).json({ success: false, error: "未找到该选项" });
+      }
+
+      if (options.length <= 2) {
+        return res.status(400).json({
+          success: false,
+          error: "议题至少需保留 2 个选项，若无需该议题请直接删除议题",
+        });
+      }
+
+      const remainingOptions = options.filter((o) => o.id !== optionId);
+
+      let deletedVotesCount = 0;
+      await XHuntHotVoteTopic.sequelize.transaction(async (t) => {
+        deletedVotesCount = await XHuntHotVoteRecord.destroy({
+          where: { topicId: id, optionId },
+          transaction: t,
+        });
+
+        await XHuntHotVoteRecord.update(
+          { previousOptionId: null },
+          {
+            where: { topicId: id, previousOptionId: optionId },
+            transaction: t,
+          }
+        );
+
+        await topic.update({ options: remainingOptions }, { transaction: t });
+      });
+
+      await invalidateTopicsCache(req.redisClient, id);
+      await invalidateTopicVotesCache(req.redisClient, id);
+
+      await recordAdminAudit(req, "DELETE_HOT_VOTE_OPTION", id, {
+        optionId,
+        optionName: targetOption.name,
+        deletedVotesCount,
+      });
+
+      const latestVoteCount = await XHuntHotVoteRecord.count({ where: { topicId: id } });
+      return res.json({
+        success: true,
+        message: `选项 "${targetOption.name || optionId}" 已删除${deletedVotesCount > 0 ? `，并清理了 ${deletedVotesCount} 条关联投票` : ""}`,
+        data: {
+          ...topic.toJSON(),
+          voteCount: latestVoteCount,
+          hasVotes: latestVoteCount > 0,
+        },
+      });
+    } catch (err) {
+      console.error("[HotVoteAdmin] DELETE /topics/:id/options/:optionId error:", err);
+      return res.status(500).json({ success: false, error: "删除选项失败" });
     }
   }
 );

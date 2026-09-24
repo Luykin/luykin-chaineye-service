@@ -74,6 +74,15 @@ export const createHotVoteTopic = (body: Record<string, unknown>) =>
 export const updateHotVoteTopic = (id: string, body: Record<string, unknown>) =>
   apiRequest<{ success: boolean; data: HotVoteTopic }>(`${base}/topics/${id}`, { method: "PUT", body });
 
+export const deleteHotVoteTopic = (id: string) =>
+  apiRequest<{ success: boolean; message: string }>(`${base}/topics/${id}`, { method: "DELETE" });
+
+export const deleteHotVoteOption = (topicId: string, optionId: string) =>
+  apiRequest<{ success: boolean; message: string; data: HotVoteTopic }>(
+    `${base}/topics/${topicId}/options/${optionId}`,
+    { method: "DELETE" }
+  );
+
 export const fetchHotVoteInternalTesters = () =>
   apiRequest<{ success: boolean; data: HotVoteInternalTester[] }>(`${base}/internal-testers`);
 
