@@ -85,7 +85,7 @@ module.exports = (sequelize) => {
       status: {
         type: DataTypes.ENUM("draft", "published", "ended", "archived"),
         defaultValue: "draft",
-        comment: "议题状态",
+        comment: "议题状态: draft-草稿仅后台可见; published-已发布; ended-已结束(前端仅展示不可投票); archived-已归档(彻底下线不返回)",
       },
       sortWeight: {
         type: DataTypes.INTEGER,

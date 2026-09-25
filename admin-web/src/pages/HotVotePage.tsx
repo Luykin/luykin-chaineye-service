@@ -30,11 +30,18 @@ import {
   type HotVoteAdminVoteRecord,
 } from "@/services/hot-vote";
 
+/**
+ * 议题状态说明：
+ * - 草稿 (draft): 仅后台编辑可见，不对前端返回
+ * - 已发布 (published): 对前端返回；在时间窗口内可投票，非时间窗口内仅展示详情不可投票
+ * - 已结束 (ended): 对前端返回，供查看详情与投票结果，不可投票
+ * - 已归档 (archived): 彻底下线归档，不对前端返回
+ */
 const STATUS_OPTIONS = [
-  { value: "draft", label: "草稿" },
-  { value: "published", label: "已发布" },
-  { value: "ended", label: "已结束" },
-  { value: "archived", label: "已归档" },
+  { value: "draft", label: "草稿 (仅后台可见)" },
+  { value: "published", label: "已发布 (可投票/展示)" },
+  { value: "ended", label: "已结束 (仅展示/不可投票)" },
+  { value: "archived", label: "已归档 (彻底下线)" },
 ];
 const STATUS_TAG: Record<string, { text: string; color: string }> = {
   draft: { text: "草稿", color: "default" },
@@ -450,7 +457,7 @@ export function HotVotePage() {
   ];
 
   return <PermissionGuard permission="hot-vote"><PageSection title="热点投票" description="创建和维护 XHunt 热点投票议题：配置选项、可见领域与语言、内测名单和上下线状态。"><>{contextHolder}<Card title="议题列表" extra={<Space wrap>
-    <Select allowClear placeholder="状态" style={{ width: 110 }} options={STATUS_OPTIONS} value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} />
+    <Select allowClear placeholder="状态" style={{ width: 135 }} options={STATUS_OPTIONS} value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} />
     <Select allowClear placeholder="测试阶段" style={{ width: 110 }} value={testingFilter} onChange={(value) => { setTestingFilter(value); setPage(1); }} options={[{ value: "true", label: "内测中" }, { value: "false", label: "正式" }]} />
     <Button icon={<ReloadOutlined />} onClick={refresh}>刷新</Button>
     <Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit()}>新建议题</Button>
@@ -537,7 +544,7 @@ export function HotVotePage() {
         <Col span={12}>
           <Form.Item
             name="status"
-            label={<InfoLabel label="议题状态" info="仅「已发布」的议题对用户可见；结束后不可再投票。" />}
+            label={<InfoLabel label="议题状态" info="草稿仅后台可见；已发布/已结束/时间范围外均返回前端（可查看详情但不可投票）；仅「已归档」彻底下线不返回前端。" />}
             rules={[{ required: true }]}
             style={{ marginBottom: 10 }}
           >

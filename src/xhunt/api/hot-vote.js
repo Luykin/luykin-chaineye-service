@@ -345,14 +345,38 @@ async function saveOrUpdateUserComment({
 }
 
 /**
+ * 获取议题非活跃原因（若处于活跃进行中则返回 null）
+ * 必须满足：status === "published" 且当前时间在 [startTime, endTime] 窗口内
+ */
+function getTopicInactiveReason(topic, now = new Date()) {
+  if (!topic) return "议题不存在或已下线";
+  if (topic.status !== "published") {
+    if (topic.status === "draft") return "议题处于草稿状态，尚未发布";
+    if (topic.status === "ended") return "投票活动已结束";
+    if (topic.status === "archived") return "议题活动已归档下线";
+    return "议题未发布或已下线";
+  }
+  if (topic.startTime) {
+    const start = new Date(topic.startTime);
+    if (!Number.isNaN(start.getTime()) && start > now) {
+      return "投票活动尚未开始";
+    }
+  }
+  if (topic.endTime) {
+    const end = new Date(topic.endTime);
+    if (!Number.isNaN(end.getTime()) && end < now) {
+      return "投票活动已结束";
+    }
+  }
+  return null;
+}
+
+/**
  * 议题有效性校验：必须为已发布状态且当前时间处于 [startTime, endTime] 窗口内
  * startTime / endTime 为 null 时表示对应方向不限（与 GET /active 过滤逻辑一致）
  */
 function isTopicActive(topic, now = new Date()) {
-  if (!topic || topic.status !== "published") return false;
-  if (topic.startTime && new Date(topic.startTime) > now) return false;
-  if (topic.endTime && new Date(topic.endTime) < now) return false;
-  return true;
+  return !getTopicInactiveReason(topic, now);
 }
 
 /**
@@ -584,24 +608,12 @@ router.get(
 
       const now = new Date();
 
-      // 查询处于发布状态且匹配多语言/领域的进行中议题
+      // 查询对前端可见的议题：
+      // 1. 已发布 (published)、已结束 (ended) 以及处于投票日期范围外的议题均对前端返回（前端可看详情与结果，但不能投票）
+      // 2. 草稿 (draft) 与已归档 (archived) 彻底下线，不对前端返回
       const where = {
-        status: "published",
+        status: { [Op.in]: ["published", "ended"] },
         displayLanguages: { [Op.contains]: [lang] },
-        [Op.and]: [
-          {
-            [Op.or]: [
-              { startTime: null },
-              { startTime: { [Op.lte]: now } },
-            ],
-          },
-          {
-            [Op.or]: [
-              { endTime: null },
-              { endTime: { [Op.gte]: now } },
-            ],
-          },
-        ],
       };
 
       if (domain) {
@@ -629,6 +641,17 @@ router.get(
 
         visibleTopics.push(t);
       }
+
+      // 排序规则：进行中且在有效时间窗口内的议题优先置顶排在最前，其余按权重及创建时间降序
+      visibleTopics.sort((a, b) => {
+        const aActive = isTopicActive(a, now) ? 1 : 0;
+        const bActive = isTopicActive(b, now) ? 1 : 0;
+        if (aActive !== bActive) return bActive - aActive;
+        const aWeight = Number(a.sortWeight || 0);
+        const bWeight = Number(b.sortWeight || 0);
+        if (aWeight !== bWeight) return bWeight - aWeight;
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
 
       if (visibleTopics.length === 0) {
         const emptyResponse = {
@@ -660,6 +683,7 @@ router.get(
             topicId: { [Op.in]: visibleTopicIds },
             twitterId,
           },
+          attributes: ["topicId", "optionId", "revoteCount", "isAnonymous"],
         });
         for (const r of records) {
           userRecordsByTopicId[r.topicId] = r;
@@ -685,23 +709,39 @@ router.get(
       // 并行聚合各议题的用户状态与票数分布
       const topicItems = await Promise.all(
         visibleTopics.map(async (t) => {
+          const isVotingActive = isTopicActive(t, now);
+          const inactiveReason = isVotingActive ? null : getTopicInactiveReason(t, now);
+
           const record = userRecordsByTopicId[t.id];
+          const hasVoted = Boolean(record);
+          const remainingRevotes = record
+            ? Math.max(0, t.maxRevotes - record.revoteCount)
+            : t.maxRevotes;
+          const canVote = isVotingActive && (!hasVoted || remainingRevotes > 0);
+
           const userState = record
             ? {
                 hasVoted: true,
                 votedOptionId: record.optionId,
-                remainingRevotes: Math.max(0, t.maxRevotes - record.revoteCount),
+                remainingRevotes,
                 isAnonymous: Boolean(record.isAnonymous),
                 lastComment: userLastCommentByTopicId[t.id] || null,
+                isVotingActive,
+                canVote,
+                inactiveReason,
               }
             : {
                 hasVoted: false,
                 votedOptionId: null,
-                remainingRevotes: t.maxRevotes,
+                remainingRevotes,
+                isVotingActive,
+                canVote,
+                inactiveReason,
               };
 
           let results = null;
-          if (userState.hasVoted) {
+          // 已投票用户 或 活动已结束/不可投票时，均返回投票统计结果，供前端完整查看详情与分布
+          if (hasVoted || !isVotingActive) {
             const optionsList = Array.isArray(t.options) ? t.options : [];
             results = await getTopicVoteDistribution(
               t.id,
@@ -719,6 +759,12 @@ router.get(
             topicType: t.topicType,
             options: localizeVoteOptions(Array.isArray(t.options) ? t.options : [], lang),
             maxRevotes: t.maxRevotes,
+            status: t.status,
+            startTime: t.startTime,
+            endTime: t.endTime,
+            isVotingActive,
+            canVote,
+            inactiveReason,
           };
 
           return {
@@ -783,8 +829,9 @@ router.post(
       if (!topic) {
         return res.status(404).json({ success: false, error: "议题不存在或已下线" });
       }
-      if (!isTopicActive(topic)) {
-        return res.status(403).json({ success: false, error: "TOPIC_NOT_ACTIVE" });
+      const inactiveReason = getTopicInactiveReason(topic);
+      if (inactiveReason) {
+        return res.status(403).json({ success: false, error: "TOPIC_NOT_ACTIVE", message: inactiveReason });
       }
 
       // 测试阶段鉴权
@@ -989,8 +1036,9 @@ router.put(
       if (!topic) {
         return res.status(404).json({ success: false, error: "议题不存在或已下线" });
       }
-      if (!isTopicActive(topic)) {
-        return res.status(403).json({ success: false, error: "TOPIC_NOT_ACTIVE" });
+      const revoteInactiveReason = getTopicInactiveReason(topic);
+      if (revoteInactiveReason) {
+        return res.status(403).json({ success: false, error: "TOPIC_NOT_ACTIVE", message: revoteInactiveReason });
       }
 
       // 测试阶段鉴权
@@ -1706,8 +1754,9 @@ router.post(
       if (!topic) {
         return res.status(404).json({ success: false, error: "议题不存在或已关闭" });
       }
-      if (!isTopicActive(topic)) {
-        return res.status(403).json({ success: false, error: "TOPIC_NOT_ACTIVE" });
+      const commentInactiveReason = getTopicInactiveReason(topic);
+      if (commentInactiveReason) {
+        return res.status(403).json({ success: false, error: "TOPIC_NOT_ACTIVE", message: commentInactiveReason });
       }
 
       const twitterId = req.headers["x-tw-id"].trim();
@@ -1782,6 +1831,7 @@ router.post(
       const topicTitle = topic.title || topic.titleI18n?.zh || "";
       const userVote = await XHuntHotVoteRecord.findOne({
         where: { topicId, twitterId },
+        attributes: ["optionId"],
       });
       const options = Array.isArray(topic.options) ? topic.options : [];
       const userVotedOption = userVote ? options.find((opt) => opt.id === userVote.optionId) : null;
