@@ -27,6 +27,7 @@ import { NacosMessagesPage } from "@/pages/NacosMessagesPage";
 import { NacosCampaignsPage } from "@/pages/NacosCampaignsPage";
 import { NacosLegacyCampaignsPage } from "@/pages/NacosLegacyCampaignsPage";
 import { NacosTagsPage } from "@/pages/NacosTagsPage";
+import { SpecialUserMarkersPage } from "@/pages/SpecialUserMarkersPage";
 import { NacosI18nPage } from "@/pages/NacosI18nPage";
 import { NacosSecurityPage } from "@/pages/NacosSecurityPage";
 import { NacosAdminPage } from "@/pages/NacosAdminPage";
@@ -77,6 +78,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "nacos-campaigns": <NacosCampaignsPage />,
   "nacos-campaigns-legacy": <NacosLegacyCampaignsPage />,
   "nacos-tags": <NacosTagsPage />,
+  "special-markers": <SpecialUserMarkersPage />,
   "nacos-i18n": <NacosI18nPage />,
   "cleaner-config": <NacosCleanerRulesPage />,
   "nacos-security": <NacosSecurityPage />,

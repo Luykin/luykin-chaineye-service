@@ -23,6 +23,7 @@ const XhuntNacosConfigSnapshotModel = require("../../xhunt/models/XhuntNacosConf
 const XhuntVipTestUserModel = require("../../xhunt/models/XhuntVipTestUser");
 const XHuntUserSettingsModel = require("../../xhunt/models/XHuntUserSettings");
 const XhuntUserTagModel = require("../../xhunt/models/XhuntUserTag");
+const XhuntSpecialUserMarkerModel = require("../../xhunt/models/XhuntSpecialUserMarker");
 const CollectorClientTokenModel = require("../../xhunt/models/CollectorClientToken");
 const XHuntWebUserModel = require("../../xhunt/models/XHuntWebUser");
 const XHuntWebUserTokenModel = require("../../xhunt/models/XHuntWebUserToken");
@@ -88,6 +89,7 @@ function initModels(pgInstance) {
     XhuntVipTestUser: XhuntVipTestUserModel(pgInstance),
     XHuntUserSettings: XHuntUserSettingsModel(pgInstance),
     XhuntUserTag: XhuntUserTagModel(pgInstance),
+    XhuntSpecialUserMarker: XhuntSpecialUserMarkerModel(pgInstance),
     CollectorClientToken: CollectorClientTokenModel(pgInstance),
 
     // XHunt Web 用户数据表

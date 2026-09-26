@@ -23,6 +23,7 @@ const xHuntStatsRoutes = require("../../xhunt/api/stats");
 const xHuntGhostFollowingRoutes = require("../../xhunt/api/ghost-following");
 const xHuntRootdataRoutes = require("../../xhunt/api/rootdata");
 const xHuntTagsRoutes = require("../../xhunt/api/tags");
+const xHuntSpecialMarkersRoutes = require("../../xhunt/api/special-markers");
 const xHuntTwitterRenameRoutes = require("../../xhunt/api/twitter-rename");
 const xHuntAIDetectRoutes = require("../../xhunt/api/ai-detect");
 const xHuntKolChatRoutes = require("../../xhunt/api/kol-chat");
@@ -111,6 +112,15 @@ function registerXhuntRoutes(app) {
     browserOnlyMiddleware,
     securityMiddleware,
     xHuntTagsRoutes
+  );
+
+  // Twitter 账号特殊标记（疑似诈骗/官方认证/自定义标记）查询接口
+  app.use(
+    "/api/xhunt/special-markers",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntSpecialMarkersRoutes
   );
 
   // Twitter 改名历史查询接口（专用代理，避免开放通用外部 URL 代理）

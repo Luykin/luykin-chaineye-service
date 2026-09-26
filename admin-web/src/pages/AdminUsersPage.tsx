@@ -44,6 +44,7 @@ const PERMISSION_OPTIONS = [
   { label: "热点投票", value: "hot-vote" },
   { label: "翻译配置", value: "nacos-i18n" },
   { label: "标签配置", value: "nacos-tags" },
+  { label: "特殊标记配置", value: "special-markers" },
   { label: "净化规则配置", value: "cleaner-config" },
   { label: "功能开关", value: "feature_flags_config" },
   { label: "Banner配置", value: "banner-config" },
