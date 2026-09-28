@@ -94,24 +94,49 @@ function escapeHtml(value) {
 }
 
 function buildHealthCheckEmailHtml(report) {
-  const sections = report.checks
+  const abnormalChecks = report.checks.filter((check) => !check.ok);
+  const abnormalSummary =
+    abnormalChecks.length > 0
+      ? abnormalChecks
+          .map((check) => `${check.name}（${check.summary}）`)
+          .join("；")
+      : "无异常";
+
+  const sortedChecks = [
+    ...abnormalChecks,
+    ...report.checks.filter((check) => check.ok),
+  ];
+
+  const sections = sortedChecks
     .map((check) => {
       const detailJson = escapeHtml(JSON.stringify(check.details || {}, null, 2));
+      const border = check.ok ? "#e5e7eb" : "#fca5a5";
+      const bg = check.ok ? "#ffffff" : "#fff5f5";
+      const badgeBg = check.ok ? "#dcfce7" : "#fee2e2";
+      const badgeColor = check.ok ? "#166534" : "#991b1b";
+      const summaryColor = check.ok ? "#374151" : "#b91c1c";
+
       return `
-        <h3>${escapeHtml(check.name)}：${check.ok ? "正常" : "异常"}</h3>
-        <p>${escapeHtml(check.summary)}</p>
-        <pre style="background:#111827;color:#e5e7eb;padding:12px;border-radius:8px;overflow:auto;">${detailJson}</pre>
+        <div style="border:1px solid ${border};border-radius:8px;padding:12px 16px;margin-bottom:16px;background:${bg};">
+          <h3 style="margin:0 0 8px;">${escapeHtml(check.name)}：<span style="display:inline-block;padding:2px 8px;background:${badgeBg};color:${badgeColor};border-radius:4px;font-size:13px;font-weight:bold;">${check.ok ? "正常" : "异常"}</span></h3>
+          <p style="margin:0 0 8px;color:${summaryColor};font-weight:${check.ok ? "normal" : "bold"};">${escapeHtml(check.summary)}</p>
+          <pre style="background:#111827;color:#e5e7eb;padding:12px;border-radius:8px;overflow:auto;margin:0;font-size:12px;">${detailJson}</pre>
+        </div>
       `;
     })
     .join("");
 
   return `
-    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;">
-      <h2>⚠️ XHunt 后端健康检查告警</h2>
-      <p>时间：${new Date(report.checkedAt).toLocaleString("zh-CN", {
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:800px;margin:0 auto;">
+      <h2 style="margin-bottom:6px;color:#dc2626;">⚠️ XHunt 后端健康检查告警</h2>
+      <p style="margin:0 0 14px;color:#6b7280;font-size:14px;">时间：${new Date(report.checkedAt).toLocaleString("zh-CN", {
         timeZone: "Asia/Shanghai",
       })}</p>
-      <p>本次检查发现风险项，已自动发出提醒。</p>
+      <div style="background:#fee2e2;border:1px solid #fecaca;border-left:5px solid #ef4444;padding:12px 16px;border-radius:6px;margin-bottom:20px;">
+        <div style="font-size:15px;font-weight:bold;color:#991b1b;margin-bottom:4px;">🚨 异常概括</div>
+        <div style="font-size:14px;color:#7f1d1d;line-height:1.5;">${escapeHtml(abnormalSummary)}</div>
+      </div>
+      <h4 style="font-size:14px;color:#374151;margin:0 0 12px;">检查详情列表（异常项已置顶）：</h4>
       ${sections}
     </div>
   `;
@@ -457,7 +482,8 @@ function createBackendHealthChecker({
       }
 
       const html = buildHealthCheckEmailHtml({ checkedAt, checks });
-      const subject = `⚠️ XHunt 后端健康检查告警 - ${checkedAt.toLocaleString(
+      const abnormalTitle = dangerousChecks.map((item) => item.name).join("、");
+      const subject = `⚠️ [${abnormalTitle}异常] XHunt 后端健康检查告警 - ${checkedAt.toLocaleString(
         "zh-CN",
         { timeZone: "Asia/Shanghai" }
       )}`;

@@ -820,7 +820,8 @@ export function NacosCleanerRulesPage() {
               },
               {
                 key: "gray_promotion",
-                label: `🎲 灰产博彩/暗语 (${config.rules.gray_promotion?.strongKeywords?.length || 0})`,
+                label: `🎲 灰产博彩/暗语 (${config.rules.gray_promotion?.strongKeywords?.length || 0}) (已禁用)`,
+                disabled: true,
               },
               {
                 key: "global_exempt",
