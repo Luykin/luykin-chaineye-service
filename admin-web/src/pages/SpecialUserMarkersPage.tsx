@@ -442,7 +442,7 @@ export function SpecialUserMarkersPage() {
       title: "目标 Handler",
       dataIndex: "username",
       key: "username",
-      width: 200,
+      width: 180,
       render: (username: string, record) => (
         <div>
           <Text strong copyable={{ text: `@${username}` }}>
@@ -457,7 +457,7 @@ export function SpecialUserMarkersPage() {
     {
       title: "微型徽章与皮肤预览",
       key: "markerPreview",
-      width: 220,
+      width: 200,
       render: (_, record) => (
         <Space direction="vertical" size={2}>
           <MarkerPreviewBadge
@@ -478,7 +478,7 @@ export function SpecialUserMarkersPage() {
       title: "可见性范围",
       dataIndex: "visibleScope",
       key: "visibleScope",
-      width: 170,
+      width: 140,
       render: (scope: MarkerVisibleScope, record) => {
         if (scope === "whitelist") {
           const count = (record.visibleTwids || []).length;
@@ -538,7 +538,7 @@ export function SpecialUserMarkersPage() {
       title: "启用状态",
       dataIndex: "enabled",
       key: "enabled",
-      width: 100,
+      width: 90,
       render: (enabled: boolean, record) => (
         <Switch
           checked={enabled}
@@ -557,9 +557,10 @@ export function SpecialUserMarkersPage() {
     {
       title: "操作",
       key: "action",
-      width: 120,
+      width: 140,
+      fixed: "right" as const,
       render: (_, record) => (
-        <Space size={8}>
+        <Space size={4}>
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleOpenEditModal(record)}>
             编辑
           </Button>
@@ -570,6 +571,7 @@ export function SpecialUserMarkersPage() {
             okText="删除"
             cancelText="取消"
             okButtonProps={{ danger: true }}
+            placement="topRight"
           >
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除
@@ -583,8 +585,7 @@ export function SpecialUserMarkersPage() {
   return (
     <PermissionGuard permission="special-markers">
       {contextHolder}
-      <div style={{ padding: "20px 24px" }}>
-        {/* 标题与统计区 */}
+      {/* 标题与统计区 */}
         <PageSection
           title="Twitter 账号特殊标记配置"
           description="配置指定 Twitter Handler 的专属标记（如“疑似诈骗”、“官方认证”等），支持丰富视觉皮肤、动效与请求头 twid 白名单可见性控制。"
@@ -695,6 +696,7 @@ export function SpecialUserMarkersPage() {
             rowKey="id"
             loading={query.isLoading}
             pagination={{ defaultPageSize: 20, showSizeChanger: true }}
+            scroll={{ x: 1080 }}
           />
         </PageSection>
 
@@ -965,7 +967,6 @@ export function SpecialUserMarkersPage() {
             </Form.Item>
           </Form>
         </Modal>
-      </div>
     </PermissionGuard>
   );
 }
