@@ -183,9 +183,20 @@
 1. `src/types/index.ts`：增加 `SpecialMarkerItem` 与响应结构类型定义。
 2. `src/contents/services/api.ts`：新增 `getSpecialUserMarkers()` 接口请求函数。
 3. `src/utils/specialMarkersManager.ts`：单例本地缓存管理器，维护 Map 索引、自动同步并与 `twId` 变更联动。
-4. `src/css/style.css`：注入 7 大色系、4 种形态、呼吸微动画 `xhunt-marker-pulse` 及双主题自适应样式。
-5. `src/contents/hooks/useSpecialUserMarkers.ts`：实现三大场景（个人主页、发推信息流、私聊会话与聊天窗口）的 DOM 精准识别与徽章挂载，内置矢量 SVG 图标，拦截事件冒泡。
-6. `src/contents/Main.tsx`：在 `FeatureLayer` 中安全挂载 `useSpecialUserMarkers`。
+4. `src/css/special-markers.css` & `src/compontents/area/GlobalInjector.tsx`：注入宿主环境全局 CSS，确保 Content Script 插入的 DOM 样式即时生效；支持 7 大色系、4 种形态、0.9 居中缩放、呼吸微动画 `xhunt-marker-pulse` 及浅深双色主题自适应。
+5. `src/contents/hooks/useSpecialUserMarkers.ts`：
+   - **单篇推文详情与帖子列表差异化挂载**：
+     1. **帖子列表（Timeline / Feed）**：`User-Name` 整体自带 `r-18u37iz` 水平 Flex 行，徽章挂载于日期后方（`Display Name @Handle · Date [徽章]`），全部在同一水平行紧凑排布；
+     2. **单篇推文详情页（Single Tweet Detail）**：`User-Name` 自身无 `r-18u37iz`，表现为纵向 Flex 列（第一行 Display Name，第二行 Handle Row）。精准将徽章注入第二行 Handle Row（内含 `r-18u37iz`）中直接紧随 `@handle` 之后，彻底解决以往换行掉落到第 3 行孤立展示的 Bug；
+   - **个人主页（Profile Header）对齐**：Profile Header 同样为纵向 Flex 列，将徽章直接注入第二行包含 `@handle` 与备注按钮的水平容器（`r-18u37iz`）内部紧随 `@handle` 之后，与账号、备注保持在同一水平行展示，杜绝换行下沉。
+   - **私聊列表与聊天窗口**：挂载于会话水平行，紧跟 `@handle` 之后。
+   - **虚拟滚动与节点复用感知（Virtual Scroll Recycling）**：深度对齐 `useTweetCleaner` 与 `useAvatarElements` 的生产级架构：
+     1. 彻底废弃原有的 `requestIdleCallback` 延迟全量扫描机制（滑动时主线程占用导致空闲回调无法执行）；
+     2. 接入 `subscribeToMutation` 的同步即时微任务通道（`childList: true, subtree: true, characterData: true`），利用 `characterData` 捕捉 Twitter 虚拟化滚动时对 DOM 节点的原位文本复用替换；
+     3. 实现微任务同帧增量收集（`collectAffectedTargets`），仅对实际发生变更的 1~2 个推文或会话节点即时判定，在浏览器首帧绘制前完成挂载，实现 0 延迟、0 闪烁；
+     4. 复合共用全局滚动管理器（`subscribeToScroll` 单例），在 `requestAnimationFrame` 级别兜底复核可视区域内的推文作者与已绑定徽章一致性。
+   - **零闪烁与防重复添加机制**：基于 `:scope > .xhunt-special-marker` 进行严格属性对比。作者与配置未变时执行严格 0 DOM 操作；作者改变时无缝置换旧徽章。
+6. `src/contents/Main.tsx`：安全挂载 `GlobalInjector` 与 `useSpecialUserMarkers`。
 
 ---
 

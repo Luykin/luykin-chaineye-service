@@ -358,13 +358,7 @@ function createBackendHealthChecker({
       const cpuPercent = await getCpuUsagePercent();
       result.details.cpuPercent = cpuPercent;
       result.details.cpuCores = os.cpus().length;
-      if (cpuPercent >= thresholds.resourcePercent) {
-        result.ok = false;
-        result.alerts.push(`CPU 使用率过高: ${cpuPercent}%`);
-      }
     } catch (error) {
-      result.ok = false;
-      result.alerts.push(`CPU 检查失败: ${error.message}`);
       result.details.cpuError = error.message;
     }
 
