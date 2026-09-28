@@ -135,6 +135,14 @@ const DEFAULT_CLEANER_CONFIG: CleanerRemoteConfig = {
     },
   },
   globalExemptHandles: ["x", "support", "twitter", "xhunt_ai", "elonmusk", "cz_binance"],
+  kolFollowerExempt: {
+    enabled: true,
+    minCount: 1,
+    matchMode: "any",
+    cacheTtlHours: 12,
+    negativeCacheHours: 1,
+    activeDomains: ["ai_cn", "ai_global", "web3_cn", "web3_global"],
+  },
 };
 
 // 文本抗混淆清洗算法（复刻自插件客户端，保证沙箱检测结果 100% 一致）
@@ -275,9 +283,17 @@ export function NacosCleanerRulesPage() {
               ...DEFAULT_CLEANER_CONFIG.rules,
               ...parsed.rules,
             },
+            kolFollowerExempt: {
+              ...DEFAULT_CLEANER_CONFIG.kolFollowerExempt!,
+              ...(parsed.kolFollowerExempt || {}),
+            },
           };
           setConfig(mergedConfig);
-          setOriginalContent(JSON.stringify(mergedConfig, null, 2));
+          setOriginalContent(
+            parsed.kolFollowerExempt
+              ? JSON.stringify(mergedConfig, null, 2)
+              : JSON.stringify({ ...mergedConfig, kolFollowerExempt: undefined }, null, 2)
+          );
         }
       } catch (e) {
         console.warn("Failed to parse remote cleaner rules, using defaults", e);
@@ -719,7 +735,19 @@ export function NacosCleanerRulesPage() {
       }
       const parsed = JSON.parse(resp.data.content);
       if (parsed && parsed.rules) {
-        setConfig(parsed);
+        const merged: CleanerRemoteConfig = {
+          ...DEFAULT_CLEANER_CONFIG,
+          ...parsed,
+          rules: {
+            ...DEFAULT_CLEANER_CONFIG.rules,
+            ...parsed.rules,
+          },
+          kolFollowerExempt: {
+            ...DEFAULT_CLEANER_CONFIG.kolFollowerExempt!,
+            ...(parsed.kolFollowerExempt || {}),
+          },
+        };
+        setConfig(merged);
         messageApi.success(`已恢复到快照版本: ${new Date(snapshot.createdAt).toLocaleString("zh-CN")}`);
         setHistoryDrawerOpen(false);
       } else {
@@ -731,6 +759,7 @@ export function NacosCleanerRulesPage() {
   };
 
   const currentGroup = config.rules[activeTab];
+  const isKolExemptEnabled = config.kolFollowerExempt?.enabled ?? true;
 
   return (
     <PermissionGuard permission="cleaner-config">
@@ -827,11 +856,224 @@ export function NacosCleanerRulesPage() {
                 key: "global_exempt",
                 label: `🛡️ 全局白名单 (${config.globalExemptHandles?.length || 0})`,
               },
+              {
+                key: "kol_follower_exempt",
+                label: `🤝 KOL 关系链防误杀 (${isKolExemptEnabled ? "已启用" : "已关闭"})`,
+              },
             ]}
           />
 
-          {/* 全局加白名单 Tab */}
-          {activeTab === "global_exempt" ? (
+          {/* KOL 关系链防误杀 Tab */}
+          {activeTab === "kol_follower_exempt" ? (
+            <div>
+              <Alert
+                message="KOL 关系链防误杀机制说明"
+                description="当推文在原有规则下明确拟拦截（非白名单、非已知大KOL且命中屏蔽词/强词）时，插件会自动向后端接口 fetch/twitter/kol_follower_counts 发起批量反查。若该作者被知名认证 KOL 关注数达到设定门槛，则判定为被误杀的正常用户，立即解除折叠/隐藏恢复推文原样展示，并写入 12 小时本地缓存，后续该作者推文秒级免检放行。"
+                type="info"
+                showIcon
+                style={{ marginBottom: 20 }}
+              />
+
+              <Card
+                title="关系链防误杀参数配置"
+                size="small"
+                extra={
+                  <Space>
+                    <Typography.Text strong>启用防误杀反查：</Typography.Text>
+                    <Switch
+                      checked={isKolExemptEnabled}
+                      onChange={(checked) => {
+                        setConfig((prev) => ({
+                          ...prev,
+                          kolFollowerExempt: {
+                            ...(prev.kolFollowerExempt || DEFAULT_CLEANER_CONFIG.kolFollowerExempt!),
+                            enabled: checked,
+                          },
+                        }));
+                      }}
+                    />
+                  </Space>
+                }
+              >
+                <Form layout="vertical" disabled={!isKolExemptEnabled} style={{ maxWidth: 700 }}>
+                  <Row gutter={24}>
+                    <Col span={12}>
+                      <Form.Item
+                        label={
+                          <Space>
+                            <Typography.Text strong>最低 KOL 关注门槛 (minCount)</Typography.Text>
+                            <Tooltip title="在勾选的生效领域中，博主被知名认证 KOL 关注的人数达到此门槛即认定为合法用户，默认 1。">
+                              <QuestionCircleOutlined style={{ color: "#8c8c8c" }} />
+                            </Tooltip>
+                          </Space>
+                        }
+                      >
+                        <InputNumber
+                          min={1}
+                          max={100}
+                          style={{ width: "100%" }}
+                          value={config.kolFollowerExempt?.minCount ?? 1}
+                          addonAfter="位 KOL"
+                          onChange={(val) => {
+                            setConfig((prev) => ({
+                              ...prev,
+                              kolFollowerExempt: {
+                                ...(prev.kolFollowerExempt || DEFAULT_CLEANER_CONFIG.kolFollowerExempt!),
+                                minCount: val || 1,
+                              },
+                            }));
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        label={
+                          <Space>
+                            <Typography.Text strong>判定计算模式 (matchMode)</Typography.Text>
+                            <Tooltip title="any 模式：任意一个勾选的领域达到门槛即放行（推荐，可灵敏保护细分垂直领域创作者）；total 模式：所有勾选领域的 KOL 关注数总和达到门槛放行。">
+                              <QuestionCircleOutlined style={{ color: "#8c8c8c" }} />
+                            </Tooltip>
+                          </Space>
+                        }
+                      >
+                        <Select
+                          style={{ width: "100%" }}
+                          value={config.kolFollowerExempt?.matchMode ?? "any"}
+                          onChange={(val) => {
+                            setConfig((prev) => ({
+                              ...prev,
+                              kolFollowerExempt: {
+                                ...(prev.kolFollowerExempt || DEFAULT_CLEANER_CONFIG.kolFollowerExempt!),
+                                matchMode: val,
+                              },
+                            }));
+                          }}
+                          options={[
+                            { value: "any", label: "任一领域满足即可 (推荐)" },
+                            { value: "total", label: "所有领域总和达到门槛" },
+                          ]}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+
+                  <Row gutter={24}>
+                    <Col span={12}>
+                      <Form.Item
+                        label={
+                          <Space>
+                            <Typography.Text strong>误杀放行缓存有效期 (cacheTtlHours)</Typography.Text>
+                            <Tooltip title="反查确认属于正常博主后，在客户端本地缓存该白名单的时长。默认 12 小时（0.5天）。有效期内后续推文直接前置免检，不消耗网络请求。">
+                              <QuestionCircleOutlined style={{ color: "#8c8c8c" }} />
+                            </Tooltip>
+                          </Space>
+                        }
+                      >
+                        <InputNumber
+                          min={1}
+                          max={72}
+                          style={{ width: "100%" }}
+                          value={config.kolFollowerExempt?.cacheTtlHours ?? 12}
+                          addonAfter="小时"
+                          onChange={(val) => {
+                            setConfig((prev) => ({
+                              ...prev,
+                              kolFollowerExempt: {
+                                ...(prev.kolFollowerExempt || DEFAULT_CLEANER_CONFIG.kolFollowerExempt!),
+                                cacheTtlHours: val || 12,
+                              },
+                            }));
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        label={
+                          <Space>
+                            <Typography.Text strong>负向缓存时长 (negativeCacheHours)</Typography.Text>
+                            <Tooltip title="反查确认无任何 KOL 关注的纯黑产号，在客户端本地临时记忆的时长，防止信息流滚动时对同一黑产号频繁重复向接口发起查询。">
+                              <QuestionCircleOutlined style={{ color: "#8c8c8c" }} />
+                            </Tooltip>
+                          </Space>
+                        }
+                      >
+                        <InputNumber
+                          min={0.5}
+                          max={24}
+                          step={0.5}
+                          style={{ width: "100%" }}
+                          value={config.kolFollowerExempt?.negativeCacheHours ?? 1}
+                          addonAfter="小时"
+                          onChange={(val) => {
+                            setConfig((prev) => ({
+                              ...prev,
+                              kolFollowerExempt: {
+                                ...(prev.kolFollowerExempt || DEFAULT_CLEANER_CONFIG.kolFollowerExempt!),
+                                negativeCacheHours: val || 1,
+                              },
+                            }));
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+
+                  <Form.Item
+                    label={
+                      <Space>
+                        <Typography.Text strong>参与考核的 KOL 领域 (activeDomains)</Typography.Text>
+                        <Tooltip title="勾选的领域 KOL 关注数将计入判定逻辑。">
+                          <QuestionCircleOutlined style={{ color: "#8c8c8c" }} />
+                        </Tooltip>
+                      </Space>
+                    }
+                    validateStatus={
+                      isKolExemptEnabled &&
+                      (!config.kolFollowerExempt?.activeDomains ||
+                        config.kolFollowerExempt.activeDomains.length === 0)
+                        ? "error"
+                        : ""
+                    }
+                    help={
+                      isKolExemptEnabled &&
+                      (!config.kolFollowerExempt?.activeDomains ||
+                        config.kolFollowerExempt.activeDomains.length === 0)
+                        ? "至少需勾选一个生效领域，否则防误杀机制无法生效"
+                        : undefined
+                    }
+                  >
+                    <Checkbox.Group
+                      value={
+                        config.kolFollowerExempt?.activeDomains ?? [
+                          "ai_cn",
+                          "ai_global",
+                          "web3_cn",
+                          "web3_global",
+                        ]
+                      }
+                      onChange={(vals) => {
+                        setConfig((prev) => ({
+                          ...prev,
+                          kolFollowerExempt: {
+                            ...(prev.kolFollowerExempt || DEFAULT_CLEANER_CONFIG.kolFollowerExempt!),
+                            activeDomains: vals as string[],
+                          },
+                        }));
+                      }}
+                      options={[
+                        { label: "AI 中文领域 (ai_cn)", value: "ai_cn" },
+                        { label: "AI 国际领域 (ai_global)", value: "ai_global" },
+                        { label: "Web3 中文领域 (web3_cn)", value: "web3_cn" },
+                        { label: "Web3 国际领域 (web3_global)", value: "web3_global" },
+                      ]}
+                    />
+                  </Form.Item>
+                </Form>
+              </Card>
+            </div>
+          ) : activeTab === "global_exempt" ? (
             <div>
               <Alert
                 message="全局白名单博主说明"
@@ -1724,6 +1966,14 @@ export function NacosCleanerRulesPage() {
           onOk={() => {
             if (!publishReason.trim()) {
               messageApi.warning("请输入本次发布的变更说明");
+              return;
+            }
+            if (
+              (config.kolFollowerExempt?.enabled ?? true) &&
+              (!config.kolFollowerExempt?.activeDomains ||
+                config.kolFollowerExempt.activeDomains.length === 0)
+            ) {
+              messageApi.warning("KOL 关系链防误杀已启用，请至少勾选一个生效领域");
               return;
             }
             const nextVersion = Number(dayjs().format("YYYYMMDDHHmmss"));

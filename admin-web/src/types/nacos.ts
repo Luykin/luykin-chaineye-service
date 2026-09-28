@@ -393,6 +393,15 @@ export interface CleanerRuleGroup {
   maxWeakSpamLength?: number;
 }
 
+export interface KolFollowerExemptConfig {
+  enabled: boolean;
+  minCount: number;
+  matchMode: "any" | "total";
+  cacheTtlHours: number;
+  negativeCacheHours?: number;
+  activeDomains: string[];
+}
+
 export interface CleanerRemoteConfig {
   version: number;
   enabled: boolean;
@@ -404,6 +413,7 @@ export interface CleanerRemoteConfig {
     [key: string]: CleanerRuleGroup | undefined;
   };
   globalExemptHandles: string[];
+  kolFollowerExempt?: KolFollowerExemptConfig;
 }
 
 export interface CleanerAiRegexSuggestion {
