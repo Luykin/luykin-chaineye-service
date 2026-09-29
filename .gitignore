@@ -27,3 +27,6 @@ packages/xhunt-auth-client/release
 .DS_Store
 /$HOME/
 /admin-web/$HOME/
+/.agents/skills/domain-modeling/agents/
+/.agents/
+/.aider-desk/
