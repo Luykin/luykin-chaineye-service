@@ -298,8 +298,32 @@ router.get("/endpoints", (req, res) => {
 /**
  * 执行通用单个接口调试请求
  */
+function resolveEndpointBaseUrl(endpoint, baseUrlOverride) {
+  const configuredBaseUrl = String(endpoint.defaultBaseUrl || PRO_API_CONFIG.baseUrl).replace(/\/+$/, "");
+  if (!baseUrlOverride) return configuredBaseUrl;
+
+  let configuredUrl;
+  let overrideUrl;
+  try {
+    configuredUrl = new URL(configuredBaseUrl);
+    overrideUrl = new URL(String(baseUrlOverride).trim());
+  } catch (_) {
+    const error = new Error("baseUrlOverride 不是有效地址");
+    error.status = 400;
+    throw error;
+  }
+
+  if (overrideUrl.origin !== configuredUrl.origin) {
+    const error = new Error("baseUrlOverride 仅允许使用预配置服务地址");
+    error.status = 400;
+    throw error;
+  }
+
+  return overrideUrl.toString().replace(/\/+$/, "");
+}
+
 async function executeSingleEndpoint(endpoint, params = {}, options = {}) {
-  const baseUrl = (options.baseUrlOverride || endpoint.defaultBaseUrl || PRO_API_CONFIG.baseUrl).replace(/\/+$/, "");
+  const baseUrl = resolveEndpointBaseUrl(endpoint, options.baseUrlOverride);
   const targetUrl = `${baseUrl}${endpoint.path}`;
   const apiKey = endpoint.id === "ghost_crawler_quota" ? CRAWLER_QUOTA_CONFIG.apiKey : PRO_API_CONFIG.apiKey;
 
@@ -354,6 +378,7 @@ async function executeSingleEndpoint(endpoint, params = {}, options = {}) {
       params: requestParams,
       data: requestData,
       timeout,
+      maxRedirects: 0,
     });
     const durationMs = Date.now() - startTime;
 
@@ -581,7 +606,7 @@ router.post("/execute", async (req, res) => {
     });
   } catch (error) {
     console.error(`[api-debugger] 执行 ${endpointId} 失败:`, error);
-    return res.status(500).json({
+    return res.status(error.status || 500).json({
       success: false,
       error: error.message || "调试请求执行失败",
     });

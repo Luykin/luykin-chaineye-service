@@ -408,6 +408,13 @@ function isHotVoteTester(testList, { username, twitterId }) {
   return testList.some((item) => identifiers.includes(normalizeTesterIdentifier(item)));
 }
 
+function isTopicVisible(topic, { lang, username, twitterId }) {
+  if (!topic || !["published", "ended"].includes(topic.status)) return false;
+  if (!Array.isArray(topic.displayLanguages) || !topic.displayLanguages.includes(lang)) return false;
+  if (topic.testingPhase && !isHotVoteTester(topic.testList, { username, twitterId })) return false;
+  return true;
+}
+
 /**
  * 安全解析多语言对象（兼容 JSONB 对象与 JSON 序列化字符串）
  */
@@ -1270,8 +1277,14 @@ router.get(
       const page = req.query.page || 1;
       const pageSize = req.query.pageSize || 3;
       const offset = (page - 1) * pageSize;
-      const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
+      const rawTwitterId = req.securityContext?.twId || req.headers["x-tw-id"] || req.user?.twitterId || null;
       const currentTwitterId = rawTwitterId ? String(rawTwitterId).trim() : null;
+      const requestHandle = req.securityContext?.userId || req.headers["x-user-id"] || req.user?.username || null;
+
+      const topic = await XHuntHotVoteTopic.findByPk(topicId);
+      if (!isTopicVisible(topic, { lang, username: requestHandle, twitterId: currentTwitterId })) {
+        return res.status(404).json({ success: false, error: "议题不存在或已下线" });
+      }
 
       const { count, rows } = await getCachedTopicCommentsPage(
         req.redisClient,
@@ -1401,7 +1414,6 @@ router.get(
       );
 
       // 解析议题选项信息以匹配每条留言的站队立场
-      const topic = await XHuntHotVoteTopic.findByPk(topicId, { attributes: ["options"] });
       const rawOptions = Array.isArray(topic?.options) ? topic.options : [];
       const localizedOptions = localizeVoteOptions(rawOptions, lang);
       const optionMap = {};
@@ -1537,11 +1549,12 @@ router.get(
       const page = req.query.page || 1;
       const pageSize = req.query.pageSize || 20;
       const offset = (page - 1) * pageSize;
-      const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
+      const rawTwitterId = req.securityContext?.twId || req.headers["x-tw-id"] || req.user?.twitterId || null;
       const currentTwitterId = rawTwitterId ? String(rawTwitterId).trim() : null;
+      const requestHandle = req.securityContext?.userId || req.headers["x-user-id"] || req.user?.username || null;
 
       const topic = await XHuntHotVoteTopic.findByPk(topicId);
-      if (!topic) {
+      if (!isTopicVisible(topic, { lang, username: requestHandle, twitterId: currentTwitterId })) {
         return res.status(404).json({ success: false, error: "议题不存在或已下线" });
       }
 

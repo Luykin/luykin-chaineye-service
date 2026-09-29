@@ -847,7 +847,10 @@ router.post("/invitations/:invitationId/decline", async (req, res) => {
       if (item.kolTwitterId !== identity.twitterId) throw publicError("这不是你的邀约", 403, "INVITATION_FORBIDDEN");
       if (item.status === "kol_declined") return item;
       if (item.status !== "sent") throw publicError("该邀约当前不能拒绝", 409, "INVITATION_NOT_DECLINABLE");
-      await item.update({ status: "kol_declined", declineReason: reason });
+      await item.update(
+        { status: "kol_declined", declineReason: reason },
+        { transaction }
+      );
       await audit({ transaction, req, activityId: item.activityId, invitationId: item.id, action: "invitation_declined_by_kol", actorType: "kol", metadata: { idempotencyKey } });
       return item;
     });

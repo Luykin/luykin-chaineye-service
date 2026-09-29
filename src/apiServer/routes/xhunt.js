@@ -88,7 +88,7 @@ function registerXhuntRoutes(app) {
   app.use("/api/xhunt/echohunt", xHuntEchohuntRoutes);
 
   // 热点投票接口
-  app.use("/api/xhunt/hot-vote", xHuntHotVoteRoutes);
+  app.use("/api/xhunt/hot-vote", securityMiddleware, xHuntHotVoteRoutes);
 
   // 未注册用户登记接口
   app.use("/api/xhunt/user-entry", xHuntUserEntryRoutes);
