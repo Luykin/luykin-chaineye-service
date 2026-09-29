@@ -36,6 +36,7 @@ export interface WebsiteCampaignRecord {
 export interface WebsiteCampaignListResponse {
   success: boolean;
   data: WebsiteCampaignRecord[];
+  revision?: string;
 }
 
 export interface WebsiteCampaignSyncResponse {

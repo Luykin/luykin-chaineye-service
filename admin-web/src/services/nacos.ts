@@ -73,12 +73,15 @@ export async function saveWebsiteCampaignConfig(nacosCampaignId: string, payload
   );
 }
 
-export async function saveManagedWebsiteCampaignsConfig(payload: Record<string, unknown>) {
-  return apiRequest<{ success: boolean; summary?: Record<string, number>; error?: string }>(
+export async function saveManagedWebsiteCampaignsConfig(
+  config: Record<string, unknown>,
+  expectedRevision: string,
+) {
+  return apiRequest<{ success: boolean; summary?: Record<string, number>; error?: string; revision?: string }>(
     "/api/xhunt/website/campaigns/internal/managed-config",
     {
       method: "PUT",
-      body: payload,
+      body: { config, expectedRevision },
     }
   );
 }

@@ -1396,6 +1396,116 @@ router.patch("/users/:id", adminAuth, async (req, res) => {
   }
 });
 
+// 启用/停用管理员账号（需要 admin:manage-permissions 权限）
+router.patch("/users/:id/active", adminAuth, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body || {};
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({ success: false, error: "isActive 必须是布尔值" });
+    }
+
+    const target = await XhuntAdminManager.findByPk(id);
+    if (!target) return res.status(404).json({ success: false, error: "未找到" });
+    if (target.role === "super") {
+      return res.status(400).json({ success: false, error: "超级管理员账号不能停用" });
+    }
+    if (Number(req.adminUser.id) === Number(target.id)) {
+      return res.status(400).json({ success: false, error: "不能修改自己的账号状态" });
+    }
+
+    target.isActive = isActive;
+    await target.save();
+    await bumpAdminSessionVersion(req, target.id);
+
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser.id,
+        email: req.adminUser.email,
+        action: isActive ? "activate-admin" : "deactivate-admin",
+        route: `/admin/users/${id}/active`,
+        method: "PATCH",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: true,
+        message: JSON.stringify({ targetId: target.id, targetEmail: target.email, isActive }),
+      });
+    } catch (e) {}
+
+    return res.json({ success: true, data: { id: target.id, email: target.email, isActive: target.isActive, canLogin: target.canLogin } });
+  } catch (e) {
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser?.id,
+        email: req.adminUser?.email,
+        action: "update-admin-active-status",
+        route: `/admin/users/${req.params.id}/active`,
+        method: "PATCH",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: false,
+        message: e.message,
+      });
+    } catch (_) {}
+    return res.status(500).json({ success: false, error: "更新账号状态失败" });
+  }
+});
+
+// 删除管理员账号：仅 super 可操作，保留审计记录但清理该账号的生物识别凭证
+router.delete("/users/:id", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = await XhuntAdminManager.findByPk(id);
+    if (!target) return res.status(404).json({ success: false, error: "未找到" });
+    if (target.role === "super") {
+      return res.status(400).json({ success: false, error: "超级管理员账号不能删除" });
+    }
+    if (Number(req.adminUser.id) === Number(target.id)) {
+      return res.status(400).json({ success: false, error: "不能删除自己的账号" });
+    }
+
+    const targetId = target.id;
+    const targetEmail = target.email;
+    const deletedCredentialCount = await XhuntAdminManager.sequelize.transaction(async (transaction) => {
+      const credentialCount = await XhuntAdminWebAuthnCredential.destroy({ where: { adminId: targetId }, transaction });
+      await target.destroy({ transaction });
+      return credentialCount;
+    });
+    await bumpAdminSessionVersion(req, targetId);
+
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser.id,
+        email: req.adminUser.email,
+        action: "delete-admin",
+        route: `/admin/users/${id}`,
+        method: "DELETE",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: true,
+        message: JSON.stringify({ targetId, targetEmail, deletedCredentialCount }),
+      });
+    } catch (e) {}
+
+    return res.json({ success: true, data: { id: targetId, email: targetEmail } });
+  } catch (e) {
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser?.id,
+        email: req.adminUser?.email,
+        action: "delete-admin",
+        route: `/admin/users/${req.params.id}`,
+        method: "DELETE",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: false,
+        message: e.message,
+      });
+    } catch (_) {}
+    return res.status(500).json({ success: false, error: "删除管理员账号失败" });
+  }
+});
+
 // 重置其他管理员登录密码（需要 admin:manage-permissions 权限）
 router.post("/users/:id/password/reset-random", adminAuth, requirePermission("admin:manage-permissions"), async (req, res) => {
   try {

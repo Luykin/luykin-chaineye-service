@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
 import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { useAuth } from "@/app/auth";
-import { createAdminUser, fetchAdminUsers, resetAdminRandomPassword, unlockAdminUser, updateAdminPermissions, type AdminUserItem } from "@/services/admin-users";
+import { createAdminUser, deleteAdminUser, fetchAdminUsers, resetAdminRandomPassword, unlockAdminUser, updateAdminActiveStatus, updateAdminPermissions, type AdminUserItem } from "@/services/admin-users";
 
 
 function isAdminUserLocked(row: AdminUserItem) {
@@ -69,10 +69,11 @@ export function AdminUsersPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUserItem | null>(null);
+  const [copyMode, setCopyMode] = useState(false);
   const [resetResult, setResetResult] = useState<{ email: string; password: string } | null>(null);
   const [form] = Form.useForm();
   const [permForm] = Form.useForm();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
 
   const query = useQuery({ queryKey: ["admin-users"], queryFn: fetchAdminUsers });
   const rows = query.data?.data || [];
@@ -87,6 +88,24 @@ export function AdminUsersPage() {
     mutationFn: ({ id, permissions }: { id: number; permissions: string[] }) => updateAdminPermissions(id, permissions),
     onSuccess: () => { messageApi.success("权限已更新"); setEditingUser(null); void query.refetch(); },
     onError: (error: Error) => messageApi.error(error.message || "权限更新失败"),
+  });
+
+  const activeStatusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => updateAdminActiveStatus(id, isActive),
+    onSuccess: (_response, variables) => {
+      messageApi.success(variables.isActive ? "账号已启用" : "账号已停用，已强制退出当前会话");
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "账号状态更新失败"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (row: AdminUserItem) => deleteAdminUser(row.id),
+    onSuccess: () => {
+      messageApi.success("管理员账号已删除");
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "删除管理员账号失败"),
   });
 
   const resetPasswordMutation = useMutation({
@@ -136,15 +155,68 @@ export function AdminUsersPage() {
     });
   }
 
+  function openPermissionEditor(row: AdminUserItem, shouldCopy = false) {
+    setEditingUser(row);
+    setCopyMode(shouldCopy);
+    permForm.setFieldsValue({ permissions: row.permissions || [], copyFromAdminId: undefined });
+  }
+
+  function copyPermissionsFrom(sourceId: number) {
+    const source = rows.find((row) => Number(row.id) === Number(sourceId));
+    if (!source) return;
+    permForm.setFieldsValue({ permissions: source.permissions || [] });
+    messageApi.info(`已复制 ${source.email} 的权限，可继续修改后保存`);
+  }
+
+  function changeAdminActiveStatus(row: AdminUserItem, isActive: boolean) {
+    if (isActive) {
+      activeStatusMutation.mutate({ id: row.id, isActive });
+      return;
+    }
+    Modal.confirm({
+      title: "停用管理员账号",
+      content: `确定要停用 ${row.email} 吗？该账号将立即无法继续使用管理后台。`,
+      okText: "停用",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: () => activeStatusMutation.mutateAsync({ id: row.id, isActive }),
+    });
+  }
+
+  function confirmDeleteAdmin(row: AdminUserItem) {
+    Modal.confirm({
+      title: "删除管理员账号",
+      content: `确定要永久删除 ${row.email} 吗？该账号的生物识别凭证会一并删除，且无法恢复。`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: () => deleteMutation.mutateAsync(row),
+    });
+  }
+
   const columns = useMemo(() => [
     { title: "ID", dataIndex: "id", width: 64 },
     { title: "邮箱", dataIndex: "email", render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
     { title: "角色", dataIndex: "role", width: 110, render: (value: string) => <Tag color={value === "super" ? "gold" : "blue"}>{value}</Tag> },
-    { title: "状态", width: 150, render: (_: unknown, row: AdminUserItem) => {
+    { title: "状态", width: 180, render: (_: unknown, row: AdminUserItem) => {
       const locked = isAdminUserLocked(row);
+      const isSelf = Number(user?.id) === Number(row.id);
+      const isProtectedSuper = row.role === "super";
+      const canManageAccounts = hasPermission("admin:manage-permissions");
       return (
         <Space size={4} wrap>
-          <Tag color={row.isActive ? "success" : "default"}>{row.isActive ? "启用" : "停用"}</Tag>
+          <Switch
+            size="small"
+            checked={row.isActive}
+            checkedChildren="启用"
+            unCheckedChildren="停用"
+            aria-label={`切换 ${row.email} 的账号状态`}
+            disabled={!canManageAccounts || isSelf || isProtectedSuper || activeStatusMutation.isPending}
+            loading={activeStatusMutation.isPending}
+            title={isProtectedSuper ? "超级管理员账号不能停用" : undefined}
+            onChange={(isActive) => changeAdminActiveStatus(row, isActive)}
+          />
+          {isProtectedSuper ? <Tag color="gold">受保护</Tag> : null}
           {locked ? <Tag color="error">锁定</Tag> : null}
         </Space>
       );
@@ -153,13 +225,14 @@ export function AdminUsersPage() {
     { title: "权限", dataIndex: "permissions", render: (values: string[]) => <Space wrap size={[4, 4]} className="admin-users-perm-tags">{(values || []).slice(0, 8).map((item) => <Tag key={item}>{item}</Tag>)}{(values || []).length > 8 ? <Tag>+{values.length - 8}</Tag> : null}</Space> },
     {
       title: "操作",
-      width: 180,
+      width: 360,
       render: (_: unknown, row: AdminUserItem) => {
         const isSelf = Number(user?.id) === Number(row.id);
         const canUnlock = user?.role === "super";
         return (
-          <Space size={6}>
-            <Button size="small" onClick={() => { setEditingUser(row); permForm.setFieldsValue({ permissions: row.permissions || [] }); }}>权限</Button>
+          <Space size={6} wrap>
+            <Button size="small" onClick={() => openPermissionEditor(row)}>权限</Button>
+            <Button size="small" onClick={() => openPermissionEditor(row, true)}>复制权限</Button>
             {canUnlock && isAdminUserLocked(row) ? (
               <Button
                 size="small"
@@ -180,11 +253,21 @@ export function AdminUsersPage() {
             >
               重置密码
             </Button>
+            {user?.role === "super" && row.role !== "super" && !isSelf ? (
+              <Button
+                size="small"
+                danger
+                loading={deleteMutation.isPending}
+                onClick={() => confirmDeleteAdmin(row)}
+              >
+                删除账号
+              </Button>
+            ) : null}
           </Space>
         );
       },
     },
-  ], [permForm, resetPasswordMutation.isPending, unlockMutation.isPending, user?.id, user?.role]);
+  ], [activeStatusMutation.isPending, deleteMutation.isPending, hasPermission, permForm, resetPasswordMutation.isPending, rows, unlockMutation.isPending, user?.id, user?.role]);
 
   return (
     <PermissionGuard permission="admin-users">
@@ -194,7 +277,7 @@ export function AdminUsersPage() {
         description="管理后台账号、日报接收开关和权限清单。"
         extra={<Space><Button icon={<ReloadOutlined />} onClick={() => query.refetch()} loading={query.isFetching}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>新增管理员</Button></Space>}
       >
-        <Table rowKey="id" size="small" columns={columns} dataSource={rows} loading={query.isFetching} scroll={{ x: 1100 }} pagination={false} />
+        <Table rowKey="id" size="small" columns={columns} dataSource={rows} loading={query.isFetching} scroll={{ x: 1340 }} pagination={false} />
       </PageSection>
 
       <Modal title="新增管理员" open={createOpen} onCancel={() => setCreateOpen(false)} onOk={() => form.submit()} confirmLoading={createMutation.isPending} okText="创建" cancelText="取消" width={760}>
@@ -206,8 +289,17 @@ export function AdminUsersPage() {
         </Form>
       </Modal>
 
-      <Modal title={`编辑权限：${editingUser?.email || ""}`} open={!!editingUser} onCancel={() => setEditingUser(null)} onOk={() => permForm.submit()} confirmLoading={permMutation.isPending} okText="保存" cancelText="取消" width={820}>
+      <Modal title={`${copyMode ? "复制权限" : "编辑权限"}：${editingUser?.email || ""}`} open={!!editingUser} onCancel={() => { setEditingUser(null); setCopyMode(false); }} onOk={() => permForm.submit()} confirmLoading={permMutation.isPending} okText="保存" cancelText="取消" width={820}>
         <Form form={permForm} onFinish={(values) => editingUser && permMutation.mutate({ id: editingUser.id, permissions: values.permissions || [] })}>
+          {copyMode ? (
+            <Form.Item name="copyFromAdminId" label="复制自">
+              <Select
+                placeholder="选择要复制权限的管理员"
+                options={rows.filter((row) => Number(row.id) !== Number(editingUser?.id)).map((row) => ({ value: row.id, label: `${row.email}（${row.role}）` }))}
+                onChange={copyPermissionsFrom}
+              />
+            </Form.Item>
+          ) : null}
           <Form.Item name="permissions"><Checkbox.Group options={PERMISSION_OPTIONS} className="admin-users-perm-grid" /></Form.Item>
         </Form>
       </Modal>

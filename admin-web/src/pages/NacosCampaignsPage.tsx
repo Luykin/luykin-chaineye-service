@@ -5,6 +5,7 @@ import { AdminImageUpload } from "@/components/upload/AdminImageUpload";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { useAuth } from "@/app/auth";
+import { ApiError } from "@/services/apiClient";
 import {
   fetchAllWebsiteCampaigns,
   fetchWebsiteCampaignByNacosId,
@@ -877,6 +878,7 @@ export function NacosCampaignsPage() {
   const [originalConfig, setOriginalConfig] = useState<CampaignConfig | null>(
     null,
   );
+  const [managedConfigRevision, setManagedConfigRevision] = useState("");
   const [websiteRecords, setWebsiteRecords] = useState<WebsiteCampaignRecord[]>(
     [],
   );
@@ -894,6 +896,7 @@ export function NacosCampaignsPage() {
   const [jsonPreviewOpen, setJsonPreviewOpen] = useState(false);
   const [jsonPreviewHtml, setJsonPreviewHtml] = useState("");
   const [jsonDiffHint, setJsonDiffHint] = useState("");
+  const [configConflictOpen, setConfigConflictOpen] = useState(false);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [newCampaignMode, setNewCampaignMode] = useState<"blank" | "copy">(
     "blank",
@@ -1025,9 +1028,10 @@ export function NacosCampaignsPage() {
     }
   }
 
-  async function loadFromDatabase() {
-    if (!confirmDiscardWebsite()) return;
+  async function loadFromDatabase({ discardChanges = false } = {}) {
+    if (!discardChanges && !confirmDiscardWebsite()) return;
     if (
+      !discardChanges &&
       dirty &&
       !window.confirm(
         "你当前有未发布的修改，重新加载会丢失这些修改。\n确认重新加载？",
@@ -1042,6 +1046,7 @@ export function NacosCampaignsPage() {
       const parsed = configFromWebsiteRecords(recordList as AnyObj[]);
       setConfig(parsed);
       setOriginalConfig(clone(parsed));
+      setManagedConfigRevision(records.revision || "");
       setWebsiteRecords(recordList);
       setSelection(null);
       setDirty(false);
@@ -1293,13 +1298,18 @@ export function NacosCampaignsPage() {
     setDirty(true);
     try {
       showToast("正在删除并保存到数据库...", "info");
-      await saveManagedWebsiteCampaignsConfig(nextConfig);
+      const result = await saveManagedWebsiteCampaignsConfig(nextConfig, managedConfigRevision);
       const records = await fetchAllWebsiteCampaigns();
       setWebsiteRecords(records.data || []);
       setOriginalConfig(clone(nextConfig));
+      setManagedConfigRevision(result.revision || managedConfigRevision);
       setDirty(false);
       showToast("删除已生效（已保存）", "success");
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setConfigConflictOpen(true);
+        return;
+      }
       showToast(
         `删除未能保存：${error instanceof Error ? error.message : "未知错误"}（可点击「发布」重试）`,
         "error",
@@ -1478,14 +1488,20 @@ export function NacosCampaignsPage() {
   async function confirmPublish() {
     setPublishing(true);
     try {
-      await saveManagedWebsiteCampaignsConfig(config);
+      const result = await saveManagedWebsiteCampaignsConfig(config, managedConfigRevision);
       const records = await fetchAllWebsiteCampaigns();
       setWebsiteRecords(records.data || []);
       setOriginalConfig(clone(config));
+      setManagedConfigRevision(result.revision || managedConfigRevision);
       setDirty(false);
       setJsonPreviewOpen(false);
       showToast("保存成功", "success");
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setJsonPreviewOpen(false);
+        setConfigConflictOpen(true);
+        return;
+      }
       showToast(
         `保存失败：${error instanceof Error ? error.message : "未知错误"}`,
         "error",
@@ -1504,6 +1520,7 @@ export function NacosCampaignsPage() {
       setConfig(parsed);
       setOriginalConfig(clone(parsed));
       setWebsiteRecords(records.data || []);
+      setManagedConfigRevision(records.revision || "");
       setDirty(false);
       showToast("刷新完成", "success");
       if (websiteTarget)
@@ -1612,6 +1629,8 @@ export function NacosCampaignsPage() {
         });
         setWebsiteForm(makeWebsiteForm(record.data as AnyObj, websiteTarget));
       }
+      const latestRecords = await fetchAllWebsiteCampaigns();
+      setManagedConfigRevision(latestRecords.revision || "");
       if (c && record.data) {
         const payload = (record.data as AnyObj).nacosPayload || {};
         const nextMetrics = Array.isArray(payload.displayMetrics) ? payload.displayMetrics : undefined;
@@ -2390,6 +2409,31 @@ export function NacosCampaignsPage() {
           </p>
           <pre dangerouslySetInnerHTML={{ __html: jsonPreviewHtml }} />
         </div>
+      </Modal>
+
+      <Modal
+        open={configConflictOpen}
+        title="配置已更新"
+        closable={false}
+        maskClosable={false}
+        footer={[
+          <Button key="continue" onClick={() => setConfigConflictOpen(false)}>
+            继续编辑
+          </Button>,
+          <Button
+            key="reload"
+            type="primary"
+            onClick={() => {
+              setConfigConflictOpen(false);
+              void loadFromDatabase({ discardChanges: true });
+            }}
+          >
+            重新加载
+          </Button>,
+        ]}
+      >
+        <p>配置已被其他管理员更新，您的修改尚未保存。</p>
+        <p className="muted">继续编辑会保留当前草稿；重新加载会丢弃当前草稿并载入最新配置。</p>
       </Modal>
     </PermissionGuard>
   );

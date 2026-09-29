@@ -18,6 +18,7 @@ import {
 import type { MenuProps } from "antd";
 import {
   Button,
+  Alert,
   Checkbox,
   Dropdown,
   Form,
@@ -35,11 +36,12 @@ import {
   message,
 } from "antd";
 import type { ReactNode } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { Outlet, useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { useAdminTheme } from "@/app/theme";
 import { buildApiUrl } from "@/services/apiClient";
+import { useAdminWebUpdate } from "@/app/version-update";
 import { adminMainNavItems, type AdminNavItem } from "@/config/admin-navigation";
 import chromeStoreIcon from "@/assets/icons/chrome-store.svg";
 
@@ -132,6 +134,7 @@ export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, hasPermission, refresh } = useAuth();
+  const { updateAvailable, refresh: refreshForUpdate } = useAdminWebUpdate();
   const adminTheme = useAdminTheme();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
@@ -149,6 +152,19 @@ export function AdminLayout() {
   >([]);
   const [passwordForm] = Form.useForm();
   const [webauthnForm] = Form.useForm();
+
+  const shouldBlockNavigation = useCallback(
+    ({ currentLocation, nextLocation }: { currentLocation: { pathname: string }; nextLocation: { pathname: string } }) =>
+      updateAvailable && currentLocation.pathname !== nextLocation.pathname,
+    [updateAvailable],
+  );
+  const navigationBlocker = useBlocker(shouldBlockNavigation);
+
+  useEffect(() => {
+    if (navigationBlocker.state !== "blocked") return;
+    messageApi.warning("检测到管理后台新版本，请刷新后再切换页面");
+    navigationBlocker.reset();
+  }, [messageApi, navigationBlocker]);
 
   const visibleMainNavItems = useMemo(() => {
     const visibleItems = adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super");
@@ -527,6 +543,16 @@ export function AdminLayout() {
           </Dropdown>
         </div>
       </Header>
+
+      {updateAvailable ? (
+        <Alert
+          banner
+          showIcon
+          type="warning"
+          message="管理后台有新版本，当前页面可继续使用；请刷新后再切换页面。"
+          action={<Button size="small" type="primary" onClick={refreshForUpdate}>立即刷新</Button>}
+        />
+      ) : null}
 
       <div className="admin-page-title-bar">
         <Typography.Title level={4} ellipsis className="admin-page-title">

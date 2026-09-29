@@ -5,6 +5,7 @@ function cleanUrlOrNull(val) {
   return s;
 }
 
+const crypto = require("crypto");
 const { Op } = require("sequelize");
 const { XHuntWebsiteCampaign, pgInstance } = require("../../models/postgres-start");
 const LEGACY_WEBSITE_CAMPAIGNS = require("../constants/legacyWebsiteCampaigns");
@@ -18,6 +19,7 @@ const WEBSITE_STATUS_VALUES = new Set([
   "ended",
   "archived",
 ]);
+const MANAGED_CONFIG_LOCK_KEY = "xhunt:website-campaigns:managed-config";
 
 function toSafeObject(value, fallback = {}) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
@@ -334,17 +336,36 @@ async function syncCampaignsFromNacos({ dryRun = false } = {}) {
   return { summary, items };
 }
 
-async function saveManagedCampaignsConfig(configLike) {
+function buildManagedCampaignsRevision(records) {
+  const fingerprint = records
+    .map((record) => {
+      const data = typeof record.get === "function" ? record.get({ plain: true }) : record;
+      const updatedAt = data.updatedAt;
+      return {
+        id: String(data.id),
+        updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : String(updatedAt || ""),
+        isDeleted: !!data.isDeleted,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return crypto.createHash("sha256").update(JSON.stringify(fingerprint)).digest("hex");
+}
+
+function createManagedConfigConflictError(revision) {
+  const error = new Error("活动配置已被其他管理员更新，请重新加载后再保存");
+  error.status = 409;
+  error.code = "CAMPAIGN_CONFIG_CONFLICT";
+  error.revision = revision;
+  return error;
+}
+
+async function saveManagedCampaignsConfig(configLike, expectedRevision) {
   const config = toSafeObject(configLike, {});
   const campaigns = toSafeArray(config.campaigns)
     .map(normalizeManagedCampaign)
     .filter((item) => item.nacosCampaignId && item.campaignKey);
 
   const incomingIds = new Set(campaigns.map((item) => String(item.nacosCampaignId)));
-  const existingRecords = await XHuntWebsiteCampaign.findAll();
-  const existingMap = new Map(
-    existingRecords.map((item) => [String(item.nacosCampaignId), item])
-  );
 
   const summary = {
     total: campaigns.length,
@@ -353,8 +374,22 @@ async function saveManagedCampaignsConfig(configLike) {
     restored: 0,
     softDeleted: 0,
   };
+  let revision = "";
 
   await pgInstance.transaction(async (transaction) => {
+    await pgInstance.query(
+      "SELECT pg_advisory_xact_lock(hashtext(:lockKey))",
+      { replacements: { lockKey: MANAGED_CONFIG_LOCK_KEY }, transaction }
+    );
+    const existingRecords = await XHuntWebsiteCampaign.findAll({ transaction });
+    const actualRevision = buildManagedCampaignsRevision(existingRecords);
+    if (!expectedRevision || expectedRevision !== actualRevision) {
+      throw createManagedConfigConflictError(actualRevision);
+    }
+    const existingMap = new Map(
+      existingRecords.map((item) => [String(item.nacosCampaignId), item])
+    );
+
     for (const campaign of campaigns) {
       const existing = existingMap.get(String(campaign.nacosCampaignId));
       if (!existing) {
@@ -401,9 +436,12 @@ async function saveManagedCampaignsConfig(configLike) {
       );
       summary.softDeleted += 1;
     }
+
+    const savedRecords = await XHuntWebsiteCampaign.findAll({ transaction });
+    revision = buildManagedCampaignsRevision(savedRecords);
   });
 
-  return summary;
+  return { summary, revision };
 }
 
 function formatRewardText(record, lang = "zh-CN") {
@@ -1007,6 +1045,25 @@ async function listAllWebsiteCampaignsAdmin() {
     });
 }
 
+async function getManagedCampaignsAdminSnapshot() {
+  const records = await XHuntWebsiteCampaign.findAll();
+  return {
+    data: records
+      .map((record) => ({
+        ...serializeWebsiteCampaignAdmin(record),
+        groupType: record.isDeleted ? "website_only" : "nacos_active",
+      }))
+      .sort((a, b) => {
+        if (a.isDeleted !== b.isDeleted) return a.isDeleted ? 1 : -1;
+        const wa = Number(a.sortWeight || 0);
+        const wb = Number(b.sortWeight || 0);
+        if (wa !== wb) return wb - wa;
+        return String(a.campaignKey || a.slug).localeCompare(String(b.campaignKey || b.slug));
+      }),
+    revision: buildManagedCampaignsRevision(records),
+  };
+}
+
 async function importLegacyWebsiteCampaigns() {
   const summary = { created: 0, skipped: 0, updatedDeleted: 0 };
   return pgInstance.transaction(async (transaction) => {
@@ -1117,6 +1174,7 @@ module.exports = {
   normalizeCustomLeaderboardDisplayChannels,
   filterCustomLeaderboardsByChannel,
   listAllWebsiteCampaignsAdmin,
+  getManagedCampaignsAdminSnapshot,
   importLegacyWebsiteCampaigns,
   serializeWebsiteCampaignAdmin,
 };

@@ -25,7 +25,7 @@ const {
   getWebsiteCampaignAdminByNacosId,
   saveManagedCampaignsConfig,
   saveWebsiteCampaignConfig,
-  listAllWebsiteCampaignsAdmin,
+  getManagedCampaignsAdminSnapshot,
   importLegacyWebsiteCampaigns,
   serializeWebsiteCampaignAdmin,
 } = require("../services/websiteCampaignService");
@@ -454,8 +454,8 @@ router.post(
 
 router.get("/internal/list-all", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
-    const data = await listAllWebsiteCampaignsAdmin();
-    return res.json({ success: true, data });
+    const snapshot = await getManagedCampaignsAdminSnapshot();
+    return res.json({ success: true, ...snapshot });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "读取网站活动列表失败" });
   }
@@ -515,21 +515,28 @@ router.post("/internal/sync-from-nacos", adminAuth, requirePermission("nacos_con
 
 router.put("/internal/managed-config", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
-    const summary = await saveManagedCampaignsConfig(req.body || {});
+    const body = req.body || {};
+    const { summary, revision } = await saveManagedCampaignsConfig(body.config, body.expectedRevision);
     await invalidateWebsiteCampaignCaches(req);
     await logAdminAction(req, {
       action: "website-campaign-save-managed-config",
       success: true,
       message: JSON.stringify(summary),
     });
-    return res.json({ success: true, summary });
+    return res.json({ success: true, summary, revision });
   } catch (error) {
     await logAdminAction(req, {
       action: "website-campaign-save-managed-config",
       success: false,
       message: error.message || "保存失败",
     });
-    return res.status(500).json({ success: false, error: error.message || "保存失败" });
+    const status = error.status === 409 ? 409 : 500;
+    return res.status(status).json({
+      success: false,
+      error: error.message || "保存失败",
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.revision ? { revision: error.revision } : {}),
+    });
   }
 });
 

@@ -32,6 +32,19 @@ export function updateAdminDailyReport(id: number, receivesDailyReport: boolean)
   });
 }
 
+export function updateAdminActiveStatus(id: number, isActive: boolean) {
+  return apiRequest<{ success: boolean; data: Pick<AdminUserItem, "id" | "email" | "isActive" | "canLogin"> }>(`/admin/users/${id}/active`, {
+    method: "PATCH",
+    body: { isActive },
+  });
+}
+
+export function deleteAdminUser(id: number) {
+  return apiRequest<{ success: boolean; data: Pick<AdminUserItem, "id" | "email"> }>(`/admin/users/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export function updateAdminPermissions(id: number, permissions: string[]) {
   return apiRequest<{ success: boolean; data: Pick<AdminUserItem, "id" | "permissions"> }>(`/admin/users/${id}/permissions`, {
     method: "PATCH",

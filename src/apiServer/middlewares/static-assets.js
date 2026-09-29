@@ -13,6 +13,7 @@ function setFrontendStaticCacheHeaders(res, filePath, stat) {
 
   const normalizedPath = filePath.split(path.sep).join("/");
   const isHtml = /\.html?$/i.test(normalizedPath);
+  const isAdminWebVersionManifest = /\/admin-web\/version\.json$/i.test(normalizedPath);
   const isViteHashedAsset = /\/admin-web\/assets\//.test(normalizedPath);
   const isCompressibleAsset = /\.(?:js|css|mjs|json|svg)$/i.test(normalizedPath);
   const isImageOrFont = /\.(?:png|jpe?g|webp|gif|ico|woff2?|ttf|otf)$/i.test(normalizedPath);
@@ -22,6 +23,12 @@ function setFrontendStaticCacheHeaders(res, filePath, stat) {
   if (isHtml) {
     // HTML 是入口文件，需要每次向服务器确认；资源文件用长缓存。
     res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    return;
+  }
+
+  if (isAdminWebVersionManifest) {
+    // 版本清单供旧页面轮询新部署，必须每次回源，不能被浏览器或 CDN 复用旧结果。
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     return;
   }
 
