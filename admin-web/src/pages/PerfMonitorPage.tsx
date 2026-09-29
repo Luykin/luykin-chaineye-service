@@ -23,6 +23,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import dayjs, { Dayjs } from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
+import { useAdminTheme } from "@/app/theme";
 import {
   fetchPerfKpis,
   fetchPerfMetrics,
@@ -196,6 +197,8 @@ function getTraceRequestId(trace: PerfTracePoint | null) {
 
 export function PerfMonitorPage() {
   const [messageApi, contextHolder] = message.useMessage();
+  const { effectiveMode } = useAdminTheme();
+  const isDarkTheme = effectiveMode === "dark";
   const defaultRange = getDefaultRange();
   const [startTime, setStartTime] = useState<Dayjs>(defaultRange.start);
   const [endTime, setEndTime] = useState<Dayjs>(defaultRange.end);
@@ -422,7 +425,7 @@ export function PerfMonitorPage() {
     if (tracesQuery.isFetching) {
       chart.showLoading("default", {
         text: "正在加载请求分布...",
-        maskColor: "rgba(255,255,255,0.65)",
+        maskColor: isDarkTheme ? "rgba(15, 23, 42, 0.72)" : "rgba(255,255,255,0.65)",
       });
       return;
     }
@@ -430,7 +433,7 @@ export function PerfMonitorPage() {
     chart.hideLoading();
 
     if (!filteredTraces.length) {
-      chart.setOption({ title: { text: "当前范围暂无散点数据", left: "center", top: "center", textStyle: { color: "#94a3b8", fontSize: 14, fontWeight: 500 } } }, true);
+      chart.setOption({ title: { text: "当前范围暂无散点数据", left: "center", top: "center", textStyle: { color: isDarkTheme ? "#cbd5e1" : "#94a3b8", fontSize: 14, fontWeight: 500 } } }, true);
       return;
     }
 
@@ -445,10 +448,13 @@ export function PerfMonitorPage() {
           data: ["Server Errors (5xx)", "Client Errors (4xx)", "Success"],
           right: 10,
           top: 8,
-          textStyle: { color: "#64748b", fontSize: 12 },
+          textStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b", fontSize: 12 },
         },
         tooltip: {
           trigger: "item",
+          backgroundColor: isDarkTheme ? "#0f172a" : "#ffffff",
+          borderColor: isDarkTheme ? "#475569" : "#cbd5e1",
+          textStyle: { color: isDarkTheme ? "#e5edf8" : "#1f2937" },
           formatter: (params: any) => {
             const v = params.value;
             const path = v[5] || "";
@@ -463,13 +469,14 @@ export function PerfMonitorPage() {
             return `<b>requestId:</b> ${escapeHtml(v[4] || "")}<br/><b>source:</b> ${escapeHtml(source)}${client ? ` / ${escapeHtml(client)}` : ""}${sign ? ` / sign=${escapeHtml(sign)}` : ""}${reason ? ` / ${escapeHtml(reason)}` : ""}<br/><b>path:</b> <span title="${escapeHtml(path)}">${escapeHtml(truncatedPath)}</span><br/><b>userId:</b> ${escapeHtml(v[6] || "")}<br/>${ip ? `<b>ip:</b> <span title="${escapeHtml(ip)}">${escapeHtml(ipTruncated)}</span><br/>` : ""}<b>status:</b> ${v[2]}<br/><b>duration:</b> ${Number(v[1]).toFixed(2)} ms<br/>${hasDetail ? "<b>点击查看详情</b>" : "无详情（未采样）"}`;
           },
         },
-        xAxis: { type: "time", name: "Time", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
-        yAxis: { type: "value", name: "Duration (ms)", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
+        xAxis: { type: "time", name: "Time", scale: true, axisLabel: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, nameTextStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, axisLine: { lineStyle: { color: isDarkTheme ? "#475569" : "#cbd5e1" } } },
+        yAxis: { type: "value", name: "Duration (ms)", scale: true, axisLabel: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, nameTextStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, axisLine: { lineStyle: { color: isDarkTheme ? "#475569" : "#cbd5e1" } }, splitLine: { lineStyle: { color: isDarkTheme ? "#243247" : "#e2e8f0" } } },
         visualMap: {
           type: "piecewise",
           orient: "horizontal",
           left: "center",
           top: 8,
+          textStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b" },
           pieces: [
             { min: 6000, label: "> 6s", color: "#fca5a5" },
             { min: 3000, max: 6000, label: "3s - 6s", color: "#f97316" },
@@ -480,19 +487,19 @@ export function PerfMonitorPage() {
           seriesIndex: 2,
         },
         series: [
-          { name: "Server Errors (5xx)", type: "effectScatter", symbolSize: 12, color: "#dc2626", data: errorData5xx, z: 10 },
-          { name: "Client Errors (4xx)", type: "scatter", symbolSize: 10, color: "#144e33", data: errorData4xx, z: 9 },
-          { name: "Success", type: "scatter", symbolSize: 8, data: normalData, z: 5 },
+          { name: "Server Errors (5xx)", type: "effectScatter", symbolSize: 12, color: isDarkTheme ? "#f87171" : "#dc2626", data: errorData5xx, z: 10 },
+          { name: "Client Errors (4xx)", type: "scatter", symbolSize: 10, color: isDarkTheme ? "#fbbf24" : "#a16207", data: errorData4xx, z: 9 },
+          { name: "Success", type: "scatter", symbolSize: 8, color: isDarkTheme ? "#60a5fa" : "#2563eb", data: normalData, z: 5 },
         ],
         dataZoom: [
           { type: "inside", disabled: true },
-          { type: "slider", startValue: tenMinutesAgo, endValue: now, bottom: 18 },
+          { type: "slider", startValue: tenMinutesAgo, endValue: now, bottom: 18, textStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, borderColor: isDarkTheme ? "#475569" : "#cbd5e1", fillerColor: isDarkTheme ? "rgba(96, 165, 250, 0.22)" : "rgba(37, 99, 235, 0.16)", handleStyle: { color: isDarkTheme ? "#60a5fa" : "#2563eb" } },
         ],
         grid: { left: 50, right: 24, top: 64, bottom: 84 },
       },
       true,
     );
-  }, [echartsReady, endMs, filteredTraces, startMs, tracesQuery.isFetching]);
+  }, [echartsReady, endMs, filteredTraces, isDarkTheme, startMs, tracesQuery.isFetching]);
 
   useEffect(() => {
     if (!echartsReady || !metricsChartRef.current) return;
@@ -501,7 +508,7 @@ export function PerfMonitorPage() {
     if (metricsQuery.isFetching) {
       chart.showLoading("default", {
         text: "正在加载聚合指标...",
-        maskColor: "rgba(255,255,255,0.65)",
+        maskColor: isDarkTheme ? "rgba(15, 23, 42, 0.72)" : "rgba(255,255,255,0.65)",
       });
       return;
     }
@@ -510,17 +517,17 @@ export function PerfMonitorPage() {
     const metrics = metricsQuery.data || [];
 
     if (!metrics.length) {
-      chart.setOption({ title: { text: "暂无聚合指标数据", left: "center", top: "center", textStyle: { color: "#94a3b8", fontSize: 14, fontWeight: 500 } } }, true);
+      chart.setOption({ title: { text: "暂无聚合指标数据", left: "center", top: "center", textStyle: { color: isDarkTheme ? "#cbd5e1" : "#94a3b8", fontSize: 14, fontWeight: 500 } } }, true);
       return;
     }
 
     chart.setOption(
       {
         animation: false,
-        tooltip: { trigger: "axis" },
-        legend: { data: ["Avg Duration (ms)"], top: 8, textStyle: { color: "#64748b", fontSize: 12 } },
-        xAxis: { type: "time", axisLabel: { color: "#64748b" } },
-        yAxis: { type: "value", name: "Duration (ms)", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
+        tooltip: { trigger: "axis", backgroundColor: isDarkTheme ? "#0f172a" : "#ffffff", borderColor: isDarkTheme ? "#475569" : "#cbd5e1", textStyle: { color: isDarkTheme ? "#e5edf8" : "#1f2937" } },
+        legend: { data: ["Avg Duration (ms)"], top: 8, textStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b", fontSize: 12 } },
+        xAxis: { type: "time", axisLabel: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, axisLine: { lineStyle: { color: isDarkTheme ? "#475569" : "#cbd5e1" } } },
+        yAxis: { type: "value", name: "Duration (ms)", scale: true, axisLabel: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, nameTextStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, axisLine: { lineStyle: { color: isDarkTheme ? "#475569" : "#cbd5e1" } }, splitLine: { lineStyle: { color: isDarkTheme ? "#243247" : "#e2e8f0" } } },
         series: [
           {
             name: "Avg Duration (ms)",
@@ -528,19 +535,19 @@ export function PerfMonitorPage() {
             showSymbol: false,
             smooth: false,
             yAxisIndex: 0,
-            lineStyle: { color: "#3b82f6", width: 2 },
+            lineStyle: { color: isDarkTheme ? "#60a5fa" : "#3b82f6", width: 2 },
             data: metrics.map((d) => [d.timestamp, Number(d.avg_duration_ms).toFixed(2)]),
           },
         ],
         dataZoom: [
           { type: "inside", disabled: true },
-          { type: "slider", startValue: startMs, endValue: endMs, bottom: 12 },
+          { type: "slider", startValue: startMs, endValue: endMs, bottom: 12, textStyle: { color: isDarkTheme ? "#cbd5e1" : "#64748b" }, borderColor: isDarkTheme ? "#475569" : "#cbd5e1", fillerColor: isDarkTheme ? "rgba(96, 165, 250, 0.22)" : "rgba(37, 99, 235, 0.16)", handleStyle: { color: isDarkTheme ? "#60a5fa" : "#2563eb" } },
         ],
         grid: { left: 50, right: 24, top: 48, bottom: 60 },
       },
       true,
     );
-  }, [echartsReady, endMs, metricsQuery.data, metricsQuery.isFetching, startMs]);
+  }, [echartsReady, endMs, isDarkTheme, metricsQuery.data, metricsQuery.isFetching, startMs]);
 
   const traceColumns: ColumnsType<PerfTracePoint> = [
     { title: "时间", key: "ts", width: 170, render: (_, record) => dayjs(record.ts).format("YYYY-MM-DD HH:mm:ss") },

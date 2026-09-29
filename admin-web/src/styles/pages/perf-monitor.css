@@ -2,7 +2,20 @@
   --perf-border: var(--admin-border-soft);
   --perf-muted: var(--admin-text-muted);
   --perf-title: var(--admin-text-strong);
-  --perf-soft-bg: rgba(248, 250, 252, 0.82);
+  --perf-shadow: light-dark(rgba(15, 23, 42, 0.045), rgba(2, 6, 23, 0.34));
+  --perf-filter-accent: light-dark(rgba(59, 130, 246, 0.08), rgba(96, 165, 250, 0.14));
+  --perf-filter-start: light-dark(rgba(255, 255, 255, 0.98), rgba(17, 24, 39, 0.98));
+  --perf-filter-end: light-dark(rgba(248, 250, 252, 0.94), rgba(15, 23, 42, 0.96));
+  --perf-secondary-button-bg: light-dark(rgba(255, 255, 255, 0.82), rgba(30, 41, 59, 0.9));
+  --perf-panel-bg: light-dark(rgba(255, 255, 255, 0.98), rgba(17, 24, 39, 0.98));
+  --perf-panel-head-end: light-dark(#fbfdff, #151f31);
+  --perf-panel-head-border: light-dark(#edf2f7, #29384d);
+  --perf-empty-mask: light-dark(rgba(255, 255, 255, 0.88), rgba(15, 23, 42, 0.88));
+  --perf-error-border: light-dark(#fee2e2, #7f1d1d);
+  --perf-error-bg: light-dark(#fff7f7, #2c1518);
+  --perf-row-hover: light-dark(#f8fbff, #172033);
+  --perf-log-mark-bg: light-dark(#fef3c7, #4a3412);
+  --perf-log-mark-text: light-dark(#92400e, #fde68a);
 }
 
 .perf-filter-card.ant-card,
@@ -10,14 +23,14 @@
 .perf-kpi-card.ant-card {
   border: 1px solid var(--perf-border);
   border-radius: 14px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.045);
+  box-shadow: 0 12px 30px var(--perf-shadow);
 }
 
 .perf-filter-card.ant-card {
   margin-bottom: 16px;
   background:
-    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 34%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+    radial-gradient(circle at 0 0, var(--perf-filter-accent), transparent 34%),
+    linear-gradient(135deg, var(--perf-filter-start), var(--perf-filter-end));
 }
 
 .perf-filter-card .ant-card-body {
@@ -136,7 +149,7 @@
 }
 
 .perf-filter-secondary-btn.ant-btn {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--perf-secondary-button-bg);
 }
 
 .perf-kpi-card.ant-card {
@@ -210,14 +223,14 @@
 
 .perf-panel-card.ant-card {
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--perf-panel-bg);
 }
 
 .perf-panel-card > .ant-card-head {
   min-height: 48px;
   padding: 0 16px;
-  border-bottom: 1px solid #edf2f7;
-  background: linear-gradient(180deg, var(--admin-surface), #fbfdff);
+  border-bottom: 1px solid var(--perf-panel-head-border);
+  background: linear-gradient(180deg, var(--admin-surface), var(--perf-panel-head-end));
 }
 
 .perf-panel-card > .ant-card-body {
@@ -271,15 +284,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--perf-empty-mask);
   backdrop-filter: blur(2px);
 }
 
 .perf-error-collapse.ant-collapse {
   margin-top: 12px;
-  border-color: #fee2e2;
+  border-color: var(--perf-error-border);
   border-radius: 12px;
-  background: #fff7f7;
+  background: var(--perf-error-bg);
 }
 
 .perf-error-collapse .ant-collapse-header {
@@ -304,7 +317,7 @@
 }
 
 .perf-compact-table .ant-table-tbody > tr:hover > td {
-  background: #f8fbff !important;
+  background: var(--perf-row-hover) !important;
 }
 
 .perf-help-text {
@@ -350,8 +363,8 @@
 
 .perf-log-line mark {
   border-radius: 3px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--perf-log-mark-bg);
+  color: var(--perf-log-mark-text);
 }
 
 .perf-log-line-number {
