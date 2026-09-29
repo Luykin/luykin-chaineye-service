@@ -220,6 +220,7 @@ export function PerfMonitorPage() {
   const [detailRequestId, setDetailRequestId] = useState("");
   const [detailData, setDetailData] = useState<PerfTraceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [logSearchRequested, setLogSearchRequested] = useState(false);
   const [requestIdSearch, setRequestIdSearch] = useState("");
   const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
 
@@ -268,7 +269,6 @@ export function PerfMonitorPage() {
   const requestCount = getRequestCount(curKpi);
   const avgDuration = getAvgDuration(curKpi);
   const p95Duration = getP95Duration(curKpi);
-  const rps = requestCount / spanSecs;
   const rangeText = `${appliedStart.format("MM-DD HH:mm")} ~ ${appliedEnd.format("MM-DD HH:mm")}`;
 
   const filteredTraces = useMemo(() => {
@@ -351,6 +351,7 @@ export function PerfMonitorPage() {
     setDetailRequestId(requestId);
     setDetailData(null);
     setDetailLoading(true);
+    setLogSearchRequested(false);
 
     try {
       if (trace?.hasDetail) {
@@ -517,12 +518,9 @@ export function PerfMonitorPage() {
       {
         animation: false,
         tooltip: { trigger: "axis" },
-        legend: { data: ["Avg Duration (ms)", "RPS"], top: 8, textStyle: { color: "#64748b", fontSize: 12 } },
+        legend: { data: ["Avg Duration (ms)"], top: 8, textStyle: { color: "#64748b", fontSize: 12 } },
         xAxis: { type: "time", axisLabel: { color: "#64748b" } },
-        yAxis: [
-          { type: "value", name: "Duration (ms)", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
-          { type: "value", name: "RPS", axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
-        ],
+        yAxis: { type: "value", name: "Duration (ms)", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
         series: [
           {
             name: "Avg Duration (ms)",
@@ -533,15 +531,6 @@ export function PerfMonitorPage() {
             lineStyle: { color: "#3b82f6", width: 2 },
             data: metrics.map((d) => [d.timestamp, Number(d.avg_duration_ms).toFixed(2)]),
           },
-          {
-            name: "RPS",
-            type: "line",
-            showSymbol: false,
-            smooth: false,
-            yAxisIndex: 1,
-            lineStyle: { color: "#10b981", width: 2 },
-            data: metrics.map((d) => [d.timestamp, (d.request_count / intervalSecs).toFixed(2)]),
-          },
         ],
         dataZoom: [
           { type: "inside", disabled: true },
@@ -551,7 +540,7 @@ export function PerfMonitorPage() {
       },
       true,
     );
-  }, [echartsReady, endMs, intervalSecs, metricsQuery.data, metricsQuery.isFetching, startMs]);
+  }, [echartsReady, endMs, metricsQuery.data, metricsQuery.isFetching, startMs]);
 
   const traceColumns: ColumnsType<PerfTracePoint> = [
     { title: "时间", key: "ts", width: 170, render: (_, record) => dayjs(record.ts).format("YYYY-MM-DD HH:mm:ss") },
@@ -589,7 +578,7 @@ export function PerfMonitorPage() {
   const logSearchQuery = useQuery({
     queryKey: ["perf", "log-search", detailRequestId],
     queryFn: () => fetchLogSearch({ query: detailRequestId, contextLines: 3, limit: 20 }),
-    enabled: detailOpen && Boolean(detailRequestId),
+    enabled: detailOpen && Boolean(detailRequestId) && logSearchRequested,
   });
 
   return (
@@ -769,10 +758,7 @@ export function PerfMonitorPage() {
 
           <Row gutter={[16, 16]}>
             <Col xs={12} md={6}>
-              <PerfKpiCard label="请求数" value={requestCount || 0} tone="blue" hint="当前窗口" />
-            </Col>
-            <Col xs={12} md={6}>
-              <PerfKpiCard label="RPS" value={Number(rps.toFixed(2))} tone="green" hint="吞吐量" />
+              <PerfKpiCard label="采样请求数" value={requestCount || 0} tone="blue" hint="当前窗口" />
             </Col>
             <Col xs={12} md={6}>
               <PerfKpiCard label="平均耗时" value={formatMs(avgDuration)} tone={avgDuration > 1000 ? "orange" : "blue"} hint="Avg" />
@@ -787,7 +773,7 @@ export function PerfMonitorPage() {
               <ChartContainer chartRef={scatterContainerRef} height={SCATTER_HEIGHT} ready={echartsReady} emptyText="ECharts 未加载" />
             </PerfPanelCard>
 
-            <PerfPanelCard title="平均耗时与吞吐量（折线图）（采样后）">
+            <PerfPanelCard title="平均耗时趋势（折线图）（采样后）">
               <ChartContainer chartRef={metricsContainerRef} height={METRICS_HEIGHT} ready={echartsReady} emptyText="ECharts 未加载" />
             </PerfPanelCard>
 
@@ -828,7 +814,7 @@ export function PerfMonitorPage() {
 
             <PerfPanelCard title="指标说明">
               <Space direction="vertical" size={8} className="perf-help-text">
-                <Typography.Text><b>RPS</b>（Requests Per Second）：每秒请求数，反映系统吞吐量。</Typography.Text>
+                <Typography.Text><b>采样请求数</b>：当前窗口内被索引的请求数量，仅用于判断延迟样本量，不能代表实际吞吐量。</Typography.Text>
                 <Typography.Text><b>Avg Duration</b>：统计窗口内的平均耗时（毫秒）。窗口大小由后端聚合（通常 60s 或 300s）。</Typography.Text>
                 <Typography.Text><b>队列积压</b>：perf:events:queue 当前长度。持续升高表示后台消费速度不足。</Typography.Text>
                 <Typography.Text><b>颜色规则</b>：深红 (5xx)；深绿 (4xx)；浅红 (&gt;6s)；橙色 (3-6s)；浅绿 (500ms-3s)；绿色 (&lt;=500ms)。</Typography.Text>
@@ -843,7 +829,7 @@ export function PerfMonitorPage() {
           ) : null}
         </PageSection>
 
-        <Modal className="perf-detail-modal" open={detailOpen} onCancel={() => setDetailOpen(false)} footer={null} width={920} title="请求追踪详情">
+        <Modal className="perf-detail-modal" open={detailOpen} onCancel={() => { setDetailOpen(false); setLogSearchRequested(false); }} footer={null} width={920} title="请求追踪详情">
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Descriptions size="small" column={1}>
               <Descriptions.Item label="requestId">{detailRequestId || getTraceRequestId(requestSearchResult)}</Descriptions.Item>
@@ -854,8 +840,15 @@ export function PerfMonitorPage() {
               </pre>
             </Card>
 
-            <Card title="关联日志搜索" size="small" loading={logSearchQuery.isFetching}>
-              {logSearchQuery.data?.data.totalMatches ? (
+            <Card
+              title="关联日志搜索"
+              size="small"
+              loading={logSearchRequested && logSearchQuery.isFetching}
+              extra={<Button size="small" onClick={() => setLogSearchRequested(true)} loading={logSearchRequested && logSearchQuery.isFetching}>加载关联日志</Button>}
+            >
+              {!logSearchRequested ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="点击“加载关联日志”后查询" />
+              ) : logSearchQuery.data?.data.totalMatches ? (
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
                   {logSearchQuery.data.data.results.map((result, index) => (
                     <Card key={`${result.file}-${index}`} size="small">

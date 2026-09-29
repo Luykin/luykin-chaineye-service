@@ -1629,8 +1629,8 @@ export function NacosCampaignsPage() {
         });
         setWebsiteForm(makeWebsiteForm(record.data as AnyObj, websiteTarget));
       }
-      const latestRecords = await fetchAllWebsiteCampaigns();
-      setManagedConfigRevision(latestRecords.revision || "");
+      // 网站配置会更新同一活动记录的 updatedAt。这里不能把最新 revision
+      // 赋给仍可能是旧内容的活动草稿，否则后续发布会绕过并发冲突校验。
       if (c && record.data) {
         const payload = (record.data as AnyObj).nacosPayload || {};
         const nextMetrics = Array.isArray(payload.displayMetrics) ? payload.displayMetrics : undefined;
