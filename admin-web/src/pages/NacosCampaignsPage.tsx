@@ -228,6 +228,76 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
+function isSameValue(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergeRemotePriority(baseValue: unknown, localValue: unknown, remoteValue: unknown): unknown {
+  if (localValue === undefined) {
+    return isSameValue(baseValue, remoteValue) ? undefined : clone(remoteValue);
+  }
+  if (isPlainObject(baseValue) && isPlainObject(remoteValue)) {
+    const localObject = isPlainObject(localValue) ? localValue : {};
+    const merged: AnyObj = {};
+    const keys = new Set([
+      ...Object.keys(baseValue),
+      ...Object.keys(localObject),
+      ...Object.keys(remoteValue),
+    ]);
+
+    keys.forEach((key) => {
+      const hasBase = Object.prototype.hasOwnProperty.call(baseValue, key);
+      const hasLocal = Object.prototype.hasOwnProperty.call(localObject, key);
+      const hasRemote = Object.prototype.hasOwnProperty.call(remoteValue, key);
+      const remoteChanged = hasBase !== hasRemote || !isSameValue(baseValue[key], remoteValue[key]);
+
+      if (!hasRemote) {
+        if (!remoteChanged && hasLocal) merged[key] = clone(localObject[key]);
+        return;
+      }
+      if (isPlainObject(baseValue[key]) && isPlainObject(remoteValue[key])) {
+        const mergedValue = mergeRemotePriority(baseValue[key], hasLocal ? localObject[key] : undefined, remoteValue[key]);
+        if (mergedValue !== undefined) merged[key] = mergedValue;
+        return;
+      }
+      if (remoteChanged) {
+        merged[key] = clone(remoteValue[key]);
+      } else if (hasLocal) {
+        merged[key] = clone(localObject[key]);
+      }
+    });
+    return merged;
+  }
+
+  return !isSameValue(baseValue, remoteValue) ? clone(remoteValue) : clone(localValue);
+}
+
+function campaignIdentity(campaign: AnyObj, index: number) {
+  return String(campaign.id || campaign.campaignKey || `__index_${index}`);
+}
+
+function mergeCampaignConfigWithRemotePriority(
+  baseConfig: CampaignConfig,
+  localConfig: CampaignConfig,
+  remoteConfig: CampaignConfig,
+) {
+  const merged = mergeRemotePriority(baseConfig, localConfig, remoteConfig) as CampaignConfig;
+  const toCampaignMap = (campaigns: AnyObj[]) =>
+    new Map(campaigns.map((campaign, index) => [campaignIdentity(campaign, index), campaign]));
+  const baseCampaigns = toCampaignMap(baseConfig.campaigns || []);
+  const localCampaigns = toCampaignMap(localConfig.campaigns || []);
+  const remoteCampaigns = toCampaignMap(remoteConfig.campaigns || []);
+  const campaignKeys = [
+    ...remoteCampaigns.keys(),
+    ...Array.from(localCampaigns.keys()).filter((key) => !remoteCampaigns.has(key)),
+  ];
+
+  merged.campaigns = campaignKeys
+    .map((key) => mergeRemotePriority(baseCampaigns.get(key), localCampaigns.get(key), remoteCampaigns.get(key)))
+    .filter((campaign): campaign is AnyObj => campaign !== undefined);
+  return normalizeConfig(merged);
+}
+
 function safeNumber(value: unknown, fallback: number) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -898,6 +968,7 @@ export function NacosCampaignsPage() {
   const [jsonPreviewHtml, setJsonPreviewHtml] = useState("");
   const [jsonDiffHint, setJsonDiffHint] = useState("");
   const [configConflictOpen, setConfigConflictOpen] = useState(false);
+  const [conflictLoading, setConflictLoading] = useState(false);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [newCampaignMode, setNewCampaignMode] = useState<"blank" | "copy">(
     "blank",
@@ -1318,10 +1389,10 @@ export function NacosCampaignsPage() {
     }
   }
 
-  function validateCampaigns() {
+  function validateCampaigns(configToValidate: CampaignConfig = config) {
     const errors: string[] = [];
-    if (!config.campaigns.length) errors.push("至少需要配置一个活动");
-    config.campaigns.forEach((c, idx) => {
+    if (!configToValidate.campaigns.length) errors.push("至少需要配置一个活动");
+    configToValidate.campaigns.forEach((c, idx) => {
       const prefix = `活动 #${idx + 1} (id: ${c.id || "未设置"})`;
       if (!c.campaignKey?.trim())
         errors.push(`${prefix}: campaignKey 不能为空`);
@@ -1509,6 +1580,40 @@ export function NacosCampaignsPage() {
       );
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function mergeConflictChanges() {
+    setConflictLoading(true);
+    try {
+      const records = await fetchAllWebsiteCampaigns();
+      const remoteConfig = configFromWebsiteRecords((records.data || []) as AnyObj[]);
+      if (!records.revision) {
+        throw new Error("未获取到最新配置版本，请稍后重试");
+      }
+      const mergedConfig = mergeCampaignConfigWithRemotePriority(
+        originalConfig || remoteConfig,
+        config,
+        remoteConfig,
+      );
+      setConfig(mergedConfig);
+      setOriginalConfig(clone(remoteConfig));
+      setManagedConfigRevision(records.revision);
+      setWebsiteRecords(records.data || []);
+      setSelection(null);
+      setWebsiteDirty(false);
+      setWebsiteForm(makeWebsiteForm(null, null));
+      setWebsiteMeta("已合并远程最新配置，请确认后重新发布");
+      setDirty(true);
+      setConfigConflictOpen(false);
+      showToast("已生成远程优先的合并草稿，请确认后点击发布", "success");
+    } catch (error) {
+      showToast(
+        `合并最新配置失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    } finally {
+      setConflictLoading(false);
     }
   }
 
@@ -2418,23 +2523,30 @@ export function NacosCampaignsPage() {
         closable={false}
         maskClosable={false}
         footer={[
-          <Button key="continue" onClick={() => setConfigConflictOpen(false)}>
-            继续编辑
-          </Button>,
           <Button
-            key="reload"
-            type="primary"
+            key="discard"
+            disabled={conflictLoading}
             onClick={() => {
               setConfigConflictOpen(false);
               void loadFromDatabase({ discardChanges: true });
             }}
           >
-            重新加载
+            舍弃本地修改，接受远程
+          </Button>,
+          <Button
+            key="merge"
+            type="primary"
+            loading={conflictLoading}
+            onClick={() => {
+              void mergeConflictChanges();
+            }}
+          >
+            合并修改
           </Button>,
         ]}
       >
         <p>配置已被其他管理员更新，您的修改尚未保存。</p>
-        <p className="muted">继续编辑会保留当前草稿；重新加载会丢弃当前草稿并载入最新配置。</p>
+        <p className="muted">合并修改会优先采用远程已变化的字段，其余字段保留本地草稿；合并后请确认内容并再次点击发布。</p>
       </Modal>
     </PermissionGuard>
   );
