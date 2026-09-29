@@ -917,7 +917,6 @@ export function NacosCampaignsPage() {
   const [echohuntTokenGenerating, setEchohuntTokenGenerating] = useState(false);
   const [echohuntTokenResult, setEchohuntTokenResult] = useState<EchohuntDebugTokenPayload | null>(null);
   const { user } = useAuth();
-  const canEditCampaignId = user?.role === "super";
   const isSuperAdmin = user?.role === "super";
 
   const selectedCampaign =
@@ -2109,7 +2108,6 @@ export function NacosCampaignsPage() {
                 />
                 <CampaignEditor
                   c={c}
-                  canEditCampaignId={canEditCampaignId}
                   vipUsers={vipUsers}
                   internalTestUsers={internalTestUsers}
                   setCampaignPath={setCampaignPath}
@@ -2546,7 +2544,6 @@ function CampaignBrief({
 
 function CampaignEditor(props: {
   c: AnyObj;
-  canEditCampaignId: boolean;
   vipUsers: VipListItem[];
   internalTestUsers: VipListItem[];
   setCampaignPath: (path: string, value: any) => void;
@@ -2559,8 +2556,9 @@ function CampaignEditor(props: {
   moveArrayItem: (kind: string, index: number, delta: number) => void;
   removeArrayItem: (kind: string, index: number) => void;
 }) {
-  const { c, canEditCampaignId, vipUsers, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
-  const campaignIdDisabled = !!c.id?.trim() && !canEditCampaignId;
+  const { c, vipUsers, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
+  const [campaignIdModalOpen, setCampaignIdModalOpen] = useState(false);
+  const [campaignIdDraft, setCampaignIdDraft] = useState("");
   const internalTestUserOptions = internalTestUsers.map((item) => ({
     value: item.username,
     label: item.username,
@@ -2593,8 +2591,27 @@ function CampaignEditor(props: {
             </div>
             <Row gutter={[12, 12]}>
               <Col xs={24} md={12}>
-                <Field label={<InfoLabel info="活动唯一短标识，例如 mantle3、bybit2。保存时会自动生成完整 nacos id。">活动ID</InfoLabel>}>
-                  <Input value={c.campaignKey || ""} disabled={campaignIdDisabled} onChange={(e) => setCampaignPath("campaignKey", e.target.value)} />
+                <Field
+                  label={
+                    <Space size={4}>
+                      <InfoLabel info="活动唯一短标识，例如 mantle3、bybit2。保存时会自动生成完整 nacos id。">
+                        活动ID
+                      </InfoLabel>
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ height: "auto", padding: "0 2px", fontSize: 12 }}
+                        onClick={() => {
+                          setCampaignIdDraft(String(c.campaignKey || ""));
+                          setCampaignIdModalOpen(true);
+                        }}
+                      >
+                        强行修改
+                      </Button>
+                    </Space>
+                  }
+                >
+                  <Input value={c.campaignKey || ""} disabled />
                 </Field>
               </Col>
               <Col xs={12} md={6}>
@@ -2652,6 +2669,49 @@ function CampaignEditor(props: {
           </Col>
         </Row>
       </Card>
+
+      <Modal
+        open={campaignIdModalOpen}
+        title="强行修改活动 ID"
+        okText="确认修改"
+        cancelText="取消"
+        okButtonProps={{
+          danger: true,
+          disabled: !campaignIdDraft.trim(),
+        }}
+        onCancel={() => setCampaignIdModalOpen(false)}
+        onOk={() => {
+          setCampaignPath("campaignKey", campaignIdDraft.trim());
+          setCampaignIdModalOpen(false);
+        }}
+      >
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "10px 12px",
+            color: "#9a3412",
+            background: "#fff7ed",
+            border: "1px solid #fed7aa",
+            borderRadius: 6,
+            lineHeight: 1.6,
+          }}
+        >
+          活动 ID 是已报名用户数据的关联标识。修改后会影响该活动的已报名用户数据，请确认影响范围后再操作。
+        </div>
+        <Field label="新的活动 ID">
+          <Input
+            autoFocus
+            value={campaignIdDraft}
+            placeholder="请输入新的活动 ID"
+            onChange={(event) => setCampaignIdDraft(event.target.value)}
+            onPressEnter={() => {
+              if (!campaignIdDraft.trim()) return;
+              setCampaignPath("campaignKey", campaignIdDraft.trim());
+              setCampaignIdModalOpen(false);
+            }}
+          />
+        </Field>
+      </Modal>
 
       <Section title="活动信息">
         <Row gutter={[12, 12]}>
