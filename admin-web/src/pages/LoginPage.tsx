@@ -91,9 +91,11 @@ export function LoginPage() {
       }
       message.destroy("admin-login-passkey");
       finishLogin(verifyData.redirect || nextPath);
-    } catch (_) {
+    } catch (ex) {
       message.destroy("admin-login-passkey");
-      setSecondFactorNotice("设备验证未完成。你可以重试，或使用管理员邮箱验证码进入。");
+      setSecondFactorNotice(ex instanceof Error && ex.message
+        ? ex.message
+        : "设备验证未完成。你可以重试，或使用管理员邮箱验证码进入。");
     } finally {
       setWebauthnLoading(false);
       setLoading(false);

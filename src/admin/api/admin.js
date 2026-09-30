@@ -1255,6 +1255,7 @@ router.post("/login/email-otp/send", express.json(), async (req, res) => {
 
     const sendCount = Number(previousOtp?.sendCount || loginAttempt.attempt.emailOtpSendCount || 0);
     if (sendCount >= ADMIN_LOGIN_EMAIL_OTP_MAX_SENDS) {
+      try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login-email-otp-send", route: "/admin/login/email-otp/send", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: "验证码发送次数已达上限" }); } catch (_) {}
       return res.status(429).json({ success: false, error: "验证码发送次数已达上限，请重新输入密码后再试" });
     }
 
@@ -1311,6 +1312,7 @@ router.post("/login/email-otp/send", express.json(), async (req, res) => {
     });
   } catch (error) {
     console.error("[admin login email otp] send failed:", error.message);
+    try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "login-email-otp-send", route: "/admin/login/email-otp/send", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: error.message }); } catch (_) {}
     return res.status(500).json({ success: false, error: "验证码发送失败，请稍后重试" });
   }
 });
@@ -1336,19 +1338,24 @@ router.post("/login/email-otp/verify", express.json(), async (req, res) => {
       const verifyAttempts = Number(otp?.verifyAttempts || 0) + 1;
       if (verifyAttempts >= ADMIN_LOGIN_EMAIL_OTP_MAX_VERIFY_ATTEMPTS) {
         await req.redisClient.del(otpKey, getAdminLoginAttemptKey(loginAttempt.decoded.jti));
+        try { await XhuntAdminAuditLog.create({ adminId: loginAttempt.decoded.aid, email: null, action: "login-email-otp", route: "/admin/login/email-otp/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: "验证码错误次数过多" }); } catch (_) {}
         return res.status(429).json({ success: false, error: "验证码错误次数过多，请重新输入密码后再试" });
       }
-      const attemptTtl = await getAdminLoginAttemptTtl(req, loginAttempt.decoded.jti);
-      await req.redisClient.set(otpKey, JSON.stringify({ ...otp, verifyAttempts }), { EX: attemptTtl });
+      await req.redisClient.set(otpKey, JSON.stringify({ ...otp, verifyAttempts }), { KEEPTTL: true });
+      try { await XhuntAdminAuditLog.create({ adminId: loginAttempt.decoded.aid, email: null, action: "login-email-otp", route: "/admin/login/email-otp/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: "验证码错误" }); } catch (_) {}
       return res.status(401).json({
         success: false,
         error: `验证码错误，还可尝试 ${ADMIN_LOGIN_EMAIL_OTP_MAX_VERIFY_ATTEMPTS - verifyAttempts} 次`,
       });
     }
 
-    const consumedOtp = typeof req.redisClient.getDel === "function"
-      ? await req.redisClient.getDel(otpKey)
-      : rawOtp;
+    let consumedOtp;
+    if (typeof req.redisClient.getDel === "function") {
+      consumedOtp = await req.redisClient.getDel(otpKey);
+    } else {
+      consumedOtp = rawOtp;
+      await req.redisClient.del(otpKey);
+    }
     if (!consumedOtp) return res.status(400).json({ success: false, error: "验证码已使用，请重新输入密码" });
     let consumedOtpState;
     try { consumedOtpState = JSON.parse(consumedOtp); } catch (_) { consumedOtpState = null; }
@@ -1369,6 +1376,7 @@ router.post("/login/email-otp/verify", express.json(), async (req, res) => {
     return res.json({ success: true, redirect: "/overview" });
   } catch (error) {
     console.error("[admin login email otp] verify failed:", error.message);
+    try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "login-email-otp", route: "/admin/login/email-otp/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: error.message }); } catch (_) {}
     return res.status(500).json({ success: false, error: "验证码验证失败，请稍后重试" });
   }
 });
