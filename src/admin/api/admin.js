@@ -13,7 +13,7 @@ const {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } = require("@simplewebauthn/server");
-const { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie, bumpAdminSessionVersion } = require("../middleware/adminAuth");
+const { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie, bumpAdminSessionVersion, isAdminSessionCurrent, JWT_SECRET } = require("../middleware/adminAuth");
 const { randomBytes, randomInt, createHmac, timingSafeEqual } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
 const { chat: llmChat } = require("../../lib/llm");
@@ -27,7 +27,7 @@ const execFileAsync = promisify(execFile);
 
 // WebAuthn 配置
 const RP_NAME = process.env.WEBAUTHN_RP_NAME || "XHunt Admin";
-const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
+const TEMP_JWT_SECRET = JWT_SECRET;
 
 const ADMIN_LOGIN_MAX_FAILED_ATTEMPTS = 5;
 const ADMIN_LOGIN_LOCK_MINUTES = 20;
@@ -659,13 +659,14 @@ async function getAdminFromRequest(req) {
 
   let session;
   try {
-    session = jwt.verify(token, process.env.ADMIN_JWT_SECRET || "change-me");
+    session = jwt.verify(token, JWT_SECRET);
   } catch (e) {
     return null;
   }
 
   const admin = await XhuntAdminManager.findByPk(session.id);
   if (!admin || !admin.isActive || !admin.canLogin) return null;
+  if (!(await isAdminSessionCurrent(req, admin.id, session.sessionVersion))) return null;
   return admin;
 }
 
@@ -787,14 +788,8 @@ router.get("/session", adminAuth, async (req, res) => {
 router.get("/webauthn/registration/options", async (req, res) => {
   try {
     res.set('Cache-Control','no-store');
-    // 手动校验已登录会话（避免使用 adminAuth 导致 HTML 重定向）
-    const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
-    const rawCookie = req.cookies?.[cookieName] || (req.headers.cookie || '').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.split('=')[1];
-    if (!rawCookie) return res.status(401).json({ success: false, error: 'UNAUTHORIZED' });
-    let session;
-    try { session = jwt.verify(rawCookie, process.env.ADMIN_JWT_SECRET || 'change-me'); } catch (e) { return res.status(401).json({ success: false, error: 'UNAUTHORIZED' }); }
-    const admin = await XhuntAdminManager.findByPk(session.id);
-    if (!admin || !admin.isActive || !admin.canLogin) return res.status(403).json({ success: false, error: 'FORBIDDEN' });
+    const admin = await getLoggedInAdminForJson(req, res);
+    if (!admin) return;
     const webAuthnConfig = getWebAuthnRequestConfig(req);
     const existing = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
     const currentRpCredentials = filterWebAuthnCredentialsForRp(existing, webAuthnConfig.rpID);
@@ -818,13 +813,8 @@ router.get("/webauthn/registration/options", async (req, res) => {
 
 router.post("/webauthn/registration/verify", express.json(), async (req, res) => {
   try {
-    const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
-    const rawCookie = req.cookies?.[cookieName] || (req.headers.cookie || '').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.split('=')[1];
-    if (!rawCookie) return res.status(401).json({ success: false, error: 'UNAUTHORIZED' });
-    let session;
-    try { session = jwt.verify(rawCookie, process.env.ADMIN_JWT_SECRET || 'change-me'); } catch (e) { return res.status(401).json({ success: false, error: 'UNAUTHORIZED' }); }
-    const admin = await XhuntAdminManager.findByPk(session.id);
-    if (!admin || !admin.isActive || !admin.canLogin) return res.status(403).json({ success: false, error: 'FORBIDDEN' });
+    const admin = await getLoggedInAdminForJson(req, res);
+    if (!admin) return;
     const { attResp, nickname } = req.body || {};
     const challengeKey = `webauthn:reg:challenge:${admin.id}`;
     const expectedChallenge = await req.redisClient.get(challengeKey);
@@ -884,6 +874,9 @@ router.get("/webauthn/authentication/options", async (req, res) => {
       await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
       webAuthnConfig.rpID,
     );
+    if (!creds.length) {
+      return res.status(403).json({ success: false, error: "当前域名未绑定通行密钥，请使用邮箱验证码" });
+    }
     const allowCredentials = creds.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
     const options = await generateAuthenticationOptions({
       rpID: webAuthnConfig.rpID,
@@ -1211,11 +1204,13 @@ router.post("/password/reset", adminAuth, express.json(), async (req, res) => {
     const adminRow = await XhuntAdminManager.findByPk(admin.id);
     if (!adminRow) return res.status(404).json({ success: false, error: "管理员不存在" });
     const hash = await bcrypt.hash(newPassword, 10);
+    await bumpAdminSessionVersion(req, adminRow.id);
     adminRow.passwordHash = hash;
     adminRow.failedLoginAttempts = 0;
     adminRow.loginLockedUntil = null;
     await adminRow.save();
     await req.redisClient.del(key);
+    clearSessionCookie(res, req);
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email, action: "password-reset", route: "/admin/password/reset", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.json({ success: true });
   } catch (e) {
@@ -1436,14 +1431,14 @@ router.post("/login", express.json(), async (req, res) => {
       });
     }
 
-    // 判断当前域名/RP ID 下是否存在 WebAuthn 凭证。kb.cryptohunt.ai 与 kb.xhunt.ai 是不同主域，凭证不能跨域复用。
+    // 是否需要二次验证按账号判断；当前域名无可用凭证时使用邮箱验证码，不能降级为仅密码登录。
     const webAuthnConfig = getWebAuthnRequestConfig(req);
     const allCredentials = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
     const credCount = filterWebAuthnCredentialsForRp(allCredentials, webAuthnConfig.rpID).length;
 
     try { const key = `admin:loginfail:${email}`; await req.redisClient.del(key); } catch (e) {}
 
-    if (credCount > 0) {
+    if (allCredentials.length > 0) {
       // 需要二次验证：签发一个临时 token（5 分钟有效），不下发会话
       const tempToken = await createAdminLoginAttempt(req, admin);
       await admin.update({ failedLoginAttempts: 0, loginLockedUntil: null });
@@ -1598,6 +1593,9 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
     if (role !== "admin" && role !== "super") {
       return res.status(400).json({ success: false, error: "角色无效" });
     }
+    if (role === "super" && req.adminUser.role !== "super") {
+      return res.status(403).json({ success: false, error: "仅 super 可创建超级管理员" });
+    }
 
     // 权限数组可选
     let perms = [];
@@ -1606,7 +1604,7 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
     }
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
+    const RESTRICTED = new Set(["*", "admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = perms.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -1774,12 +1772,17 @@ router.post("/users/:id/password/reset-random", adminAuth, requirePermission("ad
     const { id } = req.params;
     const target = await XhuntAdminManager.findByPk(id);
     if (!target) return res.status(404).json({ success: false, error: "未找到" });
+    if (target.role === "super" && req.adminUser.role !== "super") {
+      return res.status(403).json({ success: false, error: "仅 super 可重置超级管理员密码" });
+    }
     if (Number(req.adminUser.id) === Number(target.id)) {
       return res.status(400).json({ success: false, error: "不能重置自己的密码" });
     }
 
     const password = generateAdminLoginPassword();
-    target.passwordHash = await bcrypt.hash(password, 10);
+    const hash = await bcrypt.hash(password, 10);
+    await bumpAdminSessionVersion(req, target.id);
+    target.passwordHash = hash;
     target.canLogin = true;
     target.failedLoginAttempts = 0;
     target.loginLockedUntil = null;
@@ -1890,7 +1893,7 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
       .filter((p) => p.length > 0);
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
+    const RESTRICTED = new Set(["*", "admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = sanitized.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -1900,6 +1903,9 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
     const target = await XhuntAdminManager.findByPk(id);
     if (!target) return res.status(404).json({ success: false, error: "未找到" });
 
+    if (target.role === "super" && req.adminUser.role !== "super") {
+      return res.status(403).json({ success: false, error: "仅 super 可修改超级管理员权限" });
+    }
     target.permissions = sanitized;
     await target.save();
     try { await XhuntAdminAuditLog.create({ adminId: req.adminUser.id, email: req.adminUser.email, action: "update-permissions", route: `/admin/users/${id}/permissions`, method: "PATCH", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: JSON.stringify(sanitized) }); } catch (e) {}

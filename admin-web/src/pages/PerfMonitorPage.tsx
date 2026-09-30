@@ -86,7 +86,9 @@ function statusTagColor(status: number) {
 function highlightText(text: string, query: string) {
   if (!query) return text;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return text.replace(new RegExp(escaped, "gi"), (match) => `<mark>${match}</mark>`);
+  return text.split(new RegExp(`(${escaped})`, "gi")).map((part, index) =>
+    index % 2 === 1 ? <mark key={index}>{part}</mark> : part
+  );
 }
 
 function escapeHtml(str: string) {
@@ -864,7 +866,7 @@ export function PerfMonitorPage() {
                         {result.context.map((line) => (
                           <div key={`${result.file}-${line.lineNumber}`} className="perf-log-line">
                             <span className="perf-log-line-number">{line.lineNumber}:</span>
-                            <span dangerouslySetInnerHTML={{ __html: highlightText(line.content, detailRequestId) }} />
+                            <span>{highlightText(line.content, detailRequestId)}</span>
                           </div>
                         ))}
                       </div>

@@ -200,6 +200,11 @@ export function LoginPage() {
           emailOtpAvailable: loginData.emailOtpAvailable !== false,
         };
         setSecondFactor(attempt);
+        if (loginData.credCount === 0) {
+          setSecondFactorNotice("当前域名未绑定通行密钥，请使用邮箱验证码完成二次验证。");
+          setLoading(false);
+          return;
+        }
         await authenticateWithWebAuthn(attempt);
         return;
       }

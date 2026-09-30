@@ -1,39 +1,35 @@
 const jwt = require("jsonwebtoken");
+const { randomBytes } = require("crypto");
+const JWT_SECRET = process.env.ADMIN_JWT_SECRET;
+if (!JWT_SECRET?.trim() || JWT_SECRET.trim() === "change-me") {
+  throw new Error("ADMIN_JWT_SECRET must be configured with a private signing key");
+}
 const { XhuntAdminManager } = require("../../models/postgres-start");
 
 const SESSION_TTL = parseInt(process.env.ADMIN_SESSION_TTL || "7200", 10); // seconds
-const JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 
 function getSessionVersionKey(adminId) {
   return `admin:session-version:${adminId}`;
 }
 
 async function getAdminSessionVersion(req, adminId) {
-  if (!req?.redisClient || !adminId) return 0;
-  try {
-    const raw = await req.redisClient.get(getSessionVersionKey(adminId));
-    const value = Number(raw || 0);
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  } catch (error) {
-    console.warn("[adminAuth] 读取 sessionVersion 失败:", error.message);
-    return 0;
-  }
+  if (!req?.redisClient || !adminId) throw new Error("Admin session store unavailable");
+  return req.redisClient.get(getSessionVersionKey(adminId));
+}
+
+async function isAdminSessionCurrent(req, adminId, sessionVersion) {
+  const current = await getAdminSessionVersion(req, adminId);
+  // 兼容已有数字版本，但缺失版本不能放行；Redis 异常向上传递，拒绝认证。
+  return !!current && sessionVersion != null && String(sessionVersion) === String(current);
 }
 
 async function bumpAdminSessionVersion(req, adminId) {
-  if (!req?.redisClient || !adminId) return Date.now();
-  try {
-    const key = getSessionVersionKey(adminId);
-    if (typeof req.redisClient.incr === "function") {
-      return req.redisClient.incr(key);
-    }
-    const next = (await getAdminSessionVersion(req, adminId)) + 1;
-    await req.redisClient.set(key, String(next));
-    return next;
-  } catch (error) {
-    console.warn("[adminAuth] 更新 sessionVersion 失败:", error.message);
-    return Date.now();
-  }
+  if (!req?.redisClient || !adminId) throw new Error("Admin session store unavailable");
+  // 不使用 INCR：键被淘汰后重建为 1 会使历史 Cookie 重新有效。
+  const next = randomBytes(32).toString("hex");
+  const result = await req.redisClient.set(getSessionVersionKey(adminId), next);
+  if (result !== "OK") throw new Error("Failed to invalidate admin sessions");
+  return next;
 }
 
 function buildUnauthorizedResponse(req, res, status = 401) {
@@ -149,9 +145,8 @@ async function adminAuth(req, res, next) {
       return buildUnauthorizedResponse(req, res, 403);
     }
 
-    const currentSessionVersion = await getAdminSessionVersion(req, admin.id);
-    const tokenSessionVersion = Number(decoded.sessionVersion || 0);
-    if (currentSessionVersion > 0 && tokenSessionVersion !== currentSessionVersion) {
+    const tokenSessionVersion = decoded.sessionVersion;
+    if (!(await isAdminSessionCurrent(req, admin.id, tokenSessionVersion))) {
       clearSessionCookie(res, req);
       return buildUnauthorizedResponse(req, res, 401);
     }
@@ -203,4 +198,4 @@ function renderLoginRedirect() {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>location.replace('/api/xhunt/stats#/login')</script><style>body{background:#f8fafc;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#64748b}</style></head><body>会话已过期，正在跳转...</body></html>`;
 }
 
-module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie, bumpAdminSessionVersion };
+module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie, bumpAdminSessionVersion, isAdminSessionCurrent, JWT_SECRET };
