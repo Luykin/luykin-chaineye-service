@@ -1813,8 +1813,6 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
       viewer: { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId },
       allowComingSoonWarmup: String(record.webStatus || "").toLowerCase() === "coming_soon",
     });
-    const verifiedTasks = await verifyCampaignTwitterFollowTasks(req, found, twitterIdentity);
-
     const rawEmail = req.body?.email !== undefined ? req.body.email : req.body?.emil;
     const contact = normalizeRegistrationContact({ evmAddress: req.body?.evmAddress, email: rawEmail });
 
@@ -1842,10 +1840,7 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
       registrationClient: "echohunt",
       registrationMetadata: {
         agreements: req.body?.agreements || null,
-        taskState: {
-          client: req.body?.taskState || null,
-          verifiedTwitterFollowTasks: verifiedTasks,
-        },
+        taskState: req.body?.taskState || null,
         userAgent: req.headers["user-agent"] || null,
         pageUrl: registrationUrl,
         source: "echohunt_web",
