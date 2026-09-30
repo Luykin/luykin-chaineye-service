@@ -14,7 +14,7 @@ const {
   verifyAuthenticationResponse,
 } = require("@simplewebauthn/server");
 const { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie, bumpAdminSessionVersion } = require("../middleware/adminAuth");
-const { randomBytes } = require("crypto");
+const { randomBytes, randomInt, createHmac, timingSafeEqual } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
 const { chat: llmChat } = require("../../lib/llm");
 const {
@@ -32,6 +32,12 @@ const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 const ADMIN_LOGIN_MAX_FAILED_ATTEMPTS = 5;
 const ADMIN_LOGIN_LOCK_MINUTES = 20;
 const ADMIN_LOGIN_LOCK_MS = ADMIN_LOGIN_LOCK_MINUTES * 60 * 1000;
+const ADMIN_LOGIN_ATTEMPT_TTL_SECONDS = 300;
+const ADMIN_LOGIN_EMAIL_OTP_TTL_SECONDS = ADMIN_LOGIN_ATTEMPT_TTL_SECONDS;
+const ADMIN_LOGIN_EMAIL_OTP_RESEND_SECONDS = 60;
+const ADMIN_LOGIN_EMAIL_OTP_MAX_SENDS = 3;
+const ADMIN_LOGIN_EMAIL_OTP_MAX_VERIFY_ATTEMPTS = 5;
+const ADMIN_LOGIN_EMAIL_OTP_SECRET = process.env.ADMIN_EMAIL_OTP_SECRET || TEMP_JWT_SECRET;
 
 function getAdminLoginLockRemainingMinutes(admin) {
   if (!admin?.loginLockedUntil) return 0;
@@ -43,6 +49,99 @@ function getAdminLoginLockRemainingMinutes(admin) {
 function buildAdminLoginLockError(remainingMinutes) {
   const minutes = Math.max(1, remainingMinutes || ADMIN_LOGIN_LOCK_MINUTES);
   return `账号已冻结，剩余登录尝试 0 次，请 ${minutes} 分钟后再试`;
+}
+
+function getAdminLoginAttemptKey(jti) {
+  return `admin:login:attempt:${jti}`;
+}
+
+function getAdminLoginEmailOtpKey(jti) {
+  return `admin:login:email-otp:${jti}`;
+}
+
+function maskAdminEmail(email) {
+  const [localPart, domain] = String(email || "").split("@");
+  if (!localPart || !domain) return "";
+  return `${localPart.slice(0, 1)}***@${domain}`;
+}
+
+function hashAdminLoginEmailOtp(jti, code) {
+  return createHmac("sha256", ADMIN_LOGIN_EMAIL_OTP_SECRET)
+    .update(`${jti}:${code}`)
+    .digest("hex");
+}
+
+function codesMatch(expectedHash, suppliedHash) {
+  if (!expectedHash || !suppliedHash || expectedHash.length !== suppliedHash.length) return false;
+  return timingSafeEqual(Buffer.from(expectedHash), Buffer.from(suppliedHash));
+}
+
+async function createAdminLoginAttempt(req, admin) {
+  const jti = randomBytes(24).toString("hex");
+  const attempt = {
+    adminId: admin.id,
+    email: admin.email,
+    emailOtpSendCount: 0,
+  };
+  await req.redisClient.set(
+    getAdminLoginAttemptKey(jti),
+    JSON.stringify(attempt),
+    { EX: ADMIN_LOGIN_ATTEMPT_TTL_SECONDS },
+  );
+  return jwt.sign(
+    { aid: admin.id, email: admin.email, step: "pwd-ok", jti },
+    TEMP_JWT_SECRET,
+    { expiresIn: ADMIN_LOGIN_ATTEMPT_TTL_SECONDS },
+  );
+}
+
+async function getAdminLoginAttempt(req, tempToken) {
+  let decoded;
+  try {
+    decoded = jwt.verify(String(tempToken || ""), TEMP_JWT_SECRET);
+  } catch (_) {
+    return null;
+  }
+  if (decoded.step !== "pwd-ok" || !decoded.aid || !decoded.jti) return null;
+
+  const raw = await req.redisClient.get(getAdminLoginAttemptKey(decoded.jti));
+  if (!raw) return null;
+  try {
+    const attempt = JSON.parse(raw);
+    if (Number(attempt.adminId) !== Number(decoded.aid) || attempt.email !== decoded.email) return null;
+    return { decoded, attempt };
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getAdminLoginAttemptTtl(req, jti) {
+  if (typeof req.redisClient.ttl !== "function") return ADMIN_LOGIN_ATTEMPT_TTL_SECONDS;
+  const ttl = await req.redisClient.ttl(getAdminLoginAttemptKey(jti));
+  return Math.max(1, Math.min(ADMIN_LOGIN_ATTEMPT_TTL_SECONDS, Number(ttl) || 0));
+}
+
+async function completeAdminLogin(req, res, admin, { action, route, message } = {}) {
+  await admin.update({
+    failedLoginAttempts: 0,
+    loginLockedUntil: null,
+    lastLoginAt: new Date(),
+  });
+  const sessionVersion = await bumpAdminSessionVersion(req, admin.id);
+  setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email, sessionVersion }, req);
+  try {
+    await XhuntAdminAuditLog.create({
+      adminId: admin.id,
+      email: admin.email,
+      action: action || "login",
+      route: route || "/admin/login",
+      method: "POST",
+      ip: req.ip || "",
+      userAgent: req.headers["user-agent"] || "",
+      success: true,
+      message: message || null,
+    });
+  } catch (_) {}
 }
 
 const ADMIN_BLOB_PREFIX = (process.env.ADMIN_BLOB_PREFIX || "admin-images")
@@ -774,12 +873,11 @@ router.get("/webauthn/authentication/options", async (req, res) => {
     res.set('Cache-Control','no-store');
     const { tempToken } = req.query || {};
     if (!tempToken) return res.status(400).json({ success: false, error: "缺少参数" });
-    let decoded;
-    try { decoded = jwt.verify(String(tempToken), TEMP_JWT_SECRET); } catch (e) { return res.status(401).json({ success: false, error: "无效的会话" }); }
-    if (decoded.step !== "pwd-ok") return res.status(401).json({ success: false, error: "无效的会话" });
+    const loginAttempt = await getAdminLoginAttempt(req, tempToken);
+    if (!loginAttempt) return res.status(401).json({ success: false, error: "无效或已过期的登录验证" });
 
-    const admin = await XhuntAdminManager.findByPk(decoded.aid);
-    if (!admin) return res.status(404).json({ success: false, error: "管理员不存在" });
+    const admin = await XhuntAdminManager.findByPk(loginAttempt.decoded.aid);
+    if (!admin || !admin.isActive || !admin.canLogin) return res.status(403).json({ success: false, error: "管理员不可登录" });
 
     const webAuthnConfig = getWebAuthnRequestConfig(req);
     const creds = filterWebAuthnCredentialsForRp(
@@ -792,7 +890,7 @@ router.get("/webauthn/authentication/options", async (req, res) => {
       userVerification: "preferred",
       allowCredentials,
     });
-    const challengeKey = `webauthn:auth:challenge:${admin.id}`;
+    const challengeKey = `webauthn:auth:challenge:${loginAttempt.decoded.jti}`;
     await req.redisClient.set(challengeKey, options.challenge, { EX: 300 });
     res.json({ success: true, options });
   } catch (e) {
@@ -804,13 +902,12 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
   try {
     const { tempToken, assertion } = req.body || {};
     if (!tempToken || !assertion) return res.status(400).json({ success: false, error: "缺少参数" });
-    let decoded;
-    try { decoded = jwt.verify(String(tempToken), TEMP_JWT_SECRET); } catch (e) { return res.status(401).json({ success: false, error: "无效的会话" }); }
-    if (decoded.step !== "pwd-ok") return res.status(401).json({ success: false, error: "无效的会话" });
+    const loginAttempt = await getAdminLoginAttempt(req, tempToken);
+    if (!loginAttempt) return res.status(401).json({ success: false, error: "无效或已过期的登录验证" });
 
-    const admin = await XhuntAdminManager.findByPk(decoded.aid);
-    if (!admin) return res.status(404).json({ success: false, error: "管理员不存在" });
-    const challengeKey = `webauthn:auth:challenge:${admin.id}`;
+    const admin = await XhuntAdminManager.findByPk(loginAttempt.decoded.aid);
+    if (!admin || !admin.isActive || !admin.canLogin) return res.status(403).json({ success: false, error: "管理员不可登录" });
+    const challengeKey = `webauthn:auth:challenge:${loginAttempt.decoded.jti}`;
     const expectedChallenge = await req.redisClient.get(challengeKey);
     if (!expectedChallenge) return res.status(400).json({ success: false, error: "认证超时" });
 
@@ -846,11 +943,15 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
       await row.save();
     }
 
-    await admin.update({ lastLoginAt: new Date() });
-    const sessionVersion = await bumpAdminSessionVersion(req, admin.id);
-    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email, sessionVersion }, req);
-    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    await completeAdminLogin(req, res, admin, {
+      action: "webauthn-auth",
+      route: "/admin/webauthn/authentication/verify",
+    });
     await req.redisClient.del(challengeKey);
+    await req.redisClient.del(
+      getAdminLoginAttemptKey(loginAttempt.decoded.jti),
+      getAdminLoginEmailOtpKey(loginAttempt.decoded.jti),
+    );
     res.json({ success: true, redirect: "/overview" });
   } catch (e) {
     try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
@@ -1123,6 +1224,155 @@ router.post("/password/reset", adminAuth, express.json(), async (req, res) => {
   }
 });
 
+// ========== 登录邮箱验证码（WebAuthn 取消时的二次验证兜底） ==========
+router.post("/login/email-otp/send", express.json(), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const loginAttempt = await getAdminLoginAttempt(req, req.body?.tempToken);
+    if (!loginAttempt) return res.status(401).json({ success: false, error: "无效或已过期的登录验证" });
+
+    const admin = await XhuntAdminManager.findByPk(loginAttempt.decoded.aid);
+    if (!admin || !admin.isActive || !admin.canLogin) {
+      return res.status(403).json({ success: false, error: "管理员不可登录" });
+    }
+
+    let previousOtp = null;
+    const previousRaw = await req.redisClient.get(getAdminLoginEmailOtpKey(loginAttempt.decoded.jti));
+    if (previousRaw) {
+      try { previousOtp = JSON.parse(previousRaw); } catch (_) {}
+    }
+
+    const elapsedSeconds = previousOtp?.sentAt
+      ? Math.floor((Date.now() - Number(previousOtp.sentAt)) / 1000)
+      : ADMIN_LOGIN_EMAIL_OTP_RESEND_SECONDS;
+    if (elapsedSeconds < ADMIN_LOGIN_EMAIL_OTP_RESEND_SECONDS) {
+      return res.status(429).json({
+        success: false,
+        error: "验证码刚刚发送，请稍后再试",
+        retryAfterSeconds: ADMIN_LOGIN_EMAIL_OTP_RESEND_SECONDS - elapsedSeconds,
+      });
+    }
+
+    const sendCount = Number(previousOtp?.sendCount || loginAttempt.attempt.emailOtpSendCount || 0);
+    if (sendCount >= ADMIN_LOGIN_EMAIL_OTP_MAX_SENDS) {
+      return res.status(429).json({ success: false, error: "验证码发送次数已达上限，请重新输入密码后再试" });
+    }
+
+    const attemptTtl = await getAdminLoginAttemptTtl(req, loginAttempt.decoded.jti);
+    const code = String(randomInt(0, 1000000)).padStart(6, "0");
+    const nextOtp = {
+      codeHash: hashAdminLoginEmailOtp(loginAttempt.decoded.jti, code),
+      sentAt: Date.now(),
+      sendCount: sendCount + 1,
+      verifyAttempts: 0,
+    };
+    const nextAttempt = { ...loginAttempt.attempt, emailOtpSendCount: nextOtp.sendCount };
+
+    await req.redisClient.set(getAdminLoginEmailOtpKey(loginAttempt.decoded.jti), JSON.stringify(nextOtp), {
+      EX: Math.min(ADMIN_LOGIN_EMAIL_OTP_TTL_SECONDS, attemptTtl),
+    });
+    await req.redisClient.set(getAdminLoginAttemptKey(loginAttempt.decoded.jti), JSON.stringify(nextAttempt), { EX: attemptTtl });
+
+    try {
+      const emailService = require("../../services/emailService");
+      await emailService.sendEmail(
+        admin.email,
+        "XHunt 管理后台登录验证码",
+        `<p>你的管理后台登录验证码是 <b>${code}</b>。</p><p>验证码将在 5 分钟内失效，请勿向任何人透露。</p>`,
+        `你的管理后台登录验证码是 ${code}。验证码将在 5 分钟内失效，请勿向任何人透露。`,
+      );
+    } catch (error) {
+      await req.redisClient.del(getAdminLoginEmailOtpKey(loginAttempt.decoded.jti));
+      await req.redisClient.set(
+        getAdminLoginAttemptKey(loginAttempt.decoded.jti),
+        JSON.stringify(loginAttempt.attempt),
+        { EX: attemptTtl },
+      );
+      throw error;
+    }
+
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: admin.id,
+        email: admin.email,
+        action: "login-email-otp-send",
+        route: "/admin/login/email-otp/send",
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: true,
+      });
+    } catch (_) {}
+    return res.json({
+      success: true,
+      maskedEmail: maskAdminEmail(admin.email),
+      expiresInSeconds: Math.min(ADMIN_LOGIN_EMAIL_OTP_TTL_SECONDS, attemptTtl),
+      resendAfterSeconds: ADMIN_LOGIN_EMAIL_OTP_RESEND_SECONDS,
+    });
+  } catch (error) {
+    console.error("[admin login email otp] send failed:", error.message);
+    return res.status(500).json({ success: false, error: "验证码发送失败，请稍后重试" });
+  }
+});
+
+router.post("/login/email-otp/verify", express.json(), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const { tempToken, code } = req.body || {};
+    if (!/^\d{6}$/.test(String(code || ""))) {
+      return res.status(400).json({ success: false, error: "请输入 6 位验证码" });
+    }
+    const loginAttempt = await getAdminLoginAttempt(req, tempToken);
+    if (!loginAttempt) return res.status(401).json({ success: false, error: "无效或已过期的登录验证" });
+
+    const otpKey = getAdminLoginEmailOtpKey(loginAttempt.decoded.jti);
+    const rawOtp = await req.redisClient.get(otpKey);
+    if (!rawOtp) return res.status(400).json({ success: false, error: "验证码不存在或已过期，请重新发送" });
+
+    let otp;
+    try { otp = JSON.parse(rawOtp); } catch (_) { otp = null; }
+    const valid = otp && codesMatch(otp.codeHash, hashAdminLoginEmailOtp(loginAttempt.decoded.jti, String(code)));
+    if (!valid) {
+      const verifyAttempts = Number(otp?.verifyAttempts || 0) + 1;
+      if (verifyAttempts >= ADMIN_LOGIN_EMAIL_OTP_MAX_VERIFY_ATTEMPTS) {
+        await req.redisClient.del(otpKey, getAdminLoginAttemptKey(loginAttempt.decoded.jti));
+        return res.status(429).json({ success: false, error: "验证码错误次数过多，请重新输入密码后再试" });
+      }
+      const attemptTtl = await getAdminLoginAttemptTtl(req, loginAttempt.decoded.jti);
+      await req.redisClient.set(otpKey, JSON.stringify({ ...otp, verifyAttempts }), { EX: attemptTtl });
+      return res.status(401).json({
+        success: false,
+        error: `验证码错误，还可尝试 ${ADMIN_LOGIN_EMAIL_OTP_MAX_VERIFY_ATTEMPTS - verifyAttempts} 次`,
+      });
+    }
+
+    const consumedOtp = typeof req.redisClient.getDel === "function"
+      ? await req.redisClient.getDel(otpKey)
+      : rawOtp;
+    if (!consumedOtp) return res.status(400).json({ success: false, error: "验证码已使用，请重新输入密码" });
+    let consumedOtpState;
+    try { consumedOtpState = JSON.parse(consumedOtp); } catch (_) { consumedOtpState = null; }
+    if (!consumedOtpState || !codesMatch(consumedOtpState.codeHash, hashAdminLoginEmailOtp(loginAttempt.decoded.jti, String(code)))) {
+      return res.status(400).json({ success: false, error: "验证码已更新，请使用最新邮件中的验证码" });
+    }
+
+    const admin = await XhuntAdminManager.findByPk(loginAttempt.decoded.aid);
+    if (!admin || !admin.isActive || !admin.canLogin) {
+      return res.status(403).json({ success: false, error: "管理员不可登录" });
+    }
+
+    await req.redisClient.del(getAdminLoginAttemptKey(loginAttempt.decoded.jti));
+    await completeAdminLogin(req, res, admin, {
+      action: "login-email-otp",
+      route: "/admin/login/email-otp/verify",
+    });
+    return res.json({ success: true, redirect: "/overview" });
+  } catch (error) {
+    console.error("[admin login email otp] verify failed:", error.message);
+    return res.status(500).json({ success: false, error: "验证码验证失败，请稍后重试" });
+  }
+});
+
 // 登录提交
 router.post("/login", express.json(), async (req, res) => {
   try {
@@ -1187,19 +1437,23 @@ router.post("/login", express.json(), async (req, res) => {
 
     if (credCount > 0) {
       // 需要二次验证：签发一个临时 token（5 分钟有效），不下发会话
-      const tempToken = jwt.sign({ aid: admin.id, email: admin.email, step: "pwd-ok" }, TEMP_JWT_SECRET, { expiresIn: 300 });
+      const tempToken = await createAdminLoginAttempt(req, admin);
       await admin.update({ failedLoginAttempts: 0, loginLockedUntil: null });
       try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login-password-ok", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
       res.set('Cache-Control','no-store');
       res.type('application/json');
-      return res.json({ success: true, needsWebAuthn: true, tempToken, credCount });
+      return res.json({
+        success: true,
+        needsWebAuthn: true,
+        emailOtpAvailable: true,
+        maskedEmail: maskAdminEmail(admin.email),
+        tempToken,
+        credCount,
+      });
     }
 
     // 无凭证：直接登录
-    await admin.update({ failedLoginAttempts: 0, loginLockedUntil: null, lastLoginAt: new Date() });
-    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
-    const sessionVersion = await bumpAdminSessionVersion(req, admin.id);
-    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email, sessionVersion }, req);
+    await completeAdminLogin(req, res, admin, { message: `credCount=${credCount}` });
     res.set('Cache-Control','no-store');
     res.type('application/json');
     res.json({ success: true, redirect: "/overview", credCount });

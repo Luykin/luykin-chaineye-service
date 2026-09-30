@@ -188,6 +188,37 @@
   border-radius: 12px;
 }
 
+.admin-login-second-factor {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-login-second-factor-title.ant-typography {
+  margin: 0;
+  color: var(--admin-text-strong);
+}
+
+.admin-login-second-factor-copy.ant-typography {
+  margin: 0;
+  color: var(--admin-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.admin-login-second-factor .ant-alert {
+  border-radius: 12px;
+}
+
+.admin-login-second-factor-actions {
+  width: 100%;
+}
+
+.admin-login-second-factor-actions .ant-btn {
+  min-height: 44px;
+  border-radius: 13px;
+  font-weight: 700;
+}
+
 .admin-login-card .ant-form-item {
   margin-bottom: 18px;
 }

@@ -1,10 +1,16 @@
-import { Alert, Button, Form, Image, Input, Typography, App } from "antd";
+import { Alert, Button, Form, Image, Input, Typography, App, Space } from "antd";
 import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useMemo, useState } from "react";
 import { buildApiUrl } from "@/services/apiClient";
 
 const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
 const DEFAULT_NEXT_PATH = "/overview";
+
+type LoginSecondFactor = {
+  tempToken: string;
+  maskedEmail?: string;
+  emailOtpAvailable?: boolean;
+};
 
 function normalizeNextPath(value?: string | null) {
   if (!value || !value.startsWith("/")) return DEFAULT_NEXT_PATH;
@@ -21,8 +27,15 @@ function getSafeNextPath() {
 export function LoginPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm();
+  const [otpForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [webauthnLoading, setWebauthnLoading] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [secondFactorNotice, setSecondFactorNotice] = useState<string | null>(null);
+  const [secondFactor, setSecondFactor] = useState<LoginSecondFactor | null>(null);
+  const [otpSent, setOtpSent] = useState(false);
   const nextPath = useMemo(() => getSafeNextPath(), []);
 
   const finishLogin = (target?: string) => {
@@ -30,9 +43,133 @@ export function LoginPage() {
     window.location.assign(`${ADMIN_ENTRY_PATH}#${safeTarget}`);
   };
 
+  const authenticateWithWebAuthn = async (attempt: LoginSecondFactor) => {
+    setWebauthnLoading(true);
+    setError(null);
+    setSecondFactorNotice(null);
+
+    try {
+      const browserApi = window.SimpleWebAuthnBrowser;
+      const supports = browserApi
+        ? await browserApi.browserSupportsWebAuthn()
+        : typeof window.PublicKeyCredential !== "undefined";
+
+      if (!supports || !browserApi) {
+        throw new Error("当前设备不支持生物识别或通行密钥");
+      }
+
+      message.loading({ content: "等待设备验证...", key: "admin-login-passkey", duration: 0 });
+      const optionsResponse = await fetch(
+        buildApiUrl(`/admin/webauthn/authentication/options?tempToken=${encodeURIComponent(attempt.tempToken)}&_ts=${Date.now()}`),
+        {
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        }
+      );
+      const optionsData = await optionsResponse.json().catch(() => ({ success: false, error: "获取认证参数失败" }));
+      if (!optionsResponse.ok || !optionsData.success) {
+        throw new Error(optionsData.error || "获取认证参数失败");
+      }
+
+      const assertion = await browserApi.startAuthentication(optionsData.options);
+      const verifyResponse = await fetch(buildApiUrl("/admin/webauthn/authentication/verify"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify({ tempToken: attempt.tempToken, assertion }),
+      });
+      const verifyData = await verifyResponse.json().catch(() => ({ success: false, error: "非 JSON 响应" }));
+      if (!verifyResponse.ok || !verifyData.success) {
+        throw new Error(verifyData.error || "二次验证失败");
+      }
+      message.destroy("admin-login-passkey");
+      finishLogin(verifyData.redirect || nextPath);
+    } catch (_) {
+      message.destroy("admin-login-passkey");
+      setSecondFactorNotice("设备验证未完成。你可以重试，或使用管理员邮箱验证码进入。");
+    } finally {
+      setWebauthnLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const sendEmailOtp = async () => {
+    if (!secondFactor) return;
+    setSendingOtp(true);
+    setError(null);
+    try {
+      const response = await fetch(buildApiUrl("/admin/login/email-otp/send"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify({ tempToken: secondFactor.tempToken }),
+      });
+      const data = await response.json().catch(() => ({ success: false, error: "验证码发送失败" }));
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "验证码发送失败");
+      }
+      setOtpSent(true);
+      setSecondFactorNotice(`验证码已发送至 ${data.maskedEmail || secondFactor.maskedEmail || "管理员邮箱"}`);
+      message.success("邮箱验证码已发送");
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : "验证码发送失败");
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const verifyEmailOtp = async (values: { code: string }) => {
+    if (!secondFactor) return;
+    setVerifyingOtp(true);
+    setError(null);
+    try {
+      const response = await fetch(buildApiUrl("/admin/login/email-otp/verify"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify({ tempToken: secondFactor.tempToken, code: values.code.trim() }),
+      });
+      const data = await response.json().catch(() => ({ success: false, error: "验证码验证失败" }));
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "验证码验证失败");
+      }
+      finishLogin(data.redirect || nextPath);
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : "验证码验证失败");
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const returnToPassword = () => {
+    setSecondFactor(null);
+    setOtpSent(false);
+    setError(null);
+    setSecondFactorNotice(null);
+    otpForm.resetFields();
+  };
+
   const handleSubmit = async (values: { email: string; password: string }) => {
     setLoading(true);
     setError(null);
+    setSecondFactorNotice(null);
+    setSecondFactor(null);
+    setOtpSent(false);
 
     try {
       const loginResponse = await fetch(buildApiUrl("/admin/login"), {
@@ -55,55 +192,13 @@ export function LoginPage() {
       }
 
       if (loginData.needsWebAuthn && loginData.tempToken) {
-        const browserApi = window.SimpleWebAuthnBrowser;
-        const supports = browserApi
-          ? await browserApi.browserSupportsWebAuthn()
-          : typeof window.PublicKeyCredential !== "undefined";
-
-        if (!supports || !browserApi) {
-          throw new Error("该账号需要二次验证，请使用支持通行密钥的设备");
-        }
-
-        message.loading({ content: "等待设备验证...", key: "admin-login-passkey", duration: 0 });
-        const optionsResponse = await fetch(
-          buildApiUrl(`/admin/webauthn/authentication/options?tempToken=${encodeURIComponent(loginData.tempToken)}&_ts=${Date.now()}`),
-          {
-            credentials: "include",
-            headers: {
-              Accept: "application/json",
-              "X-Requested-With": "XMLHttpRequest",
-            },
-          }
-        );
-        const optionsData = await optionsResponse.json().catch(() => ({ success: false, error: "获取认证参数失败" }));
-        if (!optionsResponse.ok || !optionsData.success) {
-          throw new Error(optionsData.error || "获取认证参数失败");
-        }
-
-        let assertion: unknown;
-        try {
-          assertion = await browserApi.startAuthentication(optionsData.options);
-        } catch (we) {
-          const reason = we instanceof Error && we.message ? `：${we.message}` : "";
-          throw new Error(`验证已取消${reason}`);
-        }
-
-        const verifyResponse = await fetch(buildApiUrl("/admin/webauthn/authentication/verify"), {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          body: JSON.stringify({ tempToken: loginData.tempToken, assertion }),
-        });
-        const verifyData = await verifyResponse.json().catch(() => ({ success: false, error: "非 JSON 响应" }));
-        if (!verifyResponse.ok || !verifyData.success) {
-          throw new Error(verifyData.error || "二次验证失败");
-        }
-        message.destroy("admin-login-passkey");
-        finishLogin(verifyData.redirect || nextPath);
+        const attempt = {
+          tempToken: String(loginData.tempToken),
+          maskedEmail: typeof loginData.maskedEmail === "string" ? loginData.maskedEmail : undefined,
+          emailOtpAvailable: loginData.emailOtpAvailable !== false,
+        };
+        setSecondFactor(attempt);
+        await authenticateWithWebAuthn(attempt);
         return;
       }
 
@@ -152,6 +247,58 @@ export function LoginPage() {
 
           {error ? <Alert className="admin-login-error" type="error" showIcon message={error} /> : null}
 
+          {secondFactor ? (
+            <section className="admin-login-second-factor" aria-labelledby="admin-login-second-factor-title">
+              <Typography.Title level={4} id="admin-login-second-factor-title" className="admin-login-second-factor-title">
+                完成二次验证
+              </Typography.Title>
+              <Typography.Paragraph className="admin-login-second-factor-copy">
+                优先使用已录入的生物识别设备。无法使用时，可向 {secondFactor.maskedEmail || "管理员邮箱"} 获取一次性验证码。
+              </Typography.Paragraph>
+
+              {secondFactorNotice ? <Alert type="info" showIcon message={secondFactorNotice} /> : null}
+
+              <Space direction="vertical" size={10} className="admin-login-second-factor-actions">
+                <Button size="large" block loading={webauthnLoading} onClick={() => void authenticateWithWebAuthn(secondFactor)}>
+                  重试生物识别
+                </Button>
+                {secondFactor.emailOtpAvailable ? (
+                  <Button type="primary" size="large" block loading={sendingOtp} onClick={() => void sendEmailOtp()}>
+                    {otpSent ? "重新发送邮箱验证码" : "使用邮箱验证码"}
+                  </Button>
+                ) : null}
+              </Space>
+
+              {otpSent ? (
+                <Form form={otpForm} layout="vertical" onFinish={(values) => void verifyEmailOtp(values)} requiredMark={false}>
+                  <Form.Item
+                    label="邮箱验证码"
+                    name="code"
+                    rules={[
+                      { required: true, message: "请输入邮箱验证码" },
+                      { pattern: /^\d{6}$/, message: "请输入 6 位数字验证码" },
+                    ]}
+                  >
+                    <Input
+                      size="large"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="输入 6 位验证码"
+                      aria-label="邮箱验证码"
+                    />
+                  </Form.Item>
+                  <Button type="primary" size="large" htmlType="submit" loading={verifyingOtp} block className="admin-login-submit">
+                    验证并登录
+                  </Button>
+                </Form>
+              ) : null}
+
+              <Button type="link" block onClick={returnToPassword} disabled={webauthnLoading || sendingOtp || verifyingOtp}>
+                返回并重新输入账号密码
+              </Button>
+            </section>
+          ) : (
           <Form form={form} layout="vertical" onFinish={(values) => void handleSubmit(values)} requiredMark={false}>
             <Form.Item
               label="邮箱地址"
@@ -183,6 +330,7 @@ export function LoginPage() {
               登录
             </Button>
           </Form>
+          )}
         </div>
       </section>
     </main>
