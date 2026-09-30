@@ -37,6 +37,8 @@ const {
   generateEchohuntTwitterAuthUrl,
   getEchohuntTwitterTokens,
   getEchohuntTwitterUserInfo,
+  getTwitterFollowTaskTarget,
+  verifyEchohuntTwitterFollowTask,
 } = require("../services/twitter-echohunt");
 const {
   buildCampaignListItem,
@@ -174,6 +176,38 @@ function getTwitterIdentityFromAuth(req) {
     authCenterUserId: req.authCenter?.user?.id || null,
     xhuntUserId: req.authCenter?.user?.xhuntUserId || null,
   };
+}
+
+function getTwitterIdentityRecordFromAuth(req) {
+  const identities = req.authCenter?.identities || [];
+  return identities.find((item) => item.provider === PROVIDERS.TWITTER) || null;
+}
+
+async function verifyCampaignTwitterFollowTasks(req, campaignConfig, twitterIdentity, taskId = null) {
+  const twitterIdentityRecord = getTwitterIdentityRecordFromAuth(req);
+  if (!twitterIdentityRecord) throw publicError("TWITTER_ID_REQUIRED", 400);
+
+  const tasks = Array.isArray(campaignConfig?.tasks) ? campaignConfig.tasks : [];
+  const requiredTasks = tasks.filter((task) => {
+    if (taskId && String(task?.id || "") !== String(taskId)) return false;
+    return !!getTwitterFollowTaskTarget(task);
+  });
+
+  if (taskId && !requiredTasks.length) {
+    throw publicError("TASK_NOT_X_FOLLOW_VERIFIABLE", 400, "This task does not support X follow verification");
+  }
+
+  const verifiedTasks = [];
+  for (const task of requiredTasks) {
+    const verified = await verifyEchohuntTwitterFollowTask({
+      task,
+      identity: twitterIdentityRecord,
+      twitterUserId: twitterIdentity.twitterId,
+      redisClient: req.redisClient,
+    });
+    if (verified) verifiedTasks.push(verified);
+  }
+  return verifiedTasks;
 }
 
 async function getViewerTwitterIdForLeaderboard(req) {
@@ -562,6 +596,8 @@ function buildEchohuntCampaignListItem(record, lang, viewer) {
       title: localizeTaskTitle(task.title, lang),
       url: task.url || null,
       autoComplete: !!task.autoComplete,
+      targetTwitterId: task.targetTwitterId || null,
+      targetHandle: task.targetHandle || null,
     })),
   };
 }
@@ -982,6 +1018,8 @@ function buildEchohuntCampaignDetail(record, lang) {
       title: localizeTaskTitle(task.title, lang),
       url: task.url || null,
       autoComplete: !!task.autoComplete,
+      targetTwitterId: task.targetTwitterId || null,
+      targetHandle: task.targetHandle || null,
     })),
     registration: {
       open: detail.webStatus === "live" || detail.webStatus === "coming_soon",
@@ -1698,6 +1736,37 @@ router.get("/campaigns/:campaignKey", authenticateAuthCenterToken({ optional: tr
   }
 });
 
+router.post(
+  "/campaigns/:campaignKey/tasks/:taskId/verify",
+  authenticateAuthCenterToken(),
+  async (req, res) => {
+    try {
+      const record = await findCampaignRecord(req.params.campaignKey);
+      if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
+      const normalizedCampaign = record?.campaignKey || normalizeCampaign(req.params.campaignKey);
+      if (!normalizedCampaign) throw publicError("CAMPAIGN_REQUIRED", 400);
+
+      const twitterIdentity = getTwitterIdentityFromAuth(req);
+      if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400);
+
+      const campaignConfig = await loadCampaignConfigForRegistration(normalizedCampaign, req, {
+        channel: "echohunt",
+        viewer: { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId },
+        allowComingSoonWarmup: String(record.webStatus || "").toLowerCase() === "coming_soon",
+      });
+      const verifiedTasks = await verifyCampaignTwitterFollowTasks(
+        req,
+        campaignConfig,
+        twitterIdentity,
+        req.params.taskId
+      );
+      return res.json({ success: true, verified: true, task: verifiedTasks[0] || null });
+    } catch (error) {
+      return sendError(res, error, "ECHOHUNT_TASK_VERIFY_FAILED");
+    }
+  }
+);
+
 // EchoHunt Web 活动报名接口：
 // 1. 使用 Auth Center token 校验登录态，并从登录身份中读取 Twitter 身份；
 // 2. EchoHunt 入口负责把 Auth Center 用户关联/创建为原 XHuntUser；
@@ -1744,6 +1813,7 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
       viewer: { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId },
       allowComingSoonWarmup: String(record.webStatus || "").toLowerCase() === "coming_soon",
     });
+    const verifiedTasks = await verifyCampaignTwitterFollowTasks(req, found, twitterIdentity);
 
     const rawEmail = req.body?.email !== undefined ? req.body.email : req.body?.emil;
     const contact = normalizeRegistrationContact({ evmAddress: req.body?.evmAddress, email: rawEmail });
@@ -1772,7 +1842,10 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
       registrationClient: "echohunt",
       registrationMetadata: {
         agreements: req.body?.agreements || null,
-        taskState: req.body?.taskState || null,
+        taskState: {
+          client: req.body?.taskState || null,
+          verifiedTwitterFollowTasks: verifiedTasks,
+        },
         userAgent: req.headers["user-agent"] || null,
         pageUrl: registrationUrl,
         source: "echohunt_web",
