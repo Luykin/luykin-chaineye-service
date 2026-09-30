@@ -13,6 +13,7 @@ import {
   saveManagedWebsiteCampaignsConfig,
   saveWebsiteCampaignConfig,
   searchEchohuntDebugTokenUsers,
+  setWebsiteCampaignArchived,
 } from "@/services/nacos";
 import type { EchohuntDebugTokenPayload, EchohuntDebugTokenUser } from "@/services/nacos";
 import { fetchVipLists } from "@/services/feature-flags";
@@ -874,6 +875,21 @@ function getCampaignStage(c?: AnyObj | null) {
   return { label: "进行中", className: "is-live" };
 }
 
+function isCampaignArchiveEligible(record?: AnyObj | null) {
+  const rawEndAt = record?.endAt || record?.nacosPayload?.enrollmentWindow?.endAt;
+  const endAt = new Date(rawEndAt || "");
+  if (Number.isNaN(endAt.getTime())) return false;
+  const eligibleAt = new Date(endAt);
+  const endDay = eligibleAt.getUTCDate();
+  eligibleAt.setUTCDate(1);
+  eligibleAt.setUTCMonth(eligibleAt.getUTCMonth() + 1);
+  const lastDayOfEligibleMonth = new Date(
+    Date.UTC(eligibleAt.getUTCFullYear(), eligibleAt.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  eligibleAt.setUTCDate(Math.min(endDay, lastDayOfEligibleMonth));
+  return Date.now() > eligibleAt.getTime();
+}
+
 function getCompactRewardSummary(c?: AnyObj | null) {
   if (!c) return "-";
   if (c.leaderboardMode === "custom") {
@@ -978,6 +994,7 @@ export function NacosCampaignsPage() {
   >(null);
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [archiveChanging, setArchiveChanging] = useState(false);
   const [listCollapsed, setListCollapsed] = useState(
     () => localStorage.getItem("nacos-campaigns-list-collapsed") === "1",
   );
@@ -1386,6 +1403,47 @@ export function NacosCampaignsPage() {
         `删除未能保存：${error instanceof Error ? error.message : "未知错误"}（可点击「发布」重试）`,
         "error",
       );
+    }
+  }
+
+  async function toggleCampaignArchive() {
+    if (!selectedManagedRecord || !selectedCampaign) return;
+    const nextArchived = !selectedManagedRecord.isArchived;
+    if (
+      nextArchived &&
+      !window.confirm(
+        `确认归档该活动？\n\n${selectedCampaign.displayName?.zh || selectedCampaign.displayName?.en || selectedCampaign.id || ""}\n\n归档后，该活动不会再由内部配置接口返回，可随时复原。`,
+      )
+    )
+      return;
+
+    setArchiveChanging(true);
+    try {
+      const result = await setWebsiteCampaignArchived(
+        String(selectedManagedRecord.nacosCampaignId),
+        nextArchived,
+        managedConfigRevision,
+      );
+      setWebsiteRecords((prev) =>
+        prev.map((item) =>
+          String(item.nacosCampaignId) === String(result.data.nacosCampaignId)
+            ? result.data
+            : item,
+        ),
+      );
+      setManagedConfigRevision(result.revision);
+      showToast(nextArchived ? "活动已归档" : "活动已复原", "success");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setConfigConflictOpen(true);
+        return;
+      }
+      showToast(
+        `${nextArchived ? "归档" : "复原"}失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    } finally {
+      setArchiveChanging(false);
     }
   }
 
@@ -1962,6 +2020,13 @@ export function NacosCampaignsPage() {
       record as AnyObj,
     ]),
   );
+  const selectedManagedRecord = c
+    ? websiteRecordByNacosId.get(String(c.id || c.nacosCampaignId || "")) || null
+    : null;
+  const showArchiveAction = !!selectedManagedRecord && (
+    selectedManagedRecord.isArchived === true ||
+    isCampaignArchiveEligible(selectedManagedRecord)
+  );
   const claimVisible = websiteForm.webStatus === "claim";
   const powEnabled = !!(
     websiteTarget?.enablePowLeaderboard ||
@@ -2038,6 +2103,16 @@ export function NacosCampaignsPage() {
               >
                 复制
               </Button>
+              {showArchiveAction ? (
+                <Button
+                  className="config-action config-action-secondary"
+                  danger={!selectedManagedRecord?.isArchived}
+                  loading={archiveChanging}
+                  onClick={() => void toggleCampaignArchive()}
+                >
+                  {selectedManagedRecord?.isArchived ? "复原" : "归档"}
+                </Button>
+              ) : null}
               <Button
                 className="config-action config-action-danger"
                 danger
@@ -2138,6 +2213,7 @@ export function NacosCampaignsPage() {
                   meta: item.id || item.campaignKey || "-",
                   marker: hasWebsiteConfig ? "website-config" : undefined,
                   chips: [
+                    websiteRecord?.isArchived ? "已归档" : "",
                     item.enabled ? "展示" : "隐藏",
                     item.testingPhase ? "testing" : "",
                     hasWebsiteConfig ? "已配网站" : "",

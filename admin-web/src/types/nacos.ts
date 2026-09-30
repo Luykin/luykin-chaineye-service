@@ -22,6 +22,7 @@ export interface NacosPublishResponse {
 export interface WebsiteCampaignRecord {
   id?: string | number;
   nacosCampaignId: string;
+  isArchived?: boolean;
   campaignKey?: string | null;
   slug?: string | null;
   webStatus?: string | null;

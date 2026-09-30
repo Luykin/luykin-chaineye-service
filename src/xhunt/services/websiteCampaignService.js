@@ -345,6 +345,7 @@ function buildManagedCampaignsRevision(records) {
         id: String(data.id),
         updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : String(updatedAt || ""),
         isDeleted: !!data.isDeleted,
+        isArchived: !!data.isArchived,
       };
     })
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -357,6 +358,68 @@ function createManagedConfigConflictError(revision) {
   error.code = "CAMPAIGN_CONFIG_CONFLICT";
   error.revision = revision;
   return error;
+}
+
+function isCampaignArchiveEligible(endAt, now = new Date()) {
+  const endDate = endAt instanceof Date ? endAt : new Date(endAt);
+  if (Number.isNaN(endDate.getTime())) return false;
+  const eligibleAt = new Date(endDate);
+  const endDay = eligibleAt.getUTCDate();
+  eligibleAt.setUTCDate(1);
+  eligibleAt.setUTCMonth(eligibleAt.getUTCMonth() + 1);
+  const lastDayOfEligibleMonth = new Date(
+    Date.UTC(eligibleAt.getUTCFullYear(), eligibleAt.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  eligibleAt.setUTCDate(Math.min(endDay, lastDayOfEligibleMonth));
+  return now.getTime() > eligibleAt.getTime();
+}
+
+async function setWebsiteCampaignArchived(identifier, archived, expectedRevision) {
+  const key = String(identifier || "").trim();
+  if (!key) {
+    const error = new Error("活动 ID 不能为空");
+    error.status = 400;
+    throw error;
+  }
+
+  let updatedRecord = null;
+  let revision = "";
+  await pgInstance.transaction(async (transaction) => {
+    await pgInstance.query(
+      "SELECT pg_advisory_xact_lock(hashtext(:lockKey))",
+      { replacements: { lockKey: MANAGED_CONFIG_LOCK_KEY }, transaction }
+    );
+    const records = await XHuntWebsiteCampaign.findAll({ transaction });
+    const actualRevision = buildManagedCampaignsRevision(records);
+    if (!expectedRevision || expectedRevision !== actualRevision) {
+      throw createManagedConfigConflictError(actualRevision);
+    }
+
+    const record = records.find(
+      (item) => String(item.nacosCampaignId) === key || String(item.id) === key
+    );
+    if (!record) {
+      const error = new Error("活动不存在");
+      error.status = 404;
+      throw error;
+    }
+    if (record.isDeleted) {
+      const error = new Error("已删除活动不能归档");
+      error.status = 400;
+      throw error;
+    }
+    if (archived && !record.isArchived && !isCampaignArchiveEligible(record.endAt)) {
+      const error = new Error("只有结束超过 1 个月的活动可以归档");
+      error.status = 400;
+      throw error;
+    }
+
+    await record.update({ isArchived: archived }, { transaction });
+    updatedRecord = record;
+    revision = buildManagedCampaignsRevision(records);
+  });
+
+  return { record: updatedRecord, revision };
 }
 
 async function saveManagedCampaignsConfig(configLike, expectedRevision) {
@@ -821,10 +884,17 @@ function buildPluginCampaign(record, options = {}) {
   };
 }
 
-async function listPluginCampaigns({ includeTesting = false, includeDisabled = false } = {}) {
+async function listPluginCampaigns({
+  includeTesting = false,
+  includeDisabled = false,
+  includeArchived = true,
+} = {}) {
   const where = {
     isDeleted: false,
   };
+  if (!includeArchived) {
+    where.isArchived = false;
+  }
   if (!includeDisabled) {
     where.enabled = true;
   }
@@ -1162,6 +1232,7 @@ module.exports = {
   fetchNacosCampaigns,
   syncCampaignsFromNacos,
   saveManagedCampaignsConfig,
+  setWebsiteCampaignArchived,
   listPublicCampaigns,
   listPluginCampaigns,
   getManagedCampaignPayloadByKey,

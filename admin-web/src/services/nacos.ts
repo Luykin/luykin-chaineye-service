@@ -86,6 +86,21 @@ export async function saveManagedWebsiteCampaignsConfig(
   );
 }
 
+export async function setWebsiteCampaignArchived(
+  nacosCampaignId: string,
+  archived: boolean,
+  expectedRevision: string,
+) {
+  return apiRequest<{
+    success: boolean;
+    data: WebsiteCampaignListResponse["data"][number];
+    revision: string;
+  }>(`/api/xhunt/website/campaigns/internal/${encodeURIComponent(nacosCampaignId)}/archive`, {
+    method: "PATCH",
+    body: { archived, expectedRevision },
+  });
+}
+
 export async function fetchCampaignRegistrationsAdmin(params: {
   campaign: string;
   page?: number;

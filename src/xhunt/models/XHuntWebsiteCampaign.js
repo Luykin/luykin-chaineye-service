@@ -36,6 +36,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: false,
       },
+      isArchived: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: "是否从内部活动配置中归档",
+      },
       deletedAt: {
         type: DataTypes.DATE,
         allowNull: true,

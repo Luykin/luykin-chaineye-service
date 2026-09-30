@@ -231,12 +231,13 @@ router.get("/config", securityMiddleware, authenticateTokenOptional, async (req,
 });
 
 // 内部配置接口：不走插件安全签名/登录校验。
-// 不按 domain / webStatus / enabled 过滤；返回 isDeleted=false 的活动，包含测试中的活动。
+// 不按 domain / webStatus / enabled 过滤；返回未删除、未归档的活动，包含测试中的活动。
 router.get("/internal/hK9N7y37rPa1/config", async (req, res) => {
   try {
     const allCampaigns = await listPluginCampaigns({
       includeTesting: true,
       includeDisabled: true,
+      includeArchived: false,
     });
 
     return res.json({

@@ -24,6 +24,7 @@ const {
   getPublicCampaignDetailBySlug,
   getWebsiteCampaignAdminByNacosId,
   saveManagedCampaignsConfig,
+  setWebsiteCampaignArchived,
   saveWebsiteCampaignConfig,
   getManagedCampaignsAdminSnapshot,
   importLegacyWebsiteCampaigns,
@@ -487,6 +488,42 @@ router.get("/internal/by-nacos-id/:nacosCampaignId", adminAuth, requirePermissio
     return res.json({ success: true, data: record ? serializeWebsiteCampaignAdmin(record) : null });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "读取网站配置失败" });
+  }
+});
+
+router.patch("/internal/:nacosCampaignId/archive", adminAuth, requirePermission("nacos_config"), async (req, res) => {
+  try {
+    if (typeof req.body?.archived !== "boolean") {
+      return res.status(400).json({ success: false, error: "archived 必须是布尔值" });
+    }
+    const result = await setWebsiteCampaignArchived(
+      req.params.nacosCampaignId,
+      req.body.archived,
+      req.body.expectedRevision
+    );
+    await invalidateWebsiteCampaignCaches(req);
+    await logAdminAction(req, {
+      action: req.body.archived ? "website-campaign-archive" : "website-campaign-restore",
+      success: true,
+      message: `nacosCampaignId=${req.params.nacosCampaignId}`,
+    });
+    return res.json({
+      success: true,
+      data: serializeWebsiteCampaignAdmin(result.record),
+      revision: result.revision,
+    });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: req.body?.archived ? "website-campaign-archive" : "website-campaign-restore",
+      success: false,
+      message: error.message || "操作失败",
+    });
+    return res.status(error.status || 500).json({
+      success: false,
+      error: error.message || "操作失败",
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.revision ? { revision: error.revision } : {}),
+    });
   }
 });
 
