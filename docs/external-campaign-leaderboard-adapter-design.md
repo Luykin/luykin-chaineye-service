@@ -48,7 +48,7 @@ YZi Labs 因此成为硬编码特例：按活动 key 绕过通用 URL，拉取 `
 
 ### 3.1 目标
 
-1. 超级管理员可为一个活动配置一个或多个可信的内部数据请求；接口均为无认证、一次返回完整榜单的 JSON 接口。
+1. 超级管理员可为一个活动中的**每个自定义榜单**独立配置一套可信内部数据请求；一个榜单可有一个主 `board` 请求和多个补充请求，接口均为无认证、一次返回完整榜单的 JSON 接口。
 2. 超级管理员可在后台试拉取、查看截断样本，并让 AI 建议映射。
 3. 服务端将任意允许的外部 JSON 转为统一榜单 bundle；默认输出一个总榜和三列：排名、Hunter、声量占比。
 4. 默认身份匹配使用 `twitterId`；只有显式配置并经人工确认后才允许以 handle 作为退化匹配。
@@ -89,15 +89,16 @@ EchoHunt /campaigns/:key/leaderboard
 
 ```text
 时间、奖励与门槛
-├─ 外部榜单数据适配器              [仅超级管理员可编辑]
-│  ├─ 状态：未配置 / 草稿 / 预览通过 / 已发布 v3
-│  ├─ ① 接口样本  →  ② AI 转换规则  →  ③ 转换预览  →  ④ 发布
-│  └─ 按当前步骤展开对应内容，其他步骤收起但显示结果摘要
 └─ 自定义榜单
-   └─ 现有榜单名称、奖金、人数、展示渠道等元数据配置
+   ├─ 榜单 A：名称、奖金、人数、展示渠道等元数据
+   │  └─ 外部榜单数据适配器 A        [仅超级管理员可编辑]
+   │     ├─ 状态：未配置 / 草稿 / 预览通过 / 已发布 v3
+   │     └─ ① 接口样本 → ② AI 转换规则 → ③ 转换预览 → ④ 发布
+   └─ 榜单 B：名称、奖金、人数、展示渠道等元数据
+      └─ 外部榜单数据适配器 B（与 A 完全独立）
 ```
 
-这比把功能放在顶部全局工具栏更合适：数据适配器始终属于一个明确的 `campaignKey` 和自定义榜单，用户不需要在多个页面间记住正在配置哪个活动。现有页面已在该位置根据 `leaderboardMode === "custom"` 渲染 `CustomLeaderboards`，见 `admin-web/src/pages/NacosCampaignsPage.tsx:2968`。
+这比把功能放在顶部全局工具栏更合适：适配器卡片嵌在它所属的 `customLeaderboards[]` 折叠面板中，始终属于明确的 `(campaignKey, leaderboardKey)`，不会把多个榜单的请求或映射混在一起。`leaderboardKey` 优先使用榜单 ID，未填写时回退 `distributionType`；`custom-{index}` 回退 key 依赖榜单数组顺序、reorder 后会漂移，**禁止用于适配器绑定**（服务端返回 422 `EXTERNAL_LEADERBOARD_KEY_UNSTABLE`，提示先填写唯一榜单 ID）。管理后台新建自定义榜单时自动生成 `lb_` 前缀的稳定 id。key 推导规则统一由 `src/xhunt/utils/custom-leaderboard-key.js` 实现，前端 `NacosCampaignsPage.tsx` 保持镜像。每个榜单分别保存草稿、样本、预览、已发布版本和运行时缓存输出。
 
 非超级管理员不显示编辑控件，仅显示“外部榜单适配器：仅超级管理员可配置”的只读状态；服务端对全部适配器 API 仍强制 `super` 校验。
 
@@ -232,18 +233,16 @@ type CanonicalLeaderboard = {
 
 ## 5. 数据模型与后台操作流
 
-建议不要把完整规则继续塞进现有 `leaderboardConfig` 的松散 JSON。新增独立表，活动配置只保存已发布适配器 ID 和 source mode。
+不要把完整规则继续塞进现有 `leaderboardConfig` 的松散 JSON。第一期新增独立表；请求、映射、样本和预览先作为受 Schema 约束的 JSON 字段随适配器保存，后续需要完整审计历史时再拆表。
 
 | 实体 | 关键字段 | 用途 |
 | --- | --- | --- |
-| `ExternalLeaderboardAdapter` | `id`, `campaignKey`, `status`, `publishedVersionId` | 一个活动的适配器入口；仅用于进行中的动态榜单。 |
-| `ExternalLeaderboardRequest` | `adapterId`, `key`, `url`, `method`, `queryTemplate`, `timeoutMs`, `required` | 命名请求，例如 `board`、`detail`；URL 必须通过内部域名 allowlist 校验。 |
-| `ExternalLeaderboardMappingVersion` | `adapterId`, `version`, `mappingSpec`, `schemaFingerprint`, `status`, `createdBy`, `approvedBy`, `publishedAt` | 不可变映射版本。 |
-| `ExternalLeaderboardFetchAudit` | `versionId`, `requestKey`, `status`, `latencyMs`, `responseFingerprint`, `errorCode`, `sampleRef` | 排障、漂移检测和审计；样本受脱敏与保留期控制。 |
+| `XhuntExternalLeaderboardAdapter` | `id`, `campaignKey`, `leaderboardKey`, `draftConfig`, `publishedConfig`, `lastSample`, `lastPreview`, `publishedVersion`, `status` | 一个 `(campaignKey, leaderboardKey)` 一条记录；草稿、发布版本和预览状态彼此独立。 |
+| 后续拆表（非第一期） | `ExternalLeaderboardRequest`、`ExternalLeaderboardMappingVersion`、`ExternalLeaderboardFetchAudit` | 当需要不可变历史、回滚列表和长期审计时再拆分；当前先用操作审计日志与适配器快照满足发布追溯。 |
 
 后台建议分为以下步骤：
 
-1. **配置入口与权限**：在既有 `/api/xhunt/stats#/nacos-campaigns` 活动编辑页增加“外部榜单适配器”区块。前端仅向超级管理员显示；后端保存、试拉取、AI 草稿、预览、发布和回滚接口均必须强制 `super` 角色校验，不能只依赖前端隐藏。
+1. **配置入口与权限**：在既有 `/api/xhunt/stats#/nacos-campaigns` 的每个自定义榜单折叠面板中增加一个“外部榜单适配器”区块。前端仅向超级管理员显示；后端保存、试拉取、AI 草稿、预览、发布和回滚接口均必须强制 `super` 角色校验，不能只依赖前端隐藏。接口路径带 `leaderboardKey`，并在服务端验证它确实属于该活动且没有重复。
 2. **定义请求**：添加 `board`（必填）及 `detail` 等命名请求。每个请求设定 allowlisted 内部 URL、GET、固定查询参数、允许替换变量、超时和是否必需。第一期不支持分页；试拉取和发布校验都必须确认该响应包含完整榜单。
 3. **试拉取**：后端执行请求，展示最大尺寸/深度/数组条数均受限的脱敏 JSON 样本、HTTP 元数据和结构树。
 4. **AI 建议映射**：AI 输入仅为样本、请求说明及明确的标准字段要求；输出必须是 `MappingSpec` JSON 和人类可读的字段对应说明。
@@ -271,7 +270,7 @@ type CanonicalLeaderboard = {
 - `rowsPath` 在样本中命中数组；
 - 每行至少存在可用 `twitterId` 或管理员显式批准的替代身份键；默认发布要求 Twitter ID 覆盖率达到设定阈值（建议 95%）；
 - `rank` 可安全转换为正整数，或在声明排序规则后由后端重新编号；
-- `share` 为有限数并符合明确的单位策略（`ratio` 或 `percent`，禁止自动猜测）；
+- `share` 为有限数且强制是 `0~1` ratio；拒绝 `0~100` percent，禁止自动猜测或换算；
 - `binanceSquareAccelerated` 必须来自经确认的上游布尔字段，或由平台以规范化的 `twitterId` 批量查询有效 Binance Square 绑定后补全；
 - `avatar` 必须是允许的 `https` URL 或空值；
 - 映射输出不存在未声明字段、函数、原型路径、递归深度超限或结果行数超限；
@@ -282,18 +281,18 @@ type CanonicalLeaderboard = {
 
 ### 7.1 出站请求安全
 
-- 仅超级管理员可填写 URL，但 URL 仍必须命中服务端的内部域名 allowlist；禁止相对 URL 解析到公共默认域名，禁止任意公网 URL。
-- 解析 DNS 后拒绝 loopback、link-local、私网、metadata IP 和重定向到这些地址；每一跳重定向都重新校验。
+- 仅超级管理员可填写 URL，但 URL 必须命中服务端的内部域名 allowlist；默认包含 `DATA_SERVICE_BASE_URL` 的 host，其他内部 host 通过 `EXTERNAL_LEADERBOARD_ALLOWED_HOSTS`（逗号分隔）显式配置。禁止相对 URL 和任意公网 URL。
+- 内部域名可能正常解析到私网 IP，因此以显式 host allowlist 为信任边界；禁止 URL 内嵌用户名/密码，并拒绝所有重定向。
 - 第一阶段仅支持无认证 GET、固定 query 参数和 JSON 响应；禁止自定义 header、Cookie、请求体和重定向认证。
 - 设置连接/响应超时、最大响应字节数、最大解压大小、最大 JSON 深度和最大数组行数；按 source 做并发及速率限制。
 
 ### 7.2 缓存与失败策略
 
-以 `campaignKey + publishedMappingVersion + 请求参数` 为缓存键；建议默认 TTL 5 分钟，与 YZi Labs 的现有策略一致，但可在受限范围内配置。主 `board` 请求失败时使用最近成功的规范化缓存，并明确标记 `stale: true` 给日志/指标（对外 bundle 不暴露内部错误）。非必需 `detail` 请求失败不阻断榜单，但 `leaderboardDataUpdatedAt` 为 `null`，`updatedAt` 应表示本服务成功获得主数据的时间。
+以 `campaignKey + leaderboardKey + publishedMappingVersion + 请求参数` 为缓存键；建议默认 TTL 5 分钟，与 YZi Labs 的现有策略一致，但可在受限范围内配置。运行时可将同一活动多个榜单的结果聚合成一个 bundle，但任一榜单的请求、映射版本和失败处理仍独立。主 `board` 请求失败时使用最近成功的规范化缓存，并明确标记 `stale: true` 给日志/指标（对外 bundle 不暴露内部错误）。非必需 `detail` 请求失败不阻断榜单，但 `leaderboardDataUpdatedAt` 为 `null`，`updatedAt` 应表示本服务成功获得主数据的时间。
 
 ### 7.3 指标和日志
 
-至少记录并告警：`campaignKey`、adapter/version、request key、source host、HTTP 状态、耗时、缓存命中/陈旧命中、解析行数、丢弃行数、字段覆盖率、schema fingerprint、上游更新时间和 error code。日志不得记录完整原始响应。
+至少记录并告警：`campaignKey`、`leaderboardKey`、adapter/version、request key、source host、HTTP 状态、耗时、缓存命中/陈旧命中、解析行数、丢弃行数、字段覆盖率、schema fingerprint、上游更新时间和 error code。日志不得记录完整原始响应。
 
 ## 8. 与现有系统的集成和迁移
 

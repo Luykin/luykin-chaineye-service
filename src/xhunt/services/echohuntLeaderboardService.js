@@ -8,6 +8,7 @@ function cleanUrlOrNull(val) {
 const fs = require("fs/promises");
 const path = require("path");
 const axios = require("axios");
+const { getCustomLeaderboardAdapterKey } = require("../utils/custom-leaderboard-key");
 
 const STATIC_ROOT = path.join(__dirname, "../static/echohunt-leaderboard");
 const STATIC_CAMPAIGNS_DIR = path.join(STATIC_ROOT, "campaigns");
@@ -169,7 +170,9 @@ function getRowsForCustomConfig(rawMap, item, index) {
   const id = getCustomTrackId(item, index);
   const key = getCustomLeaderboardKey(item);
   const distributionType = item?.distributionType ? String(item.distributionType) : "";
-  return rawMap[id] || rawMap[key] || (distributionType ? rawMap[distributionType] : undefined) || rawMap[String(index)] || [];
+  // 外部榜单适配器按 adapterKey 存放数据，必须纳入兜底链，否则只填了名称的榜单静默为空。
+  const adapterKey = getCustomLeaderboardAdapterKey(item, index);
+  return rawMap[id] || rawMap[adapterKey] || rawMap[key] || (distributionType ? rawMap[distributionType] : undefined) || rawMap[String(index)] || [];
 }
 
 function normalizeCustomLeaderboardRow(item, index, sourceKey) {

@@ -20,6 +20,7 @@ import { fetchVipLists } from "@/services/feature-flags";
 import type { WebsiteCampaignRecord } from "@/types/nacos";
 import type { VipListItem } from "@/types/feature-flags";
 import { CampaignRegistrationsModal, getRegistrationCampaignKey } from "@/components/campaigns/CampaignRegistrationsModal";
+import { ExternalLeaderboardAdapterCard } from "@/components/campaigns/ExternalLeaderboardAdapter";
 
 const { TextArea } = Input;
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -1939,7 +1940,8 @@ export function NacosCampaignsPage() {
       if (kind === "writingThemes") c[kind].push({ zh: "", en: "" });
       if (kind === "customLeaderboards")
         c[kind].push({
-          id: "",
+          // 自动生成稳定 id：适配器 key 推导依赖 id，留空会回退到 custom-${index}（随排序漂移）。
+          id: `lb_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
           name: { zh: "", en: "" },
           short_name: { zh: "", en: "" },
           empty_text: { zh: "", en: "" },
@@ -2320,6 +2322,9 @@ export function NacosCampaignsPage() {
                   updateArrayItem={updateArrayItem}
                   moveArrayItem={moveArrayItem}
                   removeArrayItem={removeArrayItem}
+                  externalAdapterNacosCampaignId={selectedManagedRecord?.nacosCampaignId || null}
+                  isSuperAdmin={isSuperAdmin}
+                  onMessage={showToast}
                 />
               </>
             ) : null}
@@ -2788,8 +2793,11 @@ function CampaignEditor(props: {
   updateArrayItem: (kind: string, index: number, path: string, value: any) => void;
   moveArrayItem: (kind: string, index: number, delta: number) => void;
   removeArrayItem: (kind: string, index: number) => void;
+  externalAdapterNacosCampaignId: string | null;
+  isSuperAdmin: boolean;
+  onMessage: (message: string, type?: "success" | "error" | "info") => void;
 }) {
-  const { c, vipUsers, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
+  const { c, vipUsers, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem, externalAdapterNacosCampaignId, isSuperAdmin, onMessage } = props;
   const [campaignIdModalOpen, setCampaignIdModalOpen] = useState(false);
   const [campaignIdDraft, setCampaignIdDraft] = useState("");
   const internalTestUserOptions = internalTestUsers.map((item) => ({
@@ -2965,7 +2973,7 @@ function CampaignEditor(props: {
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
         </Row>
         <div style={{ marginTop: 12 }}>
-          {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} mockEnabled={!!c.mockCustomLeaderboardDataEnabled} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
+          {(c.leaderboardMode || "traditional") === "custom" ? <Space direction="vertical" size={8} style={{ width: "100%" }}><CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} mockEnabled={!!c.mockCustomLeaderboardDataEnabled} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} nacosCampaignId={externalAdapterNacosCampaignId} isSuperAdmin={isSuperAdmin} onMessage={onMessage} /></Space> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
         </div>
       </Section>
 
@@ -3511,6 +3519,11 @@ function getCustomLeaderboardFullTitle(item: AnyObj) {
   );
 }
 
+// 与后端 src/xhunt/utils/custom-leaderboard-key.js 保持一致，改动需同步。
+function getCustomLeaderboardAdapterKey(item: AnyObj, index: number) {
+  return String(item?.id || item?.distributionType || `custom-${index}`).trim();
+}
+
 function getCustomLeaderboardRewardText(item: AnyObj) {
   const amount = item?.amount;
   if (amount === null || amount === undefined || amount === "") return "未填金额";
@@ -3563,11 +3576,22 @@ function CustomLeaderboards({
   update,
   move,
   remove,
+  nacosCampaignId,
+  isSuperAdmin,
+  onMessage,
 }: any) {
   const apiCustomized =
     String(apiUrl || "") !== DEFAULT_CUSTOM_LEADERBOARD_API_URL ||
     String(userActivityApiUrl || "") !== DEFAULT_CUSTOM_USER_ACTIVITY_API_URL;
-  const panels = items.map((it: AnyObj, i: number) => ({
+  const adapterKeyCounts = items.reduce((counts: Record<string, number>, item: AnyObj, index: number) => {
+    const key = getCustomLeaderboardAdapterKey(item, index);
+    if (key) counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+  const panels = items.map((it: AnyObj, i: number) => {
+    const leaderboardKey = getCustomLeaderboardAdapterKey(it, i);
+    const hasDuplicateAdapterKey = !!leaderboardKey && adapterKeyCounts[leaderboardKey] > 1;
+    return ({
     key: String(i),
     label: <CustomLeaderboardSummary item={it} index={i} />,
     extra: (
@@ -3580,6 +3604,7 @@ function CustomLeaderboards({
       </div>
     ),
     children: (
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
       <Row gutter={[12, 12]}>
         <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，建议填写；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} placeholder="cohort" /></Field></Col>
         <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
@@ -3620,8 +3645,23 @@ function CustomLeaderboards({
           </Field>
         </Col>
       </Row>
+      <ExternalLeaderboardAdapterCard
+        nacosCampaignId={nacosCampaignId}
+        leaderboardKey={leaderboardKey}
+        leaderboardTitle={getCustomLeaderboardDisplayTitle(it, i)}
+        isSuperAdmin={!!isSuperAdmin}
+        disabled={!nacosCampaignId || !leaderboardKey || hasDuplicateAdapterKey}
+        disabledReason={
+          hasDuplicateAdapterKey
+            ? "多个自定义榜单使用了相同的榜单 ID / 机制 key；请填写唯一的榜单 ID 后再配置适配器。"
+            : undefined
+        }
+        onMessage={onMessage}
+      />
+      </Space>
     ),
-  }));
+    });
+  });
 
   return (
     <Space direction="vertical" size={10} style={{ width: "100%" }}>

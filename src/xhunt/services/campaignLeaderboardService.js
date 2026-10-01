@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+const { getPublishedLeaderboard } = require("./externalLeaderboardAdapterService");
 
 const CUSTOM_LEADERBOARD_TIMEOUT_MS = 10000;
 const SELF_CUSTOM_LEADERBOARD_PATH = "/api/xhunt/campaigns/custom-leaderboard";
@@ -441,6 +442,9 @@ async function getCustomLeaderboardData(campaign = {}, options = {}) {
   const campaignKey = getCampaignKey(campaign, options.campaign);
   if (config.leaderboardMode !== "custom") return emptyLeaderboardPayload(campaignKey);
 
+  const externalAdapterPayload = await getPublishedLeaderboard(campaignKey, getCustomLeaderboards(config));
+  if (externalAdapterPayload) return externalAdapterPayload;
+
   if (isYziLabsCampaign(campaignKey)) {
     // 已放开给所有用户；不再按 YZILABS_PREVIEW_TWITTER_IDS 过滤。
     // if (!canPreviewYziLabsLeaderboard(options)) {
@@ -469,6 +473,17 @@ async function getCustomUserActivityData(campaign = {}, userId, options = {}) {
   const normalizedUserId = String(userId || "").trim();
   if (config.leaderboardMode !== "custom") {
     return { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId };
+  }
+
+  const externalAdapterPayload = await getPublishedLeaderboard(campaignKey, getCustomLeaderboards(config));
+  if (externalAdapterPayload) {
+    const twitterId = String(options.twitterId || "").trim();
+    const leaderboards = {};
+    Object.entries(externalAdapterPayload.leaderboards || {}).forEach(([key, rows]) => {
+      const found = (Array.isArray(rows) ? rows : []).find((row) => twitterId && String(row.twitterId || "") === twitterId);
+      if (found) leaderboards[key] = found;
+    });
+    return { ...externalAdapterPayload, userid: normalizedUserId, twitterId, leaderboards };
   }
 
   if (isYziLabsCampaign(campaignKey)) {

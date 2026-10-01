@@ -33,6 +33,7 @@ const {
 const {
   invalidateCampaignConfigCache,
 } = require("../utils/campaign-config-cache");
+const { getCustomLeaderboardAdapterKey } = require("../utils/custom-leaderboard-key");
 const {
   normalizePublicLang,
   normalizePublicSlug,
@@ -40,6 +41,14 @@ const {
   getCachedPublicCampaignDetail,
   invalidateWebsiteCampaignPublicCache,
 } = require("../utils/website-campaign-public-cache");
+const {
+  fetchSample: fetchExternalLeaderboardSample,
+  generateMapping: generateExternalLeaderboardMapping,
+  getAdapter: getExternalLeaderboardAdapter,
+  previewAdapter: previewExternalLeaderboardAdapter,
+  publishAdapter: publishExternalLeaderboardAdapter,
+  saveDraft: saveExternalLeaderboardDraft,
+} = require("../services/externalLeaderboardAdapterService");
 
 const router = express.Router();
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
@@ -87,6 +96,37 @@ async function invalidateWebsiteCampaignCaches(req) {
     invalidatePluginCampaignConfigCache(req),
     invalidateWebsiteCampaignPublicCache(req.redisClient),
   ]);
+}
+
+async function getExternalAdapterContext(nacosCampaignId, leaderboardKey) {
+  const record = await getWebsiteCampaignAdminByNacosId(nacosCampaignId);
+  if (!record) {
+    const err = new Error("活动尚未保存到数据库，请先发布活动基础信息");
+    err.status = 404;
+    throw err;
+  }
+  const campaignKey = String(record.campaignKey || record.nacosPayload?.campaignKey || "").trim();
+  const payload = record.nacosPayload?.leaderboardConfig || record.nacosPayload || {};
+  const customLeaderboards = Array.isArray(payload.customLeaderboards) ? payload.customLeaderboards : [];
+  const requestedKey = String(leaderboardKey || "").trim();
+  const matchedEntries = customLeaderboards
+    .map((item, index) => ({ item, index, key: getCustomLeaderboardAdapterKey(item, index) }))
+    .filter((entry) => entry.key === requestedKey);
+  if (matchedEntries.length !== 1) {
+    const err = new Error("该自定义榜单不存在，或其榜单 ID / 机制 key 重复；请先保存活动基础信息并确保榜单 key 唯一");
+    err.status = 422;
+    err.code = "EXTERNAL_LEADERBOARD_KEY_INVALID";
+    throw err;
+  }
+  const matched = matchedEntries[0];
+  // custom-${index} 依赖榜单数组顺序，reorder 后适配器会绑错榜单，禁止用于适配器绑定。
+  if (matched.key === `custom-${matched.index}`) {
+    const err = new Error("该榜单未填写榜单 ID，适配器 key 会随榜单排序漂移；请先为该榜单填写唯一 ID 并保存活动基础信息");
+    err.status = 422;
+    err.code = "EXTERNAL_LEADERBOARD_KEY_UNSTABLE";
+    throw err;
+  }
+  return { campaignKey, leaderboardKey: requestedKey };
 }
 
 function getJwtSecret() {
@@ -574,6 +614,81 @@ router.put("/internal/managed-config", adminAuth, requirePermission("nacos_confi
       ...(error.code ? { code: error.code } : {}),
       ...(error.revision ? { revision: error.revision } : {}),
     });
+  }
+});
+
+router.get("/internal/:nacosCampaignId/external-leaderboards/:leaderboardKey", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { campaignKey, leaderboardKey } = await getExternalAdapterContext(req.params.nacosCampaignId, req.params.leaderboardKey);
+    return res.json({ success: true, data: await getExternalLeaderboardAdapter(campaignKey, leaderboardKey) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, error: error.message || "读取外部榜单适配器失败", code: error.code });
+  }
+});
+
+router.put("/internal/:nacosCampaignId/external-leaderboards/:leaderboardKey/draft", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { campaignKey, leaderboardKey } = await getExternalAdapterContext(req.params.nacosCampaignId, req.params.leaderboardKey);
+    const data = await saveExternalLeaderboardDraft(campaignKey, leaderboardKey, req.body?.config || {});
+    await logAdminAction(req, { action: "external-leaderboard-draft-save", success: true, message: `campaignKey=${campaignKey};leaderboardKey=${leaderboardKey}` });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await logAdminAction(req, { action: "external-leaderboard-draft-save", success: false, message: error.message || "保存失败" });
+    return res.status(error.status || 500).json({ success: false, error: error.message || "保存适配器草稿失败", code: error.code });
+  }
+});
+
+router.post("/internal/:nacosCampaignId/external-leaderboards/:leaderboardKey/sample", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { campaignKey, leaderboardKey } = await getExternalAdapterContext(req.params.nacosCampaignId, req.params.leaderboardKey);
+    const data = await fetchExternalLeaderboardSample(campaignKey, leaderboardKey, req.body?.config || {});
+    await logAdminAction(req, { action: "external-leaderboard-sample-fetch", success: true, message: `campaignKey=${campaignKey};leaderboardKey=${leaderboardKey}` });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await logAdminAction(req, { action: "external-leaderboard-sample-fetch", success: false, message: error.message || "试拉取失败" });
+    return res.status(error.status || 500).json({ success: false, error: error.message || "试拉取接口失败", code: error.code });
+  }
+});
+
+router.post("/internal/:nacosCampaignId/external-leaderboards/:leaderboardKey/generate", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { campaignKey, leaderboardKey } = await getExternalAdapterContext(req.params.nacosCampaignId, req.params.leaderboardKey);
+    const data = await generateExternalLeaderboardMapping(campaignKey, leaderboardKey, req.body?.config || {}, req.body?.instruction || "");
+    await logAdminAction(req, { action: "external-leaderboard-ai-generate", success: true, message: `campaignKey=${campaignKey};leaderboardKey=${leaderboardKey};source=${data.source}` });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await logAdminAction(req, { action: "external-leaderboard-ai-generate", success: false, message: error.message || "AI 生成失败" });
+    return res.status(error.status || 500).json({ success: false, error: error.message || "生成转换规则失败", code: error.code });
+  }
+});
+
+router.post("/internal/:nacosCampaignId/external-leaderboards/:leaderboardKey/preview", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { campaignKey, leaderboardKey } = await getExternalAdapterContext(req.params.nacosCampaignId, req.params.leaderboardKey);
+    const data = await previewExternalLeaderboardAdapter(campaignKey, leaderboardKey, req.body?.config || {});
+    await logAdminAction(req, { action: "external-leaderboard-preview", success: true, message: `campaignKey=${campaignKey};leaderboardKey=${leaderboardKey};passed=${data.preview.passed}` });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await logAdminAction(req, { action: "external-leaderboard-preview", success: false, message: error.message || "预览失败" });
+    return res.status(error.status || 500).json({ success: false, error: error.message || "预览转换结果失败", code: error.code });
+  }
+});
+
+router.post("/internal/:nacosCampaignId/external-leaderboards/:leaderboardKey/publish", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { campaignKey, leaderboardKey } = await getExternalAdapterContext(req.params.nacosCampaignId, req.params.leaderboardKey);
+    const data = await publishExternalLeaderboardAdapter(campaignKey, leaderboardKey, {
+      confirmed: req.body?.confirmed,
+      configFingerprint: req.body?.configFingerprint,
+      responseFingerprint: req.body?.responseFingerprint,
+      adminId: req.adminUser?.id,
+    });
+    await invalidateWebsiteCampaignCaches(req);
+    await logAdminAction(req, { action: "external-leaderboard-publish", success: true, message: `campaignKey=${campaignKey};leaderboardKey=${leaderboardKey};version=${data.publishedVersion}` });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await logAdminAction(req, { action: "external-leaderboard-publish", success: false, message: error.message || "发布失败" });
+    return res.status(error.status || 500).json({ success: false, error: error.message || "发布转换规则失败", code: error.code });
   }
 });
 

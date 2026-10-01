@@ -101,6 +101,65 @@ export async function setWebsiteCampaignArchived(
   });
 }
 
+export type ExternalLeaderboardRequest = {
+  key: string;
+  url: string;
+  query?: Record<string, string>;
+  required?: boolean;
+};
+
+export type ExternalLeaderboardAdapterConfig = {
+  requests: ExternalLeaderboardRequest[];
+  rowsPath?: string;
+  updatedAt?: { requestKey: string; path: string } | null;
+  fields?: Record<string, string[]>;
+  sort?: { field: string; direction: "asc" | "desc" };
+};
+
+export type ExternalLeaderboardPreview = {
+  passed: boolean;
+  previewedAt: string;
+  configFingerprint: string;
+  responseFingerprint: string;
+  schemaFingerprint: string;
+  issues: Array<{ row: number; field: string; message: string }>;
+  metrics: { total: number; valid: number; twitterIdCoverage: number; avatarCoverage: number; shareCoverage: number };
+  rows: Array<Record<string, unknown>>;
+};
+
+export type ExternalLeaderboardAdapter = {
+  campaignKey: string;
+  leaderboardKey: string;
+  status: string;
+  draftConfig: ExternalLeaderboardAdapterConfig;
+  publishedVersion: number;
+  publishedAt?: string | null;
+  lastSample?: Record<string, unknown>;
+  lastPreview?: ExternalLeaderboardPreview;
+  hasPublishedVersion: boolean;
+};
+
+const externalLeaderboardBase = (nacosCampaignId: string, leaderboardKey: string) =>
+  `/api/xhunt/website/campaigns/internal/${encodeURIComponent(nacosCampaignId)}/external-leaderboards/${encodeURIComponent(leaderboardKey)}`;
+
+export const fetchExternalLeaderboardAdapter = (nacosCampaignId: string, leaderboardKey: string) =>
+  apiRequest<{ success: boolean; data: ExternalLeaderboardAdapter | null }>(externalLeaderboardBase(nacosCampaignId, leaderboardKey));
+
+export const saveExternalLeaderboardDraft = (nacosCampaignId: string, leaderboardKey: string, config: ExternalLeaderboardAdapterConfig) =>
+  apiRequest<{ success: boolean; data: ExternalLeaderboardAdapter }>(`${externalLeaderboardBase(nacosCampaignId, leaderboardKey)}/draft`, { method: "PUT", body: { config } });
+
+export const fetchExternalLeaderboardSample = (nacosCampaignId: string, leaderboardKey: string, config: ExternalLeaderboardAdapterConfig) =>
+  apiRequest<{ success: boolean; data: { adapter: ExternalLeaderboardAdapter; sample: Record<string, unknown> } }>(`${externalLeaderboardBase(nacosCampaignId, leaderboardKey)}/sample`, { method: "POST", body: { config } });
+
+export const generateExternalLeaderboardMapping = (nacosCampaignId: string, leaderboardKey: string, config: ExternalLeaderboardAdapterConfig, instruction: string) =>
+  apiRequest<{ success: boolean; data: { adapter: ExternalLeaderboardAdapter; config: ExternalLeaderboardAdapterConfig; source: "llm" | "heuristic" } }>(`${externalLeaderboardBase(nacosCampaignId, leaderboardKey)}/generate`, { method: "POST", body: { config, instruction } });
+
+export const previewExternalLeaderboardAdapter = (nacosCampaignId: string, leaderboardKey: string, config: ExternalLeaderboardAdapterConfig) =>
+  apiRequest<{ success: boolean; data: { adapter: ExternalLeaderboardAdapter; preview: ExternalLeaderboardPreview } }>(`${externalLeaderboardBase(nacosCampaignId, leaderboardKey)}/preview`, { method: "POST", body: { config } });
+
+export const publishExternalLeaderboardAdapter = (nacosCampaignId: string, leaderboardKey: string, payload: { confirmed: boolean; configFingerprint: string; responseFingerprint: string }) =>
+  apiRequest<{ success: boolean; data: ExternalLeaderboardAdapter }>(`${externalLeaderboardBase(nacosCampaignId, leaderboardKey)}/publish`, { method: "POST", body: payload });
+
 export async function fetchCampaignRegistrationsAdmin(params: {
   campaign: string;
   page?: number;
