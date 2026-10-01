@@ -7,13 +7,16 @@ const { execSync } = require('child_process');
 // 配置文件路径
 const CONFIG_PATHS = {
 	siteConfig: '/etc/nginx/sites-available/kb.cryptohunt.ai',
+	testSiteConfig: '/etc/nginx/sites-available/test-kb.cryptohunt.ai',
 	nginxConfig: '/etc/nginx/nginx.conf',
-	siteEnabled: '/etc/nginx/sites-enabled/kb.cryptohunt.ai'
+	siteEnabled: '/etc/nginx/sites-enabled/kb.cryptohunt.ai',
+	testSiteEnabled: '/etc/nginx/sites-enabled/test-kb.cryptohunt.ai'
 };
 
 // 本地配置文件路径
 const LOCAL_CONFIGS = {
 	siteConfig: path.join(__dirname, '../nginx/kb.cryptohunt.ai.conf'),
+	testSiteConfig: path.join(__dirname, '../nginx/test-kb.cryptohunt.ai.conf'),
 	nginxConfig: path.join(__dirname, '../nginx/nginx.conf')
 };
 
@@ -176,18 +179,21 @@ async function main() {
 		// 1. 创建备份
 		console.log('📦 创建配置文件备份...');
 		backups.siteConfig = createBackup(CONFIG_PATHS.siteConfig);
+		backups.testSiteConfig = createBackup(CONFIG_PATHS.testSiteConfig);
 		backups.nginxConfig = createBackup(CONFIG_PATHS.nginxConfig);
 		console.log('');
 		
 		// 2. 复制新的配置文件
 		console.log('📋 复制新的配置文件...');
 		copyConfigFile(LOCAL_CONFIGS.siteConfig, CONFIG_PATHS.siteConfig);
+		copyConfigFile(LOCAL_CONFIGS.testSiteConfig, CONFIG_PATHS.testSiteConfig);
 		copyConfigFile(LOCAL_CONFIGS.nginxConfig, CONFIG_PATHS.nginxConfig);
 		console.log('');
 		
 		// 3. 创建或更新软链接
 		console.log('🔗 更新站点软链接...');
 		createSymlink(CONFIG_PATHS.siteConfig, CONFIG_PATHS.siteEnabled);
+		createSymlink(CONFIG_PATHS.testSiteConfig, CONFIG_PATHS.testSiteEnabled);
 		console.log('');
 		
 		// 4. 测试配置
@@ -223,6 +229,9 @@ async function main() {
 		
 		if (backups.siteConfig) {
 			restored &= restoreBackup(backups.siteConfig, CONFIG_PATHS.siteConfig);
+		}
+		if (backups.testSiteConfig) {
+			restored &= restoreBackup(backups.testSiteConfig, CONFIG_PATHS.testSiteConfig);
 		}
 		if (backups.nginxConfig) {
 			restored &= restoreBackup(backups.nginxConfig, CONFIG_PATHS.nginxConfig);
