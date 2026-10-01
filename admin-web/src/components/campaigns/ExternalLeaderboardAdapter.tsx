@@ -24,6 +24,9 @@ const FIELD_LABELS: Array<[string, string, string]> = [
   ["avatar", "头像", "例如 $.avatar"],
   ["share", "声量占比（0~1）", "例如 $.mind_share"],
   ["score", "分数（可选）", "例如 $.score"],
+  ["tweets", "推文数（可选）", "例如 $.tweet_count"],
+  ["views", "浏览数（可选）", "例如 $.view_count"],
+  ["likes", "互动数（可选）", "例如 $.like_count"],
 ];
 
 const EMPTY_CONFIG: ExternalLeaderboardAdapterConfig = {

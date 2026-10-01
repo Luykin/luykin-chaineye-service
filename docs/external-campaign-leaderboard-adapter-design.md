@@ -134,6 +134,9 @@ Hunter 名称   $.name → $.username               99.6% 覆盖
 Handle        $.username                        自动补 @
 头像          $.profile_image_url               98.7% 覆盖
 声量占比      $.value.mind_share                ratio (0~1)
+推文数        $.tweet_count                     可选，汇总“总推文”
+浏览数        $.view_count                      可选，汇总“总浏览”
+互动数        $.like_count                      可选，汇总“总互动”
 币安加速      平台 Twitter ID 绑定批量补全      12 人
 ```
 

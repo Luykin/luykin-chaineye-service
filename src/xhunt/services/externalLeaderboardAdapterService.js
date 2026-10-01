@@ -243,6 +243,9 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
       share,
       shareText: share === null ? null : `${(share * 100).toFixed(2).replace(/\.?0+$/, "")}%`,
       score: toNumber(getMappedValue(item, config.fields.score)),
+      tweets: toNumber(getMappedValue(item, config.fields.tweets)),
+      views: toNumber(getMappedValue(item, config.fields.views)),
+      likes: toNumber(getMappedValue(item, config.fields.likes)),
       raw: sanitizeSample(item),
     };
     if (!row.twitterId) issues.push({ row: index + 1, field: "twitterId", message: "缺少 Twitter ID", level: "error" });
@@ -316,6 +319,9 @@ function heuristicMapping(sample, config) {
       avatar: [inferPath(row, ["avatar", "profile_image_url", "image", "profileImageUrl"])].filter(Boolean),
       share: [inferPath(row, ["share", "mindshare", "mind_share", "score"])].filter(Boolean),
       score: [inferPath(row, ["score", "score_adj", "raw_score", "points"])].filter(Boolean),
+      tweets: [inferPath(row, ["tweets", "tweet_count", "tweetCount", "posts"])].filter(Boolean),
+      views: [inferPath(row, ["views", "view_count", "viewCount", "impressions"])].filter(Boolean),
+      likes: [inferPath(row, ["likes", "like_count", "likeCount", "engagement"])].filter(Boolean),
     },
   };
 }
@@ -336,6 +342,9 @@ const AI_MAPPING_SCHEMA = {
         avatar: { type: "array", items: { type: "string" } },
         share: { type: "array", items: { type: "string" } },
         score: { type: "array", items: { type: "string" } },
+        tweets: { type: "array", items: { type: "string" } },
+        views: { type: "array", items: { type: "string" } },
+        likes: { type: "array", items: { type: "string" } },
       },
     },
     sort: { type: "object" },
@@ -407,7 +416,7 @@ async function generateMapping(campaignKey, leaderboardKey, rawConfig, instructi
   if (process.env.LLM_API_KEY) {
     try {
       generated = await structuredChat(
-        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
+        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\ntweets/views/likes 是可选数值字段（推文数、浏览数、互动数），样本行里有对应字段才映射，没有则返回空数组。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
         AI_MAPPING_SCHEMA,
         { systemPrompt: "你是榜单数据结构映射助手。仅返回 JSONPath（以 $ 开头，只用 .key 和 [数字] 写法）数组，不生成代码、URL、headers 或表达式。" }
       );
