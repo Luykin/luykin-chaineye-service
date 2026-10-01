@@ -119,7 +119,7 @@ EchoHunt /campaigns/:key/leaderboard
 
 #### 4.1.2 ① 接口样本
 
-默认只显示一个必填请求 `board`：内部 URL、固定 query 参数、10 秒超时和“必需”标记。点击 `试拉取接口` 后，后台请求并显示：HTTP 状态、耗时、响应字节数、推测的数组路径、数组行数，以及截断后的 JSON 树。需要类似 YZi Labs 的更新时间时，可点击 `+ 补充请求` 添加 `detail`；它只可标为非必需。
+默认只显示一个必填请求 `board`：单个完整内部 URL（query 参数直接写在 URL 中）、10 秒超时和“必需”标记。点击 `试拉取接口` 后，后台请求并显示：HTTP 状态、耗时、响应字节数、推测的数组路径、数组行数，以及截断后的 JSON 树。需要类似 YZi Labs 的更新时间时，可点击 `+ 补充请求` 添加 `detail`；它只可标为非必需。
 
 该阶段不提供 header、Cookie、请求体或分页输入。若活动尚未通过页面现有的“发布”保存、没有稳定 `campaignKey`，整个适配器卡片置为禁用，并提示“请先发布活动基础信息”。
 
@@ -281,7 +281,7 @@ type CanonicalLeaderboard = {
 
 ### 7.1 出站请求安全
 
-- 仅超级管理员可填写 URL，但 URL 必须命中服务端的内部域名 allowlist；默认包含 `DATA_SERVICE_BASE_URL` 的 host，其他内部 host 通过 `EXTERNAL_LEADERBOARD_ALLOWED_HOSTS`（逗号分隔）显式配置。禁止相对 URL 和任意公网 URL。
+- 仅超级管理员可填写 URL，但 URL 必须命中服务端的内部域名 allowlist；默认包含 `DATA_SERVICE_BASE_URL` 的 host 与公网 `PUBLIC_DATA_SERVICE_BASE_URL`（默认 `https://data.cryptohunt.ai`）的 host，其他内部 host 通过 `EXTERNAL_LEADERBOARD_ALLOWED_HOSTS`（逗号分隔）显式配置。填写公网数据服务域名时服务端自动改写为内网 `DATA_SERVICE_BASE_URL`，避免生产环境从内网回源公网域名失败。禁止相对 URL 和任意公网 URL。
 - 内部域名可能正常解析到私网 IP，因此以显式 host allowlist 为信任边界；禁止 URL 内嵌用户名/密码，并拒绝所有重定向。
 - 第一阶段仅支持无认证 GET、固定 query 参数和 JSON 响应；禁止自定义 header、Cookie、请求体和重定向认证。
 - 设置连接/响应超时、最大响应字节数、最大解压大小、最大 JSON 深度和最大数组行数；按 source 做并发及速率限制。

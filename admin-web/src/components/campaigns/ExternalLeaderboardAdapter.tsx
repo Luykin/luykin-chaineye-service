@@ -49,12 +49,12 @@ function percent(value?: number) {
   return Number.isFinite(value) ? `${((value || 0) * 100).toFixed(1)}%` : "-";
 }
 
-function queryText(query?: Record<string, string>) {
-  return new URLSearchParams(query || {}).toString();
-}
-
-function parseQueryText(value: string) {
-  return Object.fromEntries(new URLSearchParams(value).entries());
+function fullRequestUrl(request: { url?: string; query?: Record<string, string> }) {
+  const base = String(request.url || "");
+  const queryText = new URLSearchParams(request.query || {}).toString();
+  if (!queryText) return base;
+  if (base.includes(`?${queryText}`) || base.includes(`&${queryText}`)) return base;
+  return `${base}${base.includes("?") ? "&" : "?"}${queryText}`;
 }
 
 export function ExternalLeaderboardAdapterCard({
@@ -211,11 +211,10 @@ export function ExternalLeaderboardAdapterCard({
             children: <Space direction="vertical" size={12} style={{ width: "100%" }}>
               {config.requests.map((request, index) => (
                 <Row gutter={[12, 8]} key={`${request.key}-${index}`} align="bottom">
-                  <Col xs={24} md={5}><label>请求 key</label><Input disabled={index === 0} value={request.key} onChange={(event) => updateConfig((next) => { next.requests[index].key = event.target.value; })} /></Col>
-                  <Col xs={24} md={13}><label>内部接口 URL</label><Input value={request.url} placeholder="https://data.cryptohunt.ai/info/board/top" onChange={(event) => updateConfig((next) => { next.requests[index].url = event.target.value; })} /></Col>
+                  <Col xs={24} md={5}><label>请求 key <Tooltip title="该请求在接口样本中的命名，固定为 board；AI 转换规则引用它取榜单数据。"><span style={{ color: "#94a3b8", cursor: "help" }}>?</span></Tooltip></label><Input disabled={index === 0} value={request.key} onChange={(event) => updateConfig((next) => { next.requests[index].key = event.target.value; })} /></Col>
+                  <Col xs={24} md={13}><label>内部接口 URL</label><Input value={fullRequestUrl(request)} placeholder="https://data.cryptohunt.ai/info/board/top?project=yzilabs&fetch_type=mind_share" onChange={(event) => updateConfig((next) => { next.requests[index].url = event.target.value; next.requests[index].query = {}; })} /></Col>
                   <Col xs={12} md={3}><Checkbox checked={request.required !== false} onChange={(event) => updateConfig((next) => { next.requests[index].required = event.target.checked; })}>必需</Checkbox></Col>
                   <Col xs={12} md={3}>{index > 0 ? <Button danger onClick={() => updateConfig((next) => { next.requests.splice(index, 1); })}>删除</Button> : null}</Col>
-                  <Col xs={24}><label>固定 query 参数</label><Input value={queryText(request.query)} placeholder="project=yzilabs&fetch_type=mind_share" onChange={(event) => updateConfig((next) => { next.requests[index].query = parseQueryText(event.target.value); })} /></Col>
                 </Row>
               ))}
               <Space wrap>

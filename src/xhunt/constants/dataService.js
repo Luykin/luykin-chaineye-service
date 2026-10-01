@@ -8,6 +8,12 @@ const DATA_SERVICE_BASE_URL =
     ? "http://data.internal.biteye.info"
     : "https://data.cryptohunt.ai");
 
+// 数据服务对外公网域名。服务端请求时需改写为内网 DATA_SERVICE_BASE_URL，
+// 避免生产环境从内部网络回源公网域名失败（502）。
+const PUBLIC_DATA_SERVICE_BASE_URL =
+  process.env.PUBLIC_DATA_SERVICE_BASE_URL || "https://data.cryptohunt.ai";
+
 module.exports = {
   DATA_SERVICE_BASE_URL,
+  PUBLIC_DATA_SERVICE_BASE_URL,
 };

@@ -2,7 +2,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const { Op } = require("sequelize");
 const { structuredChat } = require("../../lib/llm");
-const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+const { DATA_SERVICE_BASE_URL, PUBLIC_DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const { getCustomLeaderboardAdapterKey } = require("../utils/custom-leaderboard-key");
 const {
   XhuntExternalLeaderboardAdapter,
@@ -44,12 +44,26 @@ function getAllowedHosts() {
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
-  try {
-    const dataUrl = new URL(DATA_SERVICE_BASE_URL);
-    if (dataUrl.host) configured.push(dataUrl.host.toLowerCase());
-    if (dataUrl.hostname) configured.push(dataUrl.hostname.toLowerCase());
-  } catch (_) {}
+  [DATA_SERVICE_BASE_URL, PUBLIC_DATA_SERVICE_BASE_URL].forEach((baseUrl) => {
+    try {
+      const dataUrl = new URL(baseUrl);
+      if (dataUrl.host) configured.push(dataUrl.host.toLowerCase());
+      if (dataUrl.hostname) configured.push(dataUrl.hostname.toLowerCase());
+    } catch (_) {}
+  });
   return new Set(configured);
+}
+
+// 用户填写公网域名时改写为内网 base URL，生产环境从内部网络直连公网域名会失败。
+function rewritePublicDataServiceHost(url) {
+  try {
+    const publicUrl = new URL(PUBLIC_DATA_SERVICE_BASE_URL);
+    if (url.host.toLowerCase() !== publicUrl.host.toLowerCase()) return url;
+    const internalUrl = new URL(DATA_SERVICE_BASE_URL);
+    url.protocol = internalUrl.protocol;
+    url.host = internalUrl.host;
+  } catch (_) {}
+  return url;
 }
 
 function resolveRequestUrl(rawUrl, campaignKey, query = {}) {
@@ -73,11 +87,13 @@ function resolveRequestUrl(rawUrl, campaignKey, query = {}) {
     if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(key)) throw error(`query 参数名不合法：${key}`);
     if (value !== undefined && value !== null) url.searchParams.set(key, String(value).replace(/\{campaign\}/g, campaignKey));
   });
+  rewritePublicDataServiceHost(url);
   return url.toString();
 }
 
 function getPath(value, path) {
-  const expression = String(path || "").trim();
+  // 容忍 AI 生成的 [*] 数组通配后缀，本实现只支持 .key 和 [index]。
+  const expression = String(path || "").trim().replace(/\[\*\]$/, "");
   if (!expression || expression === "$") return value;
   if (!expression.startsWith("$")) return undefined;
   const tokens = expression.slice(1).match(/(?:\.([A-Za-z_$][\w$]*))|(?:\[(\d+)\])/g) || [];
@@ -98,6 +114,14 @@ function getMappedValue(row, value) {
     if (found !== undefined && found !== null && found !== "") return found;
   }
   return null;
+}
+
+// 路径可能写成相对单个请求响应体（$.data.data.data），也可能被 AI 写成
+// 相对整个样本根（$.board.data.data.data，含 status/url/data 包装），两种写法都尝试命中。
+function resolveResponsePath(responses, requestKey, path) {
+  const direct = getPath(responses[requestKey]?.data, path);
+  if (direct !== undefined) return direct;
+  return getPath(responses, path);
 }
 
 function sanitizeSample(value, depth = 0) {
@@ -191,8 +215,7 @@ async function enrichBinanceAccelerated(rows) {
 }
 
 async function transformResponses(campaignKey, config, execution, { strict = true } = {}) {
-  const board = execution.responses.board?.data;
-  const rows = getPath(board, config.rowsPath);
+  const rows = resolveResponsePath(execution.responses, "board", config.rowsPath);
   if (!Array.isArray(rows)) throw error("rowsPath 未命中数组，无法转换榜单");
   if (rows.length > MAX_LEADERBOARD_ROWS) throw error(`榜单行数超过上限 ${MAX_LEADERBOARD_ROWS}，拒绝截断不完整数据`);
   const issues = [];
@@ -225,7 +248,7 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
     return ((Number(left[config.sort.field]) || 0) - (Number(right[config.sort.field]) || 0)) * direction;
   }).map((row, index) => ({ ...row, rank: index + 1 }));
   const enriched = await enrichBinanceAccelerated(sorted);
-  const updatedRaw = config.updatedAt?.path ? getPath(execution.responses[config.updatedAt.requestKey]?.data, config.updatedAt.path) : null;
+  const updatedRaw = config.updatedAt?.path ? resolveResponsePath(execution.responses, config.updatedAt.requestKey, config.updatedAt.path) : null;
   const parsedUpdatedAt = updatedRaw ? new Date(updatedRaw) : null;
   const updatedAt = parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt.toISOString() : null;
   const blockingIssues = issues.filter((item) => item.level === "error");
@@ -374,9 +397,9 @@ async function generateMapping(campaignKey, leaderboardKey, rawConfig, instructi
   if (process.env.LLM_API_KEY) {
     try {
       generated = await structuredChat(
-        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
+        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
         AI_MAPPING_SCHEMA,
-        { systemPrompt: "你是榜单数据结构映射助手。仅返回 JSONPath（以 $ 开头）数组，不生成代码、URL、headers 或表达式。" }
+        { systemPrompt: "你是榜单数据结构映射助手。仅返回 JSONPath（以 $ 开头，只用 .key 和 [数字] 写法）数组，不生成代码、URL、headers 或表达式。" }
       );
       source = "llm";
     } catch (cause) {
