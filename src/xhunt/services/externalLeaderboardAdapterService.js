@@ -23,8 +23,18 @@ function error(message, status = 400, code = "EXTERNAL_LEADERBOARD_ADAPTER_INVAL
   return value;
 }
 
+// JSONB 不保留 key 顺序，指纹必须对规范化序列化结果计算，否则预览与发布两次 hash 必然不一致。
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key] === undefined ? null : value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
 function hash(value) {
-  return crypto.createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value || {})).digest("hex");
+  const canonical = typeof value === "string" ? value : stableStringify(value || {});
+  return crypto.createHash("sha256").update(canonical).digest("hex");
 }
 
 function cleanCampaignKey(value) {
