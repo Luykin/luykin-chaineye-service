@@ -137,8 +137,14 @@ Handle        $.username                        自动补 @
 推文数        $.tweet_count                     可选，汇总“总推文”
 浏览数        $.view_count                      可选，汇总“总浏览”
 互动数        $.like_count                      可选，汇总“总互动”
+汇总数据      $.data.summary / 自动识别         参与人数、总推文、总浏览、总互动
 币安加速      平台 Twitter ID 绑定批量补全      12 人
 ```
+
+若上游接口当前返回空榜单（`data: []`，无行数据但包含 `summary`），系统支持空榜单正常对接：
+- 自动填充未知字段的平台标准默认路径（如 `rank: $.rank`、`twitterId: $.twitter_id`、`username: $.username` 等）；
+- 自动解析或配置 `summary` 路径，提取 `participants`、`tweets`、`views`、`engagement` 及 `updatedAt`；
+- 允许空榜单通过转换预览并发布上线，向前端透传汇总统计指标，排行榜表格显示为空列表与默认列。
 
 超级管理员可点每一项修改允许的路径、类型、默认值、排序或过滤条件；“高级 JSON”仅作为只读/受 Schema 校验的审查抽屉，不提供可执行代码编辑器。修改后规则立即回到“需要预览”状态。
 

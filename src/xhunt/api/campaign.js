@@ -287,6 +287,7 @@ router.get("/custom-leaderboard", securityMiddleware, authenticateTokenOptional,
       campaign: normalizedCampaign,
       updatedAt: data.updatedAt,
       leaderboardDataUpdatedAt: data.leaderboardDataUpdatedAt || null,
+      summary: data.summary || null,
       leaderboards: data.leaderboards || {},
     });
   } catch (err) {

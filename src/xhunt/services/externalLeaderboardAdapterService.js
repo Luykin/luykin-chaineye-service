@@ -16,6 +16,20 @@ const MAX_SAMPLE_ROWS = 50;
 const MAX_LEADERBOARD_ROWS = 10000;
 const runtimeCache = new Map();
 
+const DEFAULT_FIELD_MAPPINGS = {
+  rank: ["$.rank"],
+  twitterId: ["$.twitter_id", "$.twitterId", "$.user_id"],
+  username: ["$.username"],
+  handle: ["$.username", "$.handle"],
+  name: ["$.name", "$.displayName"],
+  avatar: ["$.avatar", "$.profile_image_url"],
+  share: ["$.mind_share", "$.share"],
+  score: ["$.score"],
+  tweets: ["$.tweet_count", "$.tweets"],
+  views: ["$.view_count", "$.views"],
+  likes: ["$.like_count", "$.likes"],
+};
+
 function error(message, status = 400, code = "EXTERNAL_LEADERBOARD_ADAPTER_INVALID") {
   const value = new Error(message);
   value.status = status;
@@ -161,12 +175,17 @@ function normalizeConfig(config = {}) {
     if (!item.url) throw error(`${item.key} 请求缺少 URL`);
   });
   const fields = config.fields && typeof config.fields === "object" ? config.fields : {};
+  const summary = config.summary && typeof config.summary === "object"
+    ? { requestKey: String(config.summary.requestKey || "board"), path: String(config.summary.path || "") }
+    : (typeof config.summary === "string" && config.summary.trim() ? { requestKey: "board", path: config.summary.trim() } : null);
+  const updatedAt = config.updatedAt && typeof config.updatedAt === "object"
+    ? { requestKey: String(config.updatedAt.requestKey || "board"), path: String(config.updatedAt.path || "") }
+    : (typeof config.updatedAt === "string" && config.updatedAt.trim() ? { requestKey: "board", path: config.updatedAt.trim() } : null);
   return {
     requests: normalizedRequests,
     rowsPath: String(config.rowsPath || "").trim(),
-    updatedAt: config.updatedAt && typeof config.updatedAt === "object"
-      ? { requestKey: String(config.updatedAt.requestKey || "board"), path: String(config.updatedAt.path || "") }
-      : null,
+    updatedAt: updatedAt?.path ? updatedAt : null,
+    summary: summary?.path ? summary : null,
     fields: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, Array.isArray(value) ? value.map(String) : [String(value || "")].filter(Boolean)])),
     sort: config.sort?.field ? { field: String(config.sort.field), direction: config.sort.direction === "asc" ? "asc" : "desc" } : { field: "share", direction: "desc" },
   };
@@ -206,6 +225,103 @@ function toNumber(value) {
 
 function toBoolean(value) {
   return value === true || value === 1 || ["true", "1", "yes"].includes(String(value || "").trim().toLowerCase());
+}
+
+function extractSummaryFromResponses(responses, config = {}) {
+  let explicit = null;
+  if (config.summary?.path) {
+    explicit = resolveResponsePath(responses, config.summary.requestKey || "board", config.summary.path);
+  }
+
+  const boardData = responses.board?.data;
+  const candidates = [
+    explicit,
+    boardData?.data?.summary,
+    boardData?.summary,
+    boardData?.data?.stats,
+    boardData?.stats,
+    boardData?.data?.data?.summary,
+    boardData?.data?.data?.stats,
+  ];
+
+  Object.values(responses || {}).forEach((item) => {
+    if (item?.data && typeof item.data === "object") {
+      candidates.push(item.data?.summary, item.data?.stats, item.data?.data?.summary, item.data?.data?.stats);
+    }
+  });
+
+  for (const item of candidates) {
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const participants = toNumber(
+        item.participants ??
+        item.hunters ??
+        item.totalHunters ??
+        item.total_hunters ??
+        item.participantCount ??
+        item.participant_count ??
+        item.totalUsers ??
+        item.total_users ??
+        item.userCount ??
+        item.user_count
+      );
+      const tweets = toNumber(
+        item.tweets ??
+        item.totalTweets ??
+        item.total_tweets ??
+        item.tweetCount ??
+        item.tweet_count ??
+        item.posts ??
+        item.totalPosts ??
+        item.total_posts
+      );
+      const views = toNumber(
+        item.views ??
+        item.totalViews ??
+        item.total_views ??
+        item.viewCount ??
+        item.view_count ??
+        item.impressions ??
+        item.totalImpressions ??
+        item.total_impressions
+      );
+      const engagement = toNumber(
+        item.engagement ??
+        item.totalEngagement ??
+        item.total_engagement ??
+        item.interactions ??
+        item.totalInteractions ??
+        item.total_interactions ??
+        item.likes ??
+        item.totalLikes ??
+        item.total_likes ??
+        item.likeCount ??
+        item.like_count
+      );
+      const bridges = toNumber(
+        item.bridges ??
+        item.totalBridges ??
+        item.total_bridges ??
+        item.bridgeCount ??
+        item.bridge_count
+      );
+      const rawUpdatedAt = item.updatedAt || item.updated_at || item.update_time || item.create_time || item.lastUpdatedAt || null;
+      const parsedUpdate = rawUpdatedAt ? new Date(rawUpdatedAt) : null;
+      const updatedAt = parsedUpdate && !Number.isNaN(parsedUpdate.getTime()) ? parsedUpdate.toISOString() : (rawUpdatedAt ? String(rawUpdatedAt) : null);
+
+      if (participants !== null || tweets !== null || views !== null || engagement !== null || bridges !== null || updatedAt) {
+        return {
+          participants: participants ?? 0,
+          tweets: tweets ?? 0,
+          views: views ?? 0,
+          engagement: engagement ?? 0,
+          bridges: bridges ?? null,
+          updatedAt,
+          raw: item,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 async function enrichBinanceAccelerated(rows) {
@@ -255,7 +371,6 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
     if (share === null || share < 0 || share > 1) issues.push({ row: index + 1, field: "share", message: "share 必须是 0~1", level: "error" });
     return row;
   });
-  if (!converted.length) throw error("榜单行为空");
   const sorted = converted.sort((left, right) => {
     const direction = config.sort.direction === "asc" ? 1 : -1;
     return ((Number(left[config.sort.field]) || 0) - (Number(right[config.sort.field]) || 0)) * direction;
@@ -263,7 +378,25 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
   const enriched = await enrichBinanceAccelerated(sorted);
   const updatedRaw = config.updatedAt?.path ? resolveResponsePath(execution.responses, config.updatedAt.requestKey, config.updatedAt.path) : null;
   const parsedUpdatedAt = updatedRaw ? new Date(updatedRaw) : null;
-  const updatedAt = parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt.toISOString() : null;
+  let updatedAt = parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt.toISOString() : null;
+  const extractedSummary = extractSummaryFromResponses(execution.responses, config);
+  if (!updatedAt && extractedSummary?.updatedAt) {
+    updatedAt = extractedSummary.updatedAt;
+  }
+  const sumMetric = (fieldNames) => {
+    const values = rows
+      .map((row) => fieldNames.map((field) => Number(row?.[field])).find((v) => Number.isFinite(v)))
+      .filter((v) => Number.isFinite(v));
+    return values.length ? values.reduce((sum, v) => sum + v, 0) : 0;
+  };
+  const summary = extractedSummary || {
+    participants: rows.length,
+    tweets: sumMetric(["tweets", "tweet_count"]),
+    views: sumMetric(["views", "view_count"]),
+    engagement: sumMetric(["likes", "like_count", "engagement"]),
+    bridges: null,
+    updatedAt: updatedAt || null,
+  };
   const blockingIssues = issues.filter((item) => item.level === "error");
   if (strict && blockingIssues.length) throw error(`转换校验失败：${blockingIssues.slice(0, 3).map((item) => item.message).join("、")}`, 422, "EXTERNAL_LEADERBOARD_PREVIEW_INVALID");
   return {
@@ -271,6 +404,7 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
     updatedAt: updatedAt || new Date().toISOString(),
     leaderboardDataUpdatedAt: updatedAt,
     rows: enriched,
+    summary,
     issues,
     metrics: {
       total: rows.length,
@@ -305,24 +439,55 @@ function inferRowsPath(root, base = "$") {
 }
 
 function heuristicMapping(sample, config) {
-  const rowsPath = config.rowsPath || inferRowsPath(sample.responses?.board?.data);
-  const row = Array.isArray(getPath(sample.responses?.board?.data, rowsPath)) ? getPath(sample.responses.board.data, rowsPath)[0] : {};
+  const rowsPath = config.rowsPath || inferRowsPath(sample.responses?.board?.data) || "$.data.data";
+  const rows = getPath(sample.responses?.board?.data, rowsPath);
+  const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  const isRowEmpty = !row || typeof row !== "object" || Object.keys(row).length === 0;
+  const inferredFields = isRowEmpty ? {} : {
+    rank: [inferPath(row, ["rank", "position"])].filter(Boolean),
+    twitterId: [inferPath(row, ["twitterId", "twitter_id", "t_twitter_id", "user_id"])].filter(Boolean),
+    username: [inferPath(row, ["username", "screen_name", "handle", "handler"])].filter(Boolean),
+    handle: [inferPath(row, ["handle", "handler", "username", "screen_name"])].filter(Boolean),
+    name: [inferPath(row, ["name", "displayName", "nickname", "username"])].filter(Boolean),
+    avatar: [inferPath(row, ["avatar", "profile_image_url", "image", "profileImageUrl"])].filter(Boolean),
+    share: [inferPath(row, ["share", "mindshare", "mind_share", "score"])].filter(Boolean),
+    score: [inferPath(row, ["score", "score_adj", "raw_score", "points"])].filter(Boolean),
+    tweets: [inferPath(row, ["tweets", "tweet_count", "tweetCount", "posts"])].filter(Boolean),
+    views: [inferPath(row, ["views", "view_count", "viewCount", "impressions"])].filter(Boolean),
+    likes: [inferPath(row, ["likes", "like_count", "likeCount", "engagement"])].filter(Boolean),
+  };
+  const fields = {};
+  Object.keys(DEFAULT_FIELD_MAPPINGS).forEach((key) => {
+    const existing = config.fields?.[key];
+    const inferred = inferredFields[key];
+    if (Array.isArray(existing) && existing.length) {
+      fields[key] = existing;
+    } else if (Array.isArray(inferred) && inferred.length) {
+      fields[key] = inferred;
+    } else if (isRowEmpty || ["rank", "twitterId", "username", "handle", "name", "avatar", "share"].includes(key)) {
+      fields[key] = DEFAULT_FIELD_MAPPINGS[key];
+    } else {
+      fields[key] = [];
+    }
+  });
+  const inferredUpdatedAt = !config.updatedAt?.path
+    ? inferPath(sample.responses?.board?.data, ["updatedAt", "updated_at", "update_time", "create_time", "lastUpdatedAt"])
+    : "";
+  const updatedAt = inferredUpdatedAt
+    ? { requestKey: "board", path: inferredUpdatedAt }
+    : (config.updatedAt || null);
+  const inferredSummaryPath = !config.summary?.path
+    ? inferPath(sample.responses?.board?.data, ["summary", "stats"])
+    : "";
+  const summary = inferredSummaryPath
+    ? { requestKey: "board", path: inferredSummaryPath }
+    : (config.summary || null);
   return {
     ...config,
     rowsPath,
-    fields: {
-      rank: [inferPath(row, ["rank", "position"])].filter(Boolean),
-      twitterId: [inferPath(row, ["twitterId", "twitter_id", "t_twitter_id", "user_id"])].filter(Boolean),
-      username: [inferPath(row, ["username", "screen_name", "handle", "handler"])].filter(Boolean),
-      handle: [inferPath(row, ["handle", "handler", "username", "screen_name"])].filter(Boolean),
-      name: [inferPath(row, ["name", "displayName", "nickname", "username"])].filter(Boolean),
-      avatar: [inferPath(row, ["avatar", "profile_image_url", "image", "profileImageUrl"])].filter(Boolean),
-      share: [inferPath(row, ["share", "mindshare", "mind_share", "score"])].filter(Boolean),
-      score: [inferPath(row, ["score", "score_adj", "raw_score", "points"])].filter(Boolean),
-      tweets: [inferPath(row, ["tweets", "tweet_count", "tweetCount", "posts"])].filter(Boolean),
-      views: [inferPath(row, ["views", "view_count", "viewCount", "impressions"])].filter(Boolean),
-      likes: [inferPath(row, ["likes", "like_count", "likeCount", "engagement"])].filter(Boolean),
-    },
+    updatedAt,
+    summary,
+    fields,
   };
 }
 
@@ -331,6 +496,20 @@ const AI_MAPPING_SCHEMA = {
   required: ["rowsPath", "fields"],
   properties: {
     rowsPath: { type: "string" },
+    updatedAt: {
+      type: "object",
+      properties: {
+        requestKey: { type: "string" },
+        path: { type: "string" },
+      },
+    },
+    summary: {
+      type: "object",
+      properties: {
+        requestKey: { type: "string" },
+        path: { type: "string" },
+      },
+    },
     fields: {
       type: "object",
       properties: {
@@ -416,7 +595,7 @@ async function generateMapping(campaignKey, leaderboardKey, rawConfig, instructi
   if (process.env.LLM_API_KEY) {
     try {
       generated = await structuredChat(
-        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\ntweets/views/likes 是可选数值字段（推文数、浏览数、互动数），样本行里有对应字段才映射，没有则返回空数组。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
+        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\ntweets/views/likes 是可选数值字段（推文数、浏览数、互动数），样本行里有对应字段才映射，没有则返回空数组。\n若样本中榜单数组为空，请将 rowsPath 指向该空数组路径，并支持识别 updatedAt 或 summary 路径。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
         AI_MAPPING_SCHEMA,
         { systemPrompt: "你是榜单数据结构映射助手。仅返回 JSONPath（以 $ 开头，只用 .key 和 [数字] 写法）数组，不生成代码、URL、headers 或表达式。" }
       );
@@ -425,7 +604,31 @@ async function generateMapping(campaignKey, leaderboardKey, rawConfig, instructi
       console.warn("[ExternalLeaderboardAdapter] LLM mapping fallback:", cause.message || cause);
     }
   }
-  const nextConfig = normalizeConfig({ ...config, ...(generated || heuristicMapping(sample, config)), requests: config.requests });
+  let generatedConfig = generated;
+  if (!generatedConfig?.rowsPath || !generatedConfig?.fields) {
+    generatedConfig = heuristicMapping(sample, config);
+  } else {
+    const rows = getPath(sample.responses?.board?.data, generatedConfig.rowsPath || config.rowsPath);
+    const isRowEmpty = !Array.isArray(rows) || rows.length === 0;
+    const fields = { ...(generatedConfig.fields || {}) };
+    Object.keys(DEFAULT_FIELD_MAPPINGS).forEach((key) => {
+      if (!Array.isArray(fields[key]) || !fields[key].length) {
+        if (isRowEmpty || ["rank", "twitterId", "username", "handle", "name", "avatar", "share"].includes(key)) {
+          fields[key] = DEFAULT_FIELD_MAPPINGS[key];
+        }
+      }
+    });
+    generatedConfig.fields = fields;
+    if (!generatedConfig.updatedAt && !config.updatedAt?.path) {
+      const inferredUpdatedAt = inferPath(sample.responses?.board?.data, ["updatedAt", "updated_at", "update_time", "create_time", "lastUpdatedAt"]);
+      if (inferredUpdatedAt) generatedConfig.updatedAt = { requestKey: "board", path: inferredUpdatedAt };
+    }
+    if (!generatedConfig.summary && !config.summary?.path) {
+      const inferredSummaryPath = inferPath(sample.responses?.board?.data, ["summary", "stats"]);
+      if (inferredSummaryPath) generatedConfig.summary = { requestKey: "board", path: inferredSummaryPath };
+    }
+  }
+  const nextConfig = normalizeConfig({ ...config, ...generatedConfig, requests: config.requests });
   await adapter.update({ draftConfig: nextConfig, lastPreview: {}, status: adapter.publishedConfig ? "published" : "draft" });
   return { adapter: serializeAdapter(adapter), source, config: nextConfig };
 }
@@ -444,6 +647,7 @@ async function previewAdapter(campaignKey, leaderboardKey, rawConfig) {
     issues: blockingIssues.slice(0, 100),
     metrics: result.metrics,
     rows: result.rows.slice(0, MAX_SAMPLE_ROWS),
+    summary: result.summary || null,
     updatedAt: result.updatedAt,
     leaderboardDataUpdatedAt: result.leaderboardDataUpdatedAt,
   };
@@ -545,11 +749,24 @@ async function getPublishedLeaderboard(campaignKey, customLeaderboards = []) {
   }
   const updatedAt = successful.map(({ transformed }) => transformed.updatedAt).filter(Boolean).sort().slice(-1)[0] || cached?.data?.updatedAt || new Date().toISOString();
   const leaderboardDataUpdatedAt = successful.map(({ transformed }) => transformed.leaderboardDataUpdatedAt).filter(Boolean).sort().slice(-1)[0] || cached?.data?.leaderboardDataUpdatedAt || null;
+  const summary = successful.map(({ transformed }) => transformed.summary).filter(Boolean).reduce((acc, cur) => {
+    if (!acc) return cur;
+    return {
+      participants: Math.max(acc.participants || 0, cur.participants || 0),
+      tweets: Math.max(acc.tweets || 0, cur.tweets || 0),
+      views: Math.max(acc.views || 0, cur.views || 0),
+      engagement: Math.max(acc.engagement || 0, cur.engagement || 0),
+      bridges: acc.bridges ?? cur.bridges ?? null,
+      updatedAt: cur.updatedAt || acc.updatedAt || null,
+    };
+  }, null) || cached?.data?.summary || null;
   const data = {
     campaign: key,
     updatedAt,
     leaderboardDataUpdatedAt,
     leaderboards,
+    summary,
+    raw: { summary },
     source: "external-adapter",
     mappingVersion: Math.max(...Object.values(mappingVersions).map((version) => Number(version || 0))),
     mappingVersions,

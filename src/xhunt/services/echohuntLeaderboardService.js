@@ -207,7 +207,7 @@ function buildColumnsFromRows(rows) {
     { key: "hunter", label: "Hunter", type: "user" },
   ];
   if (has(["score"])) columns.push({ key: "score", label: "Score", type: "text" });
-  if (has(["share"])) columns.push({ key: "share", label: "Share", type: "percent" });
+  if (has(["share"]) || !rows.length) columns.push({ key: "share", label: "Share", type: "percent" });
   if (has(["tweets"])) columns.push({ key: "tweets", label: "Tweets", type: "number" });
   if (has(["views"])) columns.push({ key: "views", label: "Views", type: "number" });
   if (has(["likes"])) columns.push({ key: "likes", label: "Likes", type: "number" });
@@ -255,16 +255,19 @@ function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
 
   const leaderboardDataUpdatedAt = rawResponse?.leaderboardDataUpdatedAt || rawResponse?.data?.leaderboardDataUpdatedAt || null;
   const updatedAt = rawResponse?.updatedAt || leaderboardDataUpdatedAt || rawResponse?.data?.updatedAt || new Date().toISOString();
+  const extractedSummary = rawResponse?.summary || rawResponse?.data?.summary || rawResponse?.raw?.summary || null;
+  const summary = {
+    ...baseBundle.summary,
+    ...(extractedSummary && typeof extractedSummary === "object" ? extractedSummary : {}),
+    updatedAt: extractedSummary?.updatedAt || updatedAt,
+  };
 
   return {
     ...baseBundle,
     generatedAt: updatedAt,
     updatedAt,
     leaderboardDataUpdatedAt,
-    summary: {
-      ...baseBundle.summary,
-      updatedAt,
-    },
+    summary,
     tracks,
     leaderboards: { all: leaderboards },
   };

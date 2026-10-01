@@ -98,6 +98,7 @@ function normalizeLeaderboardPayload(raw = {}, campaignKey) {
   return {
     campaign: raw?.campaign || raw?.data?.campaign || campaignKey || null,
     updatedAt: raw?.updatedAt || raw?.data?.updatedAt || raw?.data?.data?.updatedAt || new Date().toISOString(),
+    summary: raw?.summary || raw?.data?.summary || raw?.data?.data?.summary || null,
     leaderboards: normalizeRawLeaderboards(raw),
     raw,
   };
@@ -107,6 +108,7 @@ function emptyLeaderboardPayload(campaignKey) {
   return {
     campaign: campaignKey || null,
     updatedAt: new Date().toISOString(),
+    summary: null,
     leaderboards: {},
   };
 }

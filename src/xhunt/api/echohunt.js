@@ -723,12 +723,19 @@ function extractRawLeaderboardSummary(rawResponse) {
       rawResponse?.updatedAt ||
       rawResponse?.data?.leaderboardDataUpdatedAt ||
       rawResponse?.data?.updatedAt ||
+      rawResponse?.data?.summary?.updatedAt ||
+      rawResponse?.data?.summary?.updated_at ||
+      rawResponse?.summary?.updatedAt ||
+      rawResponse?.summary?.updated_at ||
       rawResponse?.data?.data?.leaderboardDataUpdatedAt ||
       rawResponse?.data?.data?.updatedAt ||
+      rawResponse?.data?.data?.summary?.updatedAt ||
       raw?.leaderboardDataUpdatedAt ||
       raw?.updatedAt ||
       raw?.data?.leaderboardDataUpdatedAt ||
       raw?.data?.updatedAt ||
+      raw?.data?.summary?.updatedAt ||
+      raw?.summary?.updatedAt ||
       raw?.data?.data?.leaderboardDataUpdatedAt ||
       raw?.data?.data?.updatedAt ||
       null,
@@ -756,16 +763,21 @@ function summarizeLeaderboardBundle(bundle, rawResponse = null) {
       .filter((value) => Number.isFinite(value));
     return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
   };
-  const pickPositiveNumber = (value, fallback) => {
+  const pickMetricNumber = (value, fallback) => {
     const num = parseMetricNumber(value);
-    return Number.isFinite(num) && num > 0 ? value : fallback;
+    if (Number.isFinite(num) && num > 0) return num;
+    const fallbackNum = parseMetricNumber(fallback);
+    if (Number.isFinite(fallbackNum) && fallbackNum > 0) return fallbackNum;
+    if (Number.isFinite(num)) return num;
+    if (Number.isFinite(fallbackNum)) return fallbackNum;
+    return 0;
   };
 
   return {
-    participants: pickPositiveNumber(rawSummary.participants ?? base.participants, userKeys.size || countFromTracks || rows.length || 0),
-    tweets: pickPositiveNumber(rawSummary.tweets ?? base.tweets, sumRows(["tweets", "tweet_count"])),
-    views: pickPositiveNumber(rawSummary.views ?? base.views, sumRows(["views", "view_count"])),
-    engagement: pickPositiveNumber(rawSummary.engagement ?? base.engagement, sumRows(["engagement", "likes", "like_count"])),
+    participants: pickMetricNumber(rawSummary.participants ?? base.participants, userKeys.size || countFromTracks || rows.length || 0),
+    tweets: pickMetricNumber(rawSummary.tweets ?? base.tweets, sumRows(["tweets", "tweet_count"])),
+    views: pickMetricNumber(rawSummary.views ?? base.views, sumRows(["views", "view_count"])),
+    engagement: pickMetricNumber(rawSummary.engagement ?? base.engagement, sumRows(["engagement", "likes", "like_count"])),
     bridges: rawSummary.bridges ?? base.bridges ?? null,
     updatedAt: rawSummary.updatedAt || base.updatedAt || bundle?.leaderboardDataUpdatedAt || bundle?.updatedAt || bundle?.generatedAt || null,
   };

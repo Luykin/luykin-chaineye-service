@@ -32,6 +32,8 @@ const FIELD_LABELS: Array<[string, string, string]> = [
 const EMPTY_CONFIG: ExternalLeaderboardAdapterConfig = {
   requests: [{ key: "board", url: "", query: {}, required: true }],
   rowsPath: "",
+  updatedAt: null,
+  summary: null,
   fields: {},
   sort: { field: "share", direction: "desc" },
 };
@@ -240,6 +242,8 @@ export function ExternalLeaderboardAdapterCard({
                 <Col xs={24} md={12}><label>榜单数组路径 rowsPath</label><Input value={config.rowsPath || ""} placeholder="$.data.data.data" onChange={(event) => updateConfig((next) => { next.rowsPath = event.target.value; })} /></Col>
                 <Col xs={24} md={8}><label>上游更新时间请求（可选）</label><Select allowClear value={config.updatedAt?.requestKey || undefined} placeholder="默认 board" options={config.requests.map((request) => ({ value: request.key, label: request.key }))} onChange={(value) => updateConfig((next) => { next.updatedAt = value ? { requestKey: value, path: next.updatedAt?.path || "" } : null; })} style={{ width: "100%" }} /></Col>
                 <Col xs={24} md={16}><label>上游更新时间路径（可选）</label><Input value={config.updatedAt?.path || ""} placeholder="$.data.data.data[0].create_time" onChange={(event) => updateConfig((next) => { next.updatedAt = { requestKey: next.updatedAt?.requestKey || "board", path: event.target.value }; })} /></Col>
+                <Col xs={24} md={8}><label>上游汇总统计请求（可选）</label><Select allowClear value={config.summary?.requestKey || undefined} placeholder="默认 board" options={config.requests.map((request) => ({ value: request.key, label: request.key }))} onChange={(value) => updateConfig((next) => { next.summary = value ? { requestKey: value, path: next.summary?.path || "" } : null; })} style={{ width: "100%" }} /></Col>
+                <Col xs={24} md={16}><label>上游汇总统计路径（可选，默认自动识别）</label><Input value={config.summary?.path || ""} placeholder="$.data.summary" onChange={(event) => updateConfig((next) => { next.summary = { requestKey: next.summary?.requestKey || "board", path: event.target.value }; })} /></Col>
                 <Col xs={24} md={6}><label>排序字段</label><Select value={config.sort?.field || "share"} options={[{ value: "share", label: "share" }, { value: "score", label: "score" }, { value: "rank", label: "rank" }]} onChange={(value) => updateConfig((next) => { next.sort = { field: value, direction: next.sort?.direction || "desc" }; })} style={{ width: "100%" }} /></Col>
                 <Col xs={24} md={6}><label>排序方向</label><Select value={config.sort?.direction || "desc"} options={[{ value: "desc", label: "从高到低" }, { value: "asc", label: "从低到高" }]} onChange={(value) => updateConfig((next) => { next.sort = { field: next.sort?.field || "share", direction: value }; })} style={{ width: "100%" }} /></Col>
                 {FIELD_LABELS.map(([key, label, placeholder]) => <Col xs={24} md={12} key={key}><label>{label}</label><Input value={(config.fields?.[key] || []).join(" | ")} placeholder={placeholder} onChange={(event) => updateConfig((next) => { next.fields ||= {}; next.fields[key] = event.target.value.split("|").map((item) => item.trim()).filter(Boolean); })} /></Col>)}
@@ -258,8 +262,33 @@ export function ExternalLeaderboardAdapterCard({
       />
       <Drawer title="转换结果预览" open={previewOpen} onClose={() => setPreviewOpen(false)} width="min(1080px, 100vw)" extra={<Space><Button onClick={() => setPreviewOpen(false)}>返回修改规则</Button><Button type="primary" disabled={!preview?.passed || !confirmed} loading={loading === "publish"} onClick={publish}>发布转换规则</Button></Space>}>
         {preview ? <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Alert type={preview.passed ? "success" : "error"} showIcon message={preview.passed ? "转换预览通过" : "转换预览不可发布"} description={preview.issues.length ? preview.issues.slice(0, 5).map((issue) => `第 ${issue.row} 行：${issue.message}`).join("；") : "所有必填字段均已通过检查。"} />
+          <Alert
+            type={preview.passed ? "success" : "error"}
+            showIcon
+            message={
+              preview.passed
+                ? preview.rows.length === 0
+                  ? "转换预览通过（当前榜单暂无上榜行，已自动识别汇总数据）"
+                  : "转换预览通过"
+                : "转换预览不可发布"
+            }
+            description={
+              preview.issues.length
+                ? preview.issues.slice(0, 5).map((issue) => `第 ${issue.row} 行：${issue.message}`).join("；")
+                : preview.rows.length === 0
+                  ? "上游接口返回数据为空列表，允许空榜单正常发布上线并展示汇总总计数据。"
+                  : "所有必填字段均已通过检查。"
+            }
+          />
           <Row gutter={[12, 12]}><Col xs={12} md={6}><Card size="small">总行数<br /><strong>{preview.metrics.total}</strong></Card></Col><Col xs={12} md={6}><Card size="small">Twitter ID 覆盖率<br /><strong>{percent(preview.metrics.twitterIdCoverage)}</strong></Card></Col><Col xs={12} md={6}><Card size="small">头像覆盖率<br /><strong>{percent(preview.metrics.avatarCoverage)}</strong></Card></Col><Col xs={12} md={6}><Card size="small">share 合法率<br /><strong>{percent(preview.metrics.shareCoverage)}</strong></Card></Col></Row>
+          {preview.summary ? (
+            <Row gutter={[12, 12]}>
+              <Col xs={12} md={6}><Card size="small">参与人数<br /><strong>{preview.summary.participants ?? 0}</strong></Card></Col>
+              <Col xs={12} md={6}><Card size="small">总推文数<br /><strong>{preview.summary.tweets ?? 0}</strong></Card></Col>
+              <Col xs={12} md={6}><Card size="small">总浏览数<br /><strong>{preview.summary.views !== undefined && preview.summary.views !== null ? preview.summary.views.toLocaleString() : 0}</strong></Card></Col>
+              <Col xs={12} md={6}><Card size="small">总互动数<br /><strong>{preview.summary.engagement !== undefined && preview.summary.engagement !== null ? preview.summary.engagement.toLocaleString() : 0}</strong></Card></Col>
+            </Row>
+          ) : null}
           <Table rowKey={(row, index) => `${row.twitterId || "row"}-${index}`} columns={columns} dataSource={preview.rows} pagination={false} scroll={{ x: 620 }} />
           <Checkbox checked={confirmed} disabled={!preview.passed} onChange={(event) => setConfirmed(event.target.checked)}>我已确认当前转换结果可用于公开榜单</Checkbox>
         </Space> : null}

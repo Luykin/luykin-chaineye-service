@@ -112,6 +112,7 @@ export type ExternalLeaderboardAdapterConfig = {
   requests: ExternalLeaderboardRequest[];
   rowsPath?: string;
   updatedAt?: { requestKey: string; path: string } | null;
+  summary?: { requestKey: string; path: string } | null;
   fields?: Record<string, string[]>;
   sort?: { field: string; direction: "asc" | "desc" };
 };
@@ -125,6 +126,16 @@ export type ExternalLeaderboardPreview = {
   issues: Array<{ row: number; field: string; message: string }>;
   metrics: { total: number; valid: number; twitterIdCoverage: number; avatarCoverage: number; shareCoverage: number };
   rows: Array<Record<string, unknown>>;
+  summary?: {
+    participants?: number | null;
+    tweets?: number | null;
+    views?: number | null;
+    engagement?: number | null;
+    bridges?: number | null;
+    updatedAt?: string | null;
+  } | null;
+  updatedAt?: string | null;
+  leaderboardDataUpdatedAt?: string | null;
 };
 
 export type ExternalLeaderboardAdapter = {
