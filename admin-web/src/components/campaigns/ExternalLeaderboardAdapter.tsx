@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Checkbox, Col, Collapse, Drawer, Input, Row, Select, Space, Steps, Table, Tag, Tooltip } from "antd";
+import { DownOutlined, UpOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import {
   fetchExternalLeaderboardAdapter,
@@ -86,6 +87,7 @@ export function ExternalLeaderboardAdapterCard({
   const [loading, setLoading] = useState<string>("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const canOperate = !!nacosCampaignId && !!leaderboardKey && isSuperAdmin && !disabled;
   const status = statusMeta(adapter, preview);
@@ -176,6 +178,7 @@ export function ExternalLeaderboardAdapterCard({
     setPreview(null);
     setConfirmed(false);
     setPreviewOpen(false);
+    setCollapsed(true);
     onMessage(`转换规则已发布为 v${result.data.publishedVersion}`, "success");
   });
 
@@ -203,9 +206,11 @@ export function ExternalLeaderboardAdapterCard({
       size="small"
       title={<Space><span>外部榜单数据适配器 · {leaderboardTitle}</span><Tag color={status.color}>{status.label}</Tag>{adapter?.publishedAt ? <span style={{ color: "#64748b", fontSize: 12 }}>发布于 {new Date(adapter.publishedAt).toLocaleString()}</span> : null}</Space>}
       style={{ marginBottom: 12 }}
-      extra={<Tooltip title="接口样本、AI 映射、转换预览和发布均仅允许超级管理员操作。"><span style={{ color: "#64748b", fontSize: 12 }}>仅超级管理员</span></Tooltip>}
+      extra={<Space size={8}><Tooltip title="接口样本、AI 映射、转换预览和发布均仅允许超级管理员操作。"><span style={{ color: "#64748b", fontSize: 12 }}>仅超级管理员</span></Tooltip><Button type="text" size="small" icon={collapsed ? <DownOutlined /> : <UpOutlined />} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "展开" : "收起"}</Button></Space>}
     >
       {disabled ? <Alert type="warning" showIcon message={disabledReason || "请先发布活动基础信息，再配置外部榜单适配器。"} /> : null}
+      {collapsed ? null : (
+        <>
       <Steps size="small" current={preview?.passed ? 3 : adapter?.lastSample && Object.keys(adapter.lastSample).length ? 1 : 0} items={[{ title: "接口样本" }, { title: "AI 转换规则" }, { title: "转换预览" }, { title: "发布" }]} style={{ margin: "8px 0 18px" }} />
       <Collapse
         defaultActiveKey={["request"]}
@@ -260,6 +265,8 @@ export function ExternalLeaderboardAdapterCard({
           },
         ]}
       />
+        </>
+      )}
       <Drawer title="转换结果预览" open={previewOpen} onClose={() => setPreviewOpen(false)} width="min(1080px, 100vw)" extra={<Space><Button onClick={() => setPreviewOpen(false)}>返回修改规则</Button><Button type="primary" disabled={!preview?.passed || !confirmed} loading={loading === "publish"} onClick={publish}>发布转换规则</Button></Space>}>
         {preview ? <Space direction="vertical" size={16} style={{ width: "100%" }}>
           <Alert

@@ -316,7 +316,6 @@ function extractSummaryFromResponses(responses, config = {}) {
           engagement: engagement ?? 0,
           bridges: bridges ?? null,
           updatedAt,
-          raw: item,
         };
       }
     }
@@ -383,17 +382,17 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
   if (!updatedAt && extractedSummary?.updatedAt) {
     updatedAt = extractedSummary.updatedAt;
   }
-  const sumMetric = (fieldNames) => {
-    const values = rows
-      .map((row) => fieldNames.map((field) => Number(row?.[field])).find((v) => Number.isFinite(v)))
+  const sumMetric = (field) => {
+    const values = enriched
+      .map((row) => Number(row?.[field]))
       .filter((v) => Number.isFinite(v));
     return values.length ? values.reduce((sum, v) => sum + v, 0) : 0;
   };
   const summary = extractedSummary || {
-    participants: rows.length,
-    tweets: sumMetric(["tweets", "tweet_count"]),
-    views: sumMetric(["views", "view_count"]),
-    engagement: sumMetric(["likes", "like_count", "engagement"]),
+    participants: enriched.length,
+    tweets: sumMetric("tweets"),
+    views: sumMetric("views"),
+    engagement: sumMetric("likes"),
     bridges: null,
     updatedAt: updatedAt || null,
   };
