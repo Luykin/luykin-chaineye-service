@@ -5,7 +5,7 @@ const { XhuntAdminManager, XhuntAdminAuditLog, XhuntAdminWebAuthnCredential } = 
 const jwt = require("jsonwebtoken");
 const base64url = require("base64url");
 const path = require("path");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const { promisify } = require("util");
 const {
   generateRegistrationOptions,
@@ -176,13 +176,6 @@ async function runDeployCommand(command, args, options = {}) {
 }
 
 const RESTART_COMMAND_LABEL = "npm run restart";
-
-async function runProjectRestartCommand() {
-  return runDeployCommand("npm", ["run", "restart"], {
-    timeout: 60000,
-    maxBuffer: 2 * 1024 * 1024,
-  });
-}
 
 function parseGitCommitLine(line) {
   const [hash, shortHash, author, relativeTime, ...messageParts] = String(line || "").split("\t");
@@ -613,13 +606,24 @@ async function getLostCommits(target) {
 }
 
 function schedulePm2Restart(reason) {
-  setTimeout(async () => {
+  setTimeout(() => {
     try {
       console.log(`[admin-deploy] restarting services command=${RESTART_COMMAND_LABEL}, reason=${reason}`);
-      await runProjectRestartCommand();
-      console.log(`[admin-deploy] restart done command=${RESTART_COMMAND_LABEL}`);
+      // 当前进程自己就是 pm2 restart 的目标（api 为 cluster 多实例）：必须让重启命令脱离
+      // 本进程树（bash 后台化后立即退出，npm 被 reparent 到 init），否则 pm2 杀掉本进程时
+      // 会连带杀掉 npm/pm2 子进程，排在 api 后面的应用永远收不到重启指令。
+      const logFile = path.join(PROJECT_ROOT, "logs", "admin-deploy-restart.log");
+      const child = spawn("bash", ["-c", `nohup npm run restart >> "${logFile}" 2>&1 &`], {
+        cwd: PROJECT_ROOT,
+        detached: true,
+        stdio: "ignore",
+        env: process.env,
+      });
+      child.on("error", (e) => console.error("[admin-deploy] restart dispatch failed:", e?.message));
+      child.unref();
+      console.log(`[admin-deploy] restart dispatched command=${RESTART_COMMAND_LABEL}, log=${logFile}`);
     } catch (e) {
-      console.error("[admin-deploy] restart failed:", e?.message);
+      console.error("[admin-deploy] restart dispatch failed:", e?.message);
     }
   }, 1200);
 }
