@@ -28,6 +28,7 @@ const FIELD_LABELS: Array<[string, string, string]> = [
   ["tweets", "推文数（可选）", "例如 $.tweet_count"],
   ["views", "浏览数（可选）", "例如 $.view_count"],
   ["likes", "互动数（可选）", "例如 $.like_count"],
+  ["booster_bisquare", "币安加速标识（可选）", "例如 $.booster_bisquare 或 $.value.booster_bisquare"],
 ];
 
 const EMPTY_CONFIG: ExternalLeaderboardAdapterConfig = {

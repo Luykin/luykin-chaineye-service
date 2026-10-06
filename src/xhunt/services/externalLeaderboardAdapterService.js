@@ -6,7 +6,6 @@ const { DATA_SERVICE_BASE_URL, PUBLIC_DATA_SERVICE_BASE_URL } = require("../cons
 const { getCustomLeaderboardAdapterKey } = require("../utils/custom-leaderboard-key");
 const {
   XhuntExternalLeaderboardAdapter,
-  XHuntBinanceSquareBinding,
 } = require("../../models/postgres-start");
 
 const REQUEST_TIMEOUT_MS = 10000;
@@ -28,6 +27,7 @@ const DEFAULT_FIELD_MAPPINGS = {
   tweets: ["$.tweet_count", "$.tweets"],
   views: ["$.view_count", "$.views"],
   likes: ["$.like_count", "$.likes"],
+  booster_bisquare: ["$.booster_bisquare", "$.value.booster_bisquare", "$.value.booster_bisquare_mind_share", "$.is_booster"],
 };
 
 function error(message, status = 400, code = "EXTERNAL_LEADERBOARD_ADAPTER_INVALID") {
@@ -323,22 +323,6 @@ function extractSummaryFromResponses(responses, config = {}) {
   return null;
 }
 
-async function enrichBinanceAccelerated(rows) {
-  const twitterIds = [...new Set(rows.map((row) => row.twitterId).filter(Boolean))];
-  if (!twitterIds.length) return rows;
-  const bindings = await XHuntBinanceSquareBinding.findAll({
-    where: { twitterId: { [Op.in]: twitterIds }, status: "active", revokedAt: null },
-    attributes: ["twitterId"],
-  });
-  const active = new Set(bindings.map((item) => String(item.twitterId)));
-  return rows.map((row) => ({
-    ...row,
-    binanceSquareAccelerated: active.has(row.twitterId),
-    // 现有网站展示器读取该兼容字段。
-    booster_bisquare: active.has(row.twitterId),
-  }));
-}
-
 async function transformResponses(campaignKey, config, execution, { strict = true } = {}) {
   const rows = resolveResponsePath(execution.responses, "board", config.rowsPath);
   if (!Array.isArray(rows)) throw error("rowsPath 未命中数组，无法转换榜单");
@@ -348,6 +332,9 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
     const username = toText(getMappedValue(item, config.fields.username)).replace(/^@+/, "");
     const handle = username ? `@${username}` : toText(getMappedValue(item, config.fields.handle));
     const share = toNumber(getMappedValue(item, config.fields.share));
+    const boosterPaths = config.fields?.booster_bisquare?.length ? config.fields.booster_bisquare : DEFAULT_FIELD_MAPPINGS.booster_bisquare;
+    const rawBooster = getMappedValue(item, boosterPaths);
+    const boosterBisquare = rawBooster !== null && rawBooster !== undefined && rawBooster !== "" ? toBoolean(rawBooster) : false;
     const row = {
       rank: toNumber(getMappedValue(item, config.fields.rank)) || index + 1,
       twitterId: toText(getMappedValue(item, config.fields.twitterId)) || null,
@@ -361,6 +348,8 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
       tweets: toNumber(getMappedValue(item, config.fields.tweets)),
       views: toNumber(getMappedValue(item, config.fields.views)),
       likes: toNumber(getMappedValue(item, config.fields.likes)),
+      booster_bisquare: boosterBisquare,
+      binanceSquareAccelerated: boosterBisquare,
       raw: sanitizeSample(item),
     };
     if (!row.twitterId) issues.push({ row: index + 1, field: "twitterId", message: "缺少 Twitter ID", level: "error" });
@@ -370,11 +359,12 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
     if (share === null || share < 0 || share > 1) issues.push({ row: index + 1, field: "share", message: "share 必须是 0~1", level: "error" });
     return row;
   });
+  const sortConfig = config.sort || { field: "share", direction: "desc" };
+  const sortField = sortConfig.field || "share";
+  const direction = sortConfig.direction === "asc" ? 1 : -1;
   const sorted = converted.sort((left, right) => {
-    const direction = config.sort.direction === "asc" ? 1 : -1;
-    return ((Number(left[config.sort.field]) || 0) - (Number(right[config.sort.field]) || 0)) * direction;
+    return ((Number(left[sortField]) || 0) - (Number(right[sortField]) || 0)) * direction;
   }).map((row, index) => ({ ...row, rank: index + 1 }));
-  const enriched = await enrichBinanceAccelerated(sorted);
   const updatedRaw = config.updatedAt?.path ? resolveResponsePath(execution.responses, config.updatedAt.requestKey, config.updatedAt.path) : null;
   const parsedUpdatedAt = updatedRaw ? new Date(updatedRaw) : null;
   let updatedAt = parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt.toISOString() : null;
@@ -383,13 +373,13 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
     updatedAt = extractedSummary.updatedAt;
   }
   const sumMetric = (field) => {
-    const values = enriched
+    const values = sorted
       .map((row) => Number(row?.[field]))
       .filter((v) => Number.isFinite(v));
     return values.length ? values.reduce((sum, v) => sum + v, 0) : 0;
   };
   const summary = extractedSummary || {
-    participants: enriched.length,
+    participants: sorted.length,
     tweets: sumMetric("tweets"),
     views: sumMetric("views"),
     engagement: sumMetric("likes"),
@@ -402,7 +392,7 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
     campaign: campaignKey,
     updatedAt: updatedAt || new Date().toISOString(),
     leaderboardDataUpdatedAt: updatedAt,
-    rows: enriched,
+    rows: sorted,
     summary,
     issues,
     metrics: {
@@ -411,6 +401,7 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
       twitterIdCoverage: rows.length ? Number(((rows.length - issues.filter((item) => item.field === "twitterId").length) / rows.length).toFixed(4)) : 0,
       avatarCoverage: rows.length ? Number(((rows.length - issues.filter((item) => item.field === "avatar").length) / rows.length).toFixed(4)) : 0,
       shareCoverage: rows.length ? Number(((rows.length - issues.filter((item) => item.field === "share").length) / rows.length).toFixed(4)) : 0,
+      boostedCount: sorted.filter((row) => row.booster_bisquare).length,
     },
   };
 }
@@ -454,6 +445,7 @@ function heuristicMapping(sample, config) {
     tweets: [inferPath(row, ["tweets", "tweet_count", "tweetCount", "posts"])].filter(Boolean),
     views: [inferPath(row, ["views", "view_count", "viewCount", "impressions"])].filter(Boolean),
     likes: [inferPath(row, ["likes", "like_count", "likeCount", "engagement"])].filter(Boolean),
+    booster_bisquare: [inferPath(row, ["booster_bisquare", "booster_bisquare_mind_share", "value.booster_bisquare", "binanceSquareAccelerated", "is_booster", "accelerated", "booster"])].filter(Boolean),
   };
   const fields = {};
   Object.keys(DEFAULT_FIELD_MAPPINGS).forEach((key) => {
@@ -487,6 +479,7 @@ function heuristicMapping(sample, config) {
     updatedAt,
     summary,
     fields,
+    sort: config.sort || { field: "share", direction: "desc" },
   };
 }
 
@@ -523,6 +516,7 @@ const AI_MAPPING_SCHEMA = {
         tweets: { type: "array", items: { type: "string" } },
         views: { type: "array", items: { type: "string" } },
         likes: { type: "array", items: { type: "string" } },
+        booster_bisquare: { type: "array", items: { type: "string" } },
       },
     },
     sort: { type: "object" },
@@ -594,7 +588,7 @@ async function generateMapping(campaignKey, leaderboardKey, rawConfig, instructi
   if (process.env.LLM_API_KEY) {
     try {
       generated = await structuredChat(
-        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\ntweets/views/likes 是可选数值字段（推文数、浏览数、互动数），样本行里有对应字段才映射，没有则返回空数组。\n若样本中榜单数组为空，请将 rowsPath 指向该空数组路径，并支持识别 updatedAt 或 summary 路径。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
+        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\ntweets/views/likes 是可选数值字段（推文数、浏览数、互动数）。booster_bisquare 是可选布尔字段（币安广场加速标识，如 booster_bisquare、is_booster 等），样本行里有对应字段才映射，没有则返回空数组。\n若样本中榜单数组为空，请将 rowsPath 指向该空数组路径，并支持识别 updatedAt 或 summary 路径。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
         AI_MAPPING_SCHEMA,
         { systemPrompt: "你是榜单数据结构映射助手。仅返回 JSONPath（以 $ 开头，只用 .key 和 [数字] 写法）数组，不生成代码、URL、headers 或表达式。" }
       );
@@ -782,4 +776,10 @@ module.exports = {
   previewAdapter,
   publishAdapter,
   saveDraft,
+  _internal: {
+    heuristicMapping,
+    transformResponses,
+    extractSummaryFromResponses,
+    toBoolean,
+  },
 };

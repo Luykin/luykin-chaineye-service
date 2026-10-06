@@ -124,7 +124,7 @@ export type ExternalLeaderboardPreview = {
   responseFingerprint: string;
   schemaFingerprint: string;
   issues: Array<{ row: number; field: string; message: string }>;
-  metrics: { total: number; valid: number; twitterIdCoverage: number; avatarCoverage: number; shareCoverage: number };
+  metrics: { total: number; valid: number; twitterIdCoverage: number; avatarCoverage: number; shareCoverage: number; boostedCount?: number };
   rows: Array<Record<string, unknown>>;
   summary?: {
     participants?: number | null;
