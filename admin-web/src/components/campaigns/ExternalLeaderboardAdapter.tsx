@@ -164,6 +164,12 @@ export function ExternalLeaderboardAdapterCard({
     const result = await previewExternalLeaderboardAdapter(nacosCampaignId!, leaderboardKey, config);
     setAdapter(result.data.adapter);
     setPreview(result.data.preview);
+    if (result.data.preview.effectiveRowsPath && result.data.preview.effectiveRowsPath !== config.rowsPath) {
+      updateConfig((next) => {
+        next.rowsPath = result.data.preview.effectiveRowsPath!;
+      });
+      onMessage(`已自动适配 rowsPath 为 ${result.data.preview.effectiveRowsPath}`, "info");
+    }
     setPreviewOpen(true);
     onMessage(result.data.preview.passed ? "转换预览通过，可以确认发布" : "转换预览发现阻断问题，请修改规则", result.data.preview.passed ? "success" : "error");
   });
@@ -282,7 +288,7 @@ export function ExternalLeaderboardAdapterCard({
             }
             description={
               preview.issues.length
-                ? preview.issues.slice(0, 5).map((issue) => `第 ${issue.row} 行：${issue.message}`).join("；")
+                ? preview.issues.slice(0, 5).map((issue) => (issue.row > 0 ? `第 ${issue.row} 行：${issue.message}` : issue.message)).join("；")
                 : preview.rows.length === 0
                   ? "上游接口返回数据为空列表，允许空榜单正常发布上线并展示汇总总计数据。"
                   : "所有必填字段均已通过检查。"

@@ -123,7 +123,8 @@ export type ExternalLeaderboardPreview = {
   configFingerprint: string;
   responseFingerprint: string;
   schemaFingerprint: string;
-  issues: Array<{ row: number; field: string; message: string }>;
+  effectiveRowsPath?: string;
+  issues: Array<{ row: number; field: string; message: string; level?: string }>;
   metrics: { total: number; valid: number; twitterIdCoverage: number; avatarCoverage: number; shareCoverage: number; boostedCount?: number };
   rows: Array<Record<string, unknown>>;
   summary?: {

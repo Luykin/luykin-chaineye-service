@@ -324,10 +324,30 @@ function extractSummaryFromResponses(responses, config = {}) {
 }
 
 async function transformResponses(campaignKey, config, execution, { strict = true } = {}) {
-  const rows = resolveResponsePath(execution.responses, "board", config.rowsPath);
-  if (!Array.isArray(rows)) throw error("rowsPath 未命中数组，无法转换榜单");
-  if (rows.length > MAX_LEADERBOARD_ROWS) throw error(`榜单行数超过上限 ${MAX_LEADERBOARD_ROWS}，拒绝截断不完整数据`);
   const issues = [];
+  let rows = resolveResponsePath(execution.responses, "board", config.rowsPath);
+  let effectiveRowsPath = config.rowsPath;
+
+  if (!Array.isArray(rows)) {
+    const healedPath = autoFixRowsPath(execution.responses, "board", config.rowsPath);
+    if (healedPath) {
+      rows = resolveResponsePath(execution.responses, "board", healedPath);
+      effectiveRowsPath = healedPath;
+      issues.push({
+        row: 0,
+        field: "rowsPath",
+        message: `配置的 rowsPath ("${config.rowsPath}") 未命中数组，已自动适配为 "${healedPath}"。建议在规则中将 rowsPath 更新为 "${healedPath}"`,
+        level: "warn",
+      });
+    }
+  }
+
+  if (!Array.isArray(rows)) {
+    const discovered = findCandidateArrayPaths(execution.responses.board?.data);
+    const suggestions = discovered.map((item) => `"${item.path}"`).join("、");
+    throw error(`rowsPath ("${config.rowsPath}") 未命中数组，无法转换榜单。${suggestions ? `检测到的有效数组路径建议：${suggestions}` : "请检查上游接口响应结构"}`);
+  }
+  if (rows.length > MAX_LEADERBOARD_ROWS) throw error(`榜单行数超过上限 ${MAX_LEADERBOARD_ROWS}，拒绝截断不完整数据`);
   const converted = rows.map((item, index) => {
     const username = toText(getMappedValue(item, config.fields.username)).replace(/^@+/, "");
     const handle = username ? `@${username}` : toText(getMappedValue(item, config.fields.handle));
@@ -390,6 +410,7 @@ async function transformResponses(campaignKey, config, execution, { strict = tru
   if (strict && blockingIssues.length) throw error(`转换校验失败：${blockingIssues.slice(0, 3).map((item) => item.message).join("、")}`, 422, "EXTERNAL_LEADERBOARD_PREVIEW_INVALID");
   return {
     campaign: campaignKey,
+    effectiveRowsPath,
     updatedAt: updatedAt || new Date().toISOString(),
     leaderboardDataUpdatedAt: updatedAt,
     rows: sorted,
@@ -418,18 +439,79 @@ function inferPath(root, candidates, base = "$") {
   return "";
 }
 
-function inferRowsPath(root, base = "$") {
-  if (Array.isArray(root)) return base;
-  if (!root || typeof root !== "object") return "";
-  for (const [key, value] of Object.entries(root)) {
-    const found = inferRowsPath(value, `${base}.${key}`);
-    if (found) return found;
+function findCandidateArrayPaths(root, base = "$", results = []) {
+  if (Array.isArray(root)) {
+    let score = 1;
+    if (root.length > 0) {
+      const first = root[0];
+      if (first && typeof first === "object") {
+        score += 10;
+        const keys = Object.keys(first);
+        const matched = keys.filter((k) =>
+          /rank|user|name|handle|twitter|share|score|tweet|view|like|avatar|booster|soul|farming/i.test(k)
+        );
+        score += matched.length * 5;
+      }
+    } else {
+      score += 5;
+    }
+    const lastKey = base.split(".").pop();
+    if (/data|list|rows|items|board|top|leaderboard|ranks|users|hunters/i.test(lastKey)) score += 8;
+    results.push({ path: base, score, length: root.length, sample: root[0] });
+    return results;
   }
-  return "";
+  if (!root || typeof root !== "object") return results;
+  for (const [key, value] of Object.entries(root)) {
+    findCandidateArrayPaths(value, base === "$" ? `$.${key}` : `${base}.${key}`, results);
+  }
+  return results.sort((a, b) => b.score - a.score);
+}
+
+function inferRowsPath(root, base = "$") {
+  const candidates = findCandidateArrayPaths(root, base);
+  return candidates[0]?.path || "";
+}
+
+function autoFixRowsPath(responses, requestKey, configuredPath, candidates = null) {
+  const direct = resolveResponsePath(responses, requestKey, configuredPath);
+  if (Array.isArray(direct)) return configuredPath;
+
+  const reqData = responses[requestKey]?.data;
+  const candidateList = [];
+
+  if (configuredPath && configuredPath.includes(".data.data.data")) {
+    candidateList.push(configuredPath.replace(/\.data\.data\.data/g, ".data.data"));
+    candidateList.push(configuredPath.replace(/\.data\.data/g, ".data"));
+  } else if (configuredPath && configuredPath.includes(".data.data")) {
+    candidateList.push(configuredPath.replace(/\.data\.data/g, ".data"));
+  }
+
+  if (configuredPath && configuredPath.startsWith(`$.${requestKey}.`)) {
+    candidateList.push("$." + configuredPath.slice(requestKey.length + 3));
+  }
+  if (configuredPath && configuredPath.startsWith("$.responses.")) {
+    candidateList.push("$." + configuredPath.replace(/^\$\.responses\.[^.]+\./, ""));
+  }
+
+  const discovered = candidates || findCandidateArrayPaths(reqData);
+  discovered.forEach((item) => candidateList.push(item.path || item));
+
+  for (const candidate of candidateList) {
+    if (!candidate || candidate === configuredPath) continue;
+    const testRows = resolveResponsePath(responses, requestKey, candidate);
+    if (Array.isArray(testRows)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 function heuristicMapping(sample, config) {
-  const rowsPath = config.rowsPath || inferRowsPath(sample.responses?.board?.data) || "$.data.data";
+  const candidateArrayPaths = findCandidateArrayPaths(sample.responses?.board?.data);
+  const rowsPath = autoFixRowsPath(sample.responses, "board", config.rowsPath, candidateArrayPaths)
+    || candidateArrayPaths[0]?.path
+    || "$.data.data";
   const rows = getPath(sample.responses?.board?.data, rowsPath);
   const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   const isRowEmpty = !row || typeof row !== "object" || Object.keys(row).length === 0;
@@ -578,30 +660,116 @@ async function fetchSample(campaignKey, leaderboardKey, rawConfig) {
   return { adapter: serializeAdapter(adapter), sample };
 }
 
+function buildMappingPrompt(boardData, otherResponses, instruction, candidateArrayPaths, retryFeedback = null) {
+  const candidateList = (candidateArrayPaths || []).map((c) => `\`${c.path}\` (含 ${c.length} 行${c.sample && typeof c.sample === "object" ? "，单行含 " + Object.keys(c.sample).slice(0, 6).join(", ") : ""})`).join("、");
+  let prompt = `你是一个精准的接口数据结构分析专家。请为外部活动榜单生成受限 JSONPath 映射规范。
+
+【根节点 $ 与路径定义（至关重要）】：
+1. 目标接口 board 请求的 HTTP 响应体（Response Body）本身即为根节点 \`$\`。
+2. 榜单数组路径 \`rowsPath\` 必须直接相对 board 响应体根节点 \`$\` 书写，且必须精确命中存放用户列表的 Array 数组：
+   - 示例 1：若响应体为 { code: 200, data: { data: [ { ... } ], summary: { ... } } }，则 rowsPath 必须是 \`$.data.data\`（第 1 层 .data 对应顶层包装对象，第 2 层 .data 对应用户数组）。切勿多写一层写成 $.data.data.data！
+   - 示例 2：若响应体为 { code: 200, data: [ { ... } ] }，则 rowsPath 必须是 \`$.data\`。
+   - 示例 3：若响应体本身就是数组 [ { ... } ]，则 rowsPath 是 \`$\`。
+3. 系统在响应体中探测到的候选数组路径为：${candidateList || "无直接探测结果，请仔细核对"}。请优先核对并选择最符合榜单用户列表的路径。
+
+【单行字段映射（相对用户单行对象书写）】：
+- 字段路径相对数组中的每一个元素（单行对象）书写，例如 \`$.username\`、\`$.value.booster_bisquare\`。
+- rank: 排名，如 $.rank
+- twitterId: Twitter ID，如 $.twitter_id、$.t_twitter_id、$.id
+- username: Twitter 用户名，如 $.username、$.screen_name
+- handle: Twitter handle，如 $.username
+- name: 用户名称，如 $.name、$.nickname
+- avatar: 头像 URL，如 $.profile_image_url、$.avatar
+- share: 声量/份额占比，必须是 0~1 的小数，如 $.share、$.mind_share
+- score: 可选数值分数，如 $.score、$.score_adj、$.raw_score
+- tweets: 可选推文数，如 $.tweet_count、$.tweets
+- views: 可选浏览数，如 $.view_count、$.views
+- likes: 可选互动数，如 $.like_count、$.likes
+- booster_bisquare: 可选布尔值（币安广场加速标识，如 $.booster_bisquare、$.value.booster_bisquare、$.is_booster），样本中有对应加速字段才映射，没有则返回空数组 []。
+
+【汇总统计与更新时间（相对 board 响应体根节点 $）】：
+- updatedAt: 上游更新时间，如 $.data.summary.updatedAt 或 $.data.updatedAt
+- summary: 上游汇总统计对象（包含 participants, tweets, views, engagement 等），如 $.data.summary
+
+【重要约束】：
+- rowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，严禁使用 [*] 通配符。
+- 不要编造不存在的字段路径。若样本中某可选字段不存在，返回空数组 []。
+- 若样本中榜单数组为空列表（[]），请将 rowsPath 指向该空数组路径，并识别 summary 路径。
+${instruction ? `\n【业务补充说明】：\n${instruction}\n` : ""}
+${retryFeedback ? `\n【⚠️ 上一轮生成结果校验不通过，请根据以下反馈重试修正】：\n${retryFeedback}\n` : ""}
+【board 请求实际响应体（根节点 $）】：
+${JSON.stringify(boardData, null, 2)}
+`;
+  if (otherResponses && Object.keys(otherResponses).length > 0) {
+    prompt += `\n【其他辅助接口响应（如有）】：\n${JSON.stringify(otherResponses, null, 2)}`;
+  }
+  return prompt;
+}
+
 async function generateMapping(campaignKey, leaderboardKey, rawConfig, instruction = "") {
   const adapter = await getOrCreateAdapter(campaignKey, leaderboardKey);
   const config = normalizeConfig(rawConfig || adapter.draftConfig || {});
   const sample = adapter.lastSample || {};
-  if (!sample.responses?.board?.data) throw error("请先成功试拉取接口样本");
+  const boardData = sample.responses?.board?.data;
+  if (!boardData) throw error("请先成功试拉取接口样本");
+
+  const candidateArrayPaths = findCandidateArrayPaths(boardData);
+  const otherResponses = Object.fromEntries(
+    Object.entries(sample.responses || {}).filter(([k]) => k !== "board")
+  );
+
   let generated = null;
   let source = "heuristic";
+
   if (process.env.LLM_API_KEY) {
-    try {
-      generated = await structuredChat(
-        `为外部活动榜单生成受限 JSONPath 映射。只使用以下接口样本，不要编造字段。share 必须是 0~1。\nrowsPath 和字段路径只支持 .key 与 [数字下标] 两种写法，禁止 [*] 通配符。\nrowsPath 必须相对 board 请求的响应体书写：样本中 responses.board.data 即为根 $，例如数组在 responses.board.data.data.data 时 rowsPath 写 $.data.data.data。\n字段路径相对数组中的单行书写，例如 $.username。\ntweets/views/likes 是可选数值字段（推文数、浏览数、互动数）。booster_bisquare 是可选布尔字段（币安广场加速标识，如 booster_bisquare、is_booster 等），样本行里有对应字段才映射，没有则返回空数组。\n若样本中榜单数组为空，请将 rowsPath 指向该空数组路径，并支持识别 updatedAt 或 summary 路径。\n业务补充说明：${String(instruction || "无").slice(0, 1000)}\n样本：${JSON.stringify(sample.responses)}`,
-        AI_MAPPING_SCHEMA,
-        { systemPrompt: "你是榜单数据结构映射助手。仅返回 JSONPath（以 $ 开头，只用 .key 和 [数字] 写法）数组，不生成代码、URL、headers 或表达式。" }
-      );
-      source = "llm";
-    } catch (cause) {
-      console.warn("[ExternalLeaderboardAdapter] LLM mapping fallback:", cause.message || cause);
+    const maxRetries = 2;
+    let retryCount = 0;
+    let retryFeedback = null;
+
+    while (retryCount <= maxRetries) {
+      try {
+        const prompt = buildMappingPrompt(boardData, otherResponses, instruction, candidateArrayPaths, retryFeedback);
+        const result = await structuredChat(prompt, AI_MAPPING_SCHEMA, {
+          systemPrompt: "你是榜单数据结构映射助手。仅返回以 $ 开头的 JSONPath（仅用 .key 和 [数字] 写法），不生成代码或表达式。必须确保 rowsPath 相对 board 响应体准确命中 Array 数组。",
+        });
+
+        const testRows = resolveResponsePath(sample.responses, "board", result?.rowsPath);
+        if (Array.isArray(testRows)) {
+          generated = result;
+          source = "llm";
+          break;
+        }
+
+        const autoFixed = autoFixRowsPath(sample.responses, "board", result?.rowsPath, candidateArrayPaths);
+        if (autoFixed) {
+          const fixedRows = resolveResponsePath(sample.responses, "board", autoFixed);
+          if (Array.isArray(fixedRows)) {
+            console.log(`[ExternalLeaderboardAdapter] Auto-fixed LLM rowsPath from "${result?.rowsPath}" to "${autoFixed}"`);
+            generated = { ...result, rowsPath: autoFixed };
+            source = "llm";
+            break;
+          }
+        }
+
+        retryCount++;
+        const candidateNames = candidateArrayPaths.map((c) => `"${c.path}"`).join(" 或 ");
+        retryFeedback = `你生成的 rowsPath: "${result?.rowsPath}" 在 board 响应体中未能命中数组（获取结果为: ${typeof testRows === "undefined" ? "undefined" : JSON.stringify(testRows).slice(0, 80)}）。请重新核对响应体结构，候选数组路径为: ${candidateNames || "请检查数据层级"}。请重新生成准确的 rowsPath 及相关字段！`;
+        console.warn(`[ExternalLeaderboardAdapter] LLM rowsPath "${result?.rowsPath}" not an array, retrying (${retryCount}/${maxRetries})...`);
+      } catch (cause) {
+        console.warn(`[ExternalLeaderboardAdapter] LLM attempt ${retryCount + 1} failed:`, cause.message || cause);
+        retryCount++;
+      }
     }
   }
+
   let generatedConfig = generated;
   if (!generatedConfig?.rowsPath || !generatedConfig?.fields) {
     generatedConfig = heuristicMapping(sample, config);
   } else {
-    const rows = getPath(sample.responses?.board?.data, generatedConfig.rowsPath || config.rowsPath);
+    const validRowsPath = autoFixRowsPath(sample.responses, "board", generatedConfig.rowsPath, candidateArrayPaths) || generatedConfig.rowsPath;
+    generatedConfig.rowsPath = validRowsPath;
+
+    const rows = getPath(boardData, validRowsPath);
     const isRowEmpty = !Array.isArray(rows) || rows.length === 0;
     const fields = { ...(generatedConfig.fields || {}) };
     Object.keys(DEFAULT_FIELD_MAPPINGS).forEach((key) => {
@@ -613,14 +781,15 @@ async function generateMapping(campaignKey, leaderboardKey, rawConfig, instructi
     });
     generatedConfig.fields = fields;
     if (!generatedConfig.updatedAt && !config.updatedAt?.path) {
-      const inferredUpdatedAt = inferPath(sample.responses?.board?.data, ["updatedAt", "updated_at", "update_time", "create_time", "lastUpdatedAt"]);
+      const inferredUpdatedAt = inferPath(boardData, ["updatedAt", "updated_at", "update_time", "create_time", "lastUpdatedAt"]);
       if (inferredUpdatedAt) generatedConfig.updatedAt = { requestKey: "board", path: inferredUpdatedAt };
     }
     if (!generatedConfig.summary && !config.summary?.path) {
-      const inferredSummaryPath = inferPath(sample.responses?.board?.data, ["summary", "stats"]);
+      const inferredSummaryPath = inferPath(boardData, ["summary", "stats"]);
       if (inferredSummaryPath) generatedConfig.summary = { requestKey: "board", path: inferredSummaryPath };
     }
   }
+
   const nextConfig = normalizeConfig({ ...config, ...generatedConfig, requests: config.requests });
   await adapter.update({ draftConfig: nextConfig, lastPreview: {}, status: adapter.publishedConfig ? "published" : "draft" });
   return { adapter: serializeAdapter(adapter), source, config: nextConfig };
@@ -631,13 +800,17 @@ async function previewAdapter(campaignKey, leaderboardKey, rawConfig) {
   const execution = await executeRequests(cleanCampaignKey(campaignKey), config);
   const result = await transformResponses(cleanCampaignKey(campaignKey), config, execution, { strict: false });
   const blockingIssues = result.issues.filter((item) => item.level === "error");
+  const effectiveConfig = result.effectiveRowsPath && result.effectiveRowsPath !== config.rowsPath
+    ? { ...config, rowsPath: result.effectiveRowsPath }
+    : config;
   const preview = {
     passed: blockingIssues.length === 0,
     previewedAt: new Date().toISOString(),
-    configFingerprint: hash(config),
+    configFingerprint: hash(effectiveConfig),
     responseFingerprint: hash(Object.fromEntries(Object.entries(execution.responses).map(([key, value]) => [key, value.data]))),
     schemaFingerprint: hash(Object.fromEntries(Object.entries(execution.responses).map(([key, value]) => [key, sanitizeSample(value.data)]))),
-    issues: blockingIssues.slice(0, 100),
+    issues: result.issues.slice(0, 100),
+    effectiveRowsPath: result.effectiveRowsPath,
     metrics: result.metrics,
     rows: result.rows.slice(0, MAX_SAMPLE_ROWS),
     summary: result.summary || null,
@@ -645,7 +818,7 @@ async function previewAdapter(campaignKey, leaderboardKey, rawConfig) {
     leaderboardDataUpdatedAt: result.leaderboardDataUpdatedAt,
   };
   const adapter = await getOrCreateAdapter(campaignKey, leaderboardKey);
-  await adapter.update({ draftConfig: config, lastPreview: preview, status: preview.passed ? "previewed" : "draft" });
+  await adapter.update({ draftConfig: effectiveConfig, lastPreview: preview, status: preview.passed ? "previewed" : "draft" });
   return { adapter: serializeAdapter(adapter), preview };
 }
 
@@ -781,5 +954,7 @@ module.exports = {
     transformResponses,
     extractSummaryFromResponses,
     toBoolean,
+    findCandidateArrayPaths,
+    autoFixRowsPath,
   },
 };
