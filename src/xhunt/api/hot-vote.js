@@ -253,6 +253,7 @@ async function saveOrUpdateUserComment({
   userInfo = {},
   effectiveUserId = null,
   redisClient = null,
+  allowClearContent = false,
 }) {
   const isAnon = Boolean(isAnonymous);
   const safeContent = content ? sanitizeCommentPlainText(content, 200) : "";
@@ -271,8 +272,8 @@ async function saveOrUpdateUserComment({
 
   if (existingComments && existingComments.length > 0) {
     targetComment = existingComments[0];
-    // 若传入非空新内容则更新内容与时间；纯投票同步时保留原内容
-    if (safeContent) {
+    // 若传入非空新内容或允许清空留言，则更新内容与时间；纯投票同步时保留原内容
+    if (safeContent || allowClearContent) {
       targetComment.content = safeContent;
       targetComment.createdAt = now;
       targetComment.isDeleted = false;
@@ -315,7 +316,7 @@ async function saveOrUpdateUserComment({
           where: { topicId, twitterId },
         });
         if (targetComment) {
-          if (safeContent) {
+          if (safeContent || allowClearContent) {
             targetComment.content = safeContent;
             targetComment.createdAt = now;
             targetComment.isDeleted = false;
@@ -989,6 +990,7 @@ router.post(
             votedOptionId: optionId,
             remainingRevotes: topic.maxRevotes,
             isAnonymous,
+            lastComment: cleanComment || null,
           },
           results,
         },
@@ -1077,8 +1079,14 @@ router.put(
         }
       }
 
-      // 提取附带改票留言观点
-      const rawRevoteComment = req.body.comment || req.body.content || req.body.commentContent;
+      // 提取附带改票留言观点（支持显式清空留言）
+      const hasCommentField =
+        req.body.comment !== undefined ||
+        req.body.content !== undefined ||
+        req.body.commentContent !== undefined;
+      const rawRevoteComment = req.body.comment !== undefined
+        ? req.body.comment
+        : (req.body.content !== undefined ? req.body.content : req.body.commentContent);
       const cleanRevoteComment = rawRevoteComment ? sanitizeCommentPlainText(rawRevoteComment, 200) : "";
 
       // 用户改票时若附带了留言，调用 AI 大模型进行安全审核（结合议题与选项上下文，主要限制政治、色情、引流，放宽正常观点讨论）
@@ -1145,10 +1153,11 @@ router.put(
         isRecordAnonymous = Boolean(record.isAnonymous);
       });
 
-      // 若改票时同时附带了留言观点，则更新（或写入）留言表（单人单议题唯一留言，再次发言为修改）
-      if (cleanRevoteComment) {
+      // 若请求中明确包含留言字段（包含传空字符串清空留言）或包含非空新留言，则更新留言表；未传留言字段时仅同步个人资料与匿名状态
+      let latestCommentRecord = null;
+      if (hasCommentField || cleanRevoteComment) {
         try {
-          await saveOrUpdateUserComment({
+          latestCommentRecord = await saveOrUpdateUserComment({
             topicId,
             twitterId,
             content: cleanRevoteComment,
@@ -1156,6 +1165,7 @@ router.put(
             userInfo,
             effectiveUserId,
             redisClient: req.redisClient,
+            allowClearContent: hasCommentField,
           });
         } catch (commentErr) {
           console.error(
@@ -1166,12 +1176,13 @@ router.put(
           );
         }
       } else {
-        // 未改发言时，同步更新既有留言的匿名状态及最新头像昵称资料到评论表
+        // 未提供留言字段时，同步更新既有留言的匿名状态及最新头像昵称资料到评论表
         try {
           const existingComment = await XHuntHotVoteComment.findOne({
             where: { topicId, twitterId, isDeleted: false },
           });
           if (existingComment) {
+            latestCommentRecord = existingComment;
             let changed = false;
             if (req.body.isAnonymous !== undefined && Boolean(existingComment.isAnonymous) !== isRecordAnonymous) {
               existingComment.isAnonymous = isRecordAnonymous;
@@ -1220,6 +1231,9 @@ router.put(
       }
 
       const results = await getTopicVoteDistribution(topicId, options, req.redisClient);
+      const responseLastComment = latestCommentRecord && latestCommentRecord.content && latestCommentRecord.content.trim()
+        ? sanitizeCommentPlainText(latestCommentRecord.content, 200)
+        : null;
 
       return res.json({
         success: true,
@@ -1229,6 +1243,7 @@ router.put(
             votedOptionId: newOptionId,
             remainingRevotes: Math.max(0, topic.maxRevotes - newRevoteCount),
             isAnonymous: isRecordAnonymous,
+            lastComment: responseLastComment,
           },
           results,
         },
