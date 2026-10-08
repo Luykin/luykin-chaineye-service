@@ -1023,9 +1023,9 @@ router.put(
     param("topicId").isUUID().withMessage("无效的议题ID"),
     body("newOptionId").trim().matches(/^[a-zA-Z0-9_-]{1,32}$/).withMessage("无效的新选项ID"),
     body("isAnonymous").optional().isBoolean().toBoolean(),
-    body("comment").optional().trim().isLength({ min: 1, max: 200 }),
-    body("content").optional().trim().isLength({ min: 1, max: 200 }),
-    body("commentContent").optional().trim().isLength({ min: 1, max: 200 }),
+    body("comment").optional({ checkFalsy: true }).trim().isLength({ min: 1, max: 200 }),
+    body("content").optional({ checkFalsy: true }).trim().isLength({ min: 1, max: 200 }),
+    body("commentContent").optional({ checkFalsy: true }).trim().isLength({ min: 1, max: 200 }),
     validateRequest,
   ],
   async (req, res) => {
