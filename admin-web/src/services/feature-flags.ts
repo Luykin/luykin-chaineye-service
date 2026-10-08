@@ -3,6 +3,7 @@ import type {
   AdBannerConfig,
   FeatureFlagsPublishResponse,
   FeatureFlagsResponse,
+  VipListItem,
   VipListsResponse,
   VipTwitterIdSyncResponse,
 } from "@/types/feature-flags";
