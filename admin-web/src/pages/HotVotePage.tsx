@@ -1278,7 +1278,7 @@ export function HotVotePage() {
                       render: (_: unknown, record: HotVoteAdminVoteRecord) => (
                         <Popconfirm
                           title="确定删除此投票记录？"
-                          description="删除后票数将自动扣除并重新计算。"
+                          description="删除后票数将自动扣除并重新计算。注意：仅删除投票记录，不会删除该用户的附带留言；如需屏蔽留言请前往「留言管理」操作。"
                           okText="删除"
                           cancelText="取消"
                           okButtonProps={{ danger: true, loading: deleteVoteMutation.isPending }}
