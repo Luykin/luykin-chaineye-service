@@ -59,17 +59,43 @@ async function getAiWorkerConfig() {
   return config.aiWorker || {};
 }
 
+const AI_RETRY_COOLDOWN_MS = 60 * 60 * 1000;
+
 function buildPendingAiPostWhere() {
+  const cooldownThreshold = new Date(Date.now() - AI_RETRY_COOLDOWN_MS);
   return {
     text: { [Op.ne]: null },
     [Op.or]: [
       { tagStatus: null },
-      { tagStatus: { [Op.in]: ["pending", "failed", "reused"] } },
+      { tagStatus: "pending" },
       { summaryStatus: null },
-      { summaryStatus: { [Op.in]: ["pending", "failed", "reused"] } },
+      { summaryStatus: "pending" },
       { attitudeStatus: null },
-      { attitudeStatus: { [Op.in]: ["pending", "failed"] } },
+      { attitudeStatus: "pending" },
+      { tagStatus: "reused" },
+      { summaryStatus: "reused" },
       { aiSource: "dev_tweet_ai" },
+      {
+        tagStatus: "failed",
+        [Op.or]: [
+          { aiAnalyzedAt: null },
+          { aiAnalyzedAt: { [Op.lt]: cooldownThreshold } },
+        ],
+      },
+      {
+        summaryStatus: "failed",
+        [Op.or]: [
+          { aiAnalyzedAt: null },
+          { aiAnalyzedAt: { [Op.lt]: cooldownThreshold } },
+        ],
+      },
+      {
+        attitudeStatus: "failed",
+        [Op.or]: [
+          { aiAnalyzedAt: null },
+          { aiAnalyzedAt: { [Op.lt]: cooldownThreshold } },
+        ],
+      },
     ],
   };
 }
@@ -406,12 +432,8 @@ function createSocialListeningAiWorker({ redisClient, tickIntervalMs } = {}) {
 
   function hasSelectedWork(summary = {}) {
     return (
-      Number(summary.contentSelected || 0) > 0 ||
-      Number(summary.attitudeSelected || 0) > 0 ||
       Number(summary.contentAnalyzed || 0) > 0 ||
-      Number(summary.contentFailed || 0) > 0 ||
-      Number(summary.attitudeAnalyzed || 0) > 0 ||
-      Number(summary.attitudeFailed || 0) > 0
+      Number(summary.attitudeAnalyzed || 0) > 0
     );
   }
 

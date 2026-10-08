@@ -33,8 +33,30 @@ function clampInteger(value, fallback, min, max) {
   return Math.min(Math.max(Math.floor(num), min), max);
 }
 
+function sanitizeSurrogates(value) {
+  if (typeof value !== "string") return value;
+  if (typeof value.toWellFormed === "function") {
+    return value.toWellFormed();
+  }
+  return value.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+}
+
+function deepSanitizeSurrogates(value) {
+  if (typeof value === "string") return sanitizeSurrogates(value);
+  if (Array.isArray(value)) return value.map(deepSanitizeSurrogates);
+  if (value && typeof value === "object") {
+    const output = {};
+    for (const [k, v] of Object.entries(value)) {
+      output[k] = deepSanitizeSurrogates(v);
+    }
+    return output;
+  }
+  return value;
+}
+
 function truncateText(value, maxLength) {
-  return Array.from(String(value || "")).slice(0, maxLength).join("");
+  const text = sanitizeSurrogates(String(value || ""));
+  return Array.from(text).slice(0, maxLength).join("");
 }
 
 function textHash(text) {
@@ -270,7 +292,7 @@ function getAiRankOrder() {
 }
 
 function summarizeError(error) {
-  return String(error?.message || error).slice(0, 1000);
+  return truncateText(error?.message || error, 1000);
 }
 
 async function getAiConfig() {
@@ -314,7 +336,7 @@ function hasLocalAiConfig(aiConfig = {}) {
 function normalizePrompt(value, maxLength = 6000) {
   const text = String(value || "").trim();
   if (!text) return "";
-  return text.slice(0, Math.max(200, Number(maxLength) || 6000));
+  return truncateText(text, Math.max(200, Number(maxLength) || 6000));
 }
 
 function getBoardMetadata(board) {
@@ -444,8 +466,8 @@ function buildPromptInfo(board, aiConfig, field, variables = {}) {
       source,
       configured,
       length: prompt.length,
-      preview: prompt.slice(0, 240),
-      templatePreview: template.slice(0, 240),
+      preview: truncateText(prompt, 240),
+      templatePreview: truncateText(template, 240),
     },
   };
 }
@@ -610,7 +632,7 @@ function filterExcludedKeywords(values, exclusions = []) {
 function normalizeHotTags(value, text, limit = 12, exclusions = []) {
   const output = [];
   for (const item of filterExcludedKeywords(value, exclusions)) {
-    const tag = String(item || "").trim().slice(0, 80);
+    const tag = truncateText(String(item || "").trim(), 80);
     if (!hotTagAppearsInText(tag, text) || output.includes(tag)) continue;
     output.push(tag);
     if (output.length >= limit) break;
@@ -795,7 +817,19 @@ async function callTweetAnalysisAi(board, post, options = {}) {
   };
 }
 
-function isPendingContentPost(post) {
+const MAX_AI_AUTO_RETRIES = 2;
+const AI_RETRY_COOLDOWN_MS = 60 * 60 * 1000;
+
+function canAutoRetryPost(post) {
+  const retryCount = Number(post.rawTweet?.socialListeningAi?.retryCount || 0);
+  return retryCount < MAX_AI_AUTO_RETRIES;
+}
+
+function isPendingContentPost(post, force = false) {
+  const isFailed = post.tagStatus === "failed" || post.summaryStatus === "failed";
+  if (!force && isFailed && !canAutoRetryPost(post)) {
+    return false;
+  }
   return (
     !Array.isArray(post.topics) ||
     !post.topics.length ||
@@ -806,7 +840,11 @@ function isPendingContentPost(post) {
   );
 }
 
-function isPendingAttitudePost(post) {
+function isPendingAttitudePost(post, force = false) {
+  const isFailed = post.attitudeStatus === "failed";
+  if (!force && isFailed && !canAutoRetryPost(post)) {
+    return false;
+  }
   return !post.attitudeStatus || ["pending", "failed"].includes(post.attitudeStatus);
 }
 
@@ -842,19 +880,43 @@ async function analyzePendingPostAi(board, options = {}) {
   const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
   const maxReferenceContextLength = clampInteger(options.maxReferenceContextLength || aiConfig.referenceContextMaxLength, 1200, 200, 2000);
   const pendingClauses = [];
+  const cooldownThreshold = new Date(Date.now() - AI_RETRY_COOLDOWN_MS);
   if (contentEnabled) {
     pendingClauses.push(
       { tagStatus: null },
-      { tagStatus: { [Op.in]: ["pending", "failed", "reused"] } },
+      { tagStatus: "pending" },
       { summaryStatus: null },
-      { summaryStatus: { [Op.in]: ["pending", "failed", "reused"] } },
-      { aiSource: "dev_tweet_ai" }
+      { summaryStatus: "pending" },
+      { tagStatus: "reused" },
+      { summaryStatus: "reused" },
+      { aiSource: "dev_tweet_ai" },
+      {
+        tagStatus: "failed",
+        [Op.or]: [
+          { aiAnalyzedAt: null },
+          { aiAnalyzedAt: { [Op.lt]: cooldownThreshold } },
+        ],
+      },
+      {
+        summaryStatus: "failed",
+        [Op.or]: [
+          { aiAnalyzedAt: null },
+          { aiAnalyzedAt: { [Op.lt]: cooldownThreshold } },
+        ],
+      }
     );
   }
   if (attitudeEnabled) {
     pendingClauses.push(
       { attitudeStatus: null },
-      { attitudeStatus: { [Op.in]: ["pending", "failed"] } }
+      { attitudeStatus: "pending" },
+      {
+        attitudeStatus: "failed",
+        [Op.or]: [
+          { aiAnalyzedAt: null },
+          { aiAnalyzedAt: { [Op.lt]: cooldownThreshold } },
+        ],
+      }
     );
   }
   const postWhere = {
@@ -895,8 +957,8 @@ async function analyzePendingPostAi(board, options = {}) {
       condensedTextsByTweetId: longTextCondensation.condensedTextsByTweetId,
       longTextModesByTweetId: longTextCondensation.longTextModesByTweetId,
     });
-    const shouldGenerateContent = contentEnabled && (force || isPendingContentPost(post));
-    const shouldGenerateAttitude = attitudeEnabled && (force || isPendingAttitudePost(post));
+    const shouldGenerateContent = contentEnabled && (force || isPendingContentPost(post, force));
+    const shouldGenerateAttitude = attitudeEnabled && (force || isPendingAttitudePost(post, force));
     if (!shouldGenerateContent && !shouldGenerateAttitude) return;
     if (shouldGenerateContent) content.selected += 1;
     if (shouldGenerateAttitude) attitude.selected += 1;
@@ -975,7 +1037,7 @@ async function analyzePendingPostAi(board, options = {}) {
       }
 
       await post.update({
-        ...patch,
+        ...deepSanitizeSurrogates(patch),
         aiStatus: buildCombinedAiStatus({
           contentEnabled,
           attitudeEnabled,
@@ -986,10 +1048,13 @@ async function analyzePendingPostAi(board, options = {}) {
         aiAnalyzedAt: new Date(),
         aiError: null,
         aiSource: "social_listening_combined",
-        rawTweet: {
+        rawTweet: deepSanitizeSurrogates({
           ...(post.rawTweet || {}),
-          socialListeningAi: rawAi,
-        },
+          socialListeningAi: {
+            ...rawAi,
+            retryCount: 0,
+          },
+        }),
       });
       if (shouldGenerateContent) content.analyzed += 1;
       if (shouldGenerateAttitude) attitude.analyzed += 1;
@@ -997,6 +1062,8 @@ async function analyzePendingPostAi(board, options = {}) {
     } catch (error) {
       if (shouldGenerateContent) content.failed += 1;
       if (shouldGenerateAttitude) attitude.failed += 1;
+      const currentRawAi = post.rawTweet?.socialListeningAi || {};
+      const retryCount = (Number(currentRawAi.retryCount) || 0) + 1;
       await post.update({
         tagStatus: shouldGenerateContent && ["pending", "failed", null].includes(post.tagStatus) ? "failed" : post.tagStatus,
         summaryStatus: shouldGenerateContent && ["pending", "failed", null].includes(post.summaryStatus) ? "failed" : post.summaryStatus,
@@ -1004,6 +1071,13 @@ async function analyzePendingPostAi(board, options = {}) {
         attitudeStatus: shouldGenerateAttitude ? "failed" : post.attitudeStatus,
         aiAnalyzedAt: new Date(),
         aiError: summarizeError(error),
+        rawTweet: deepSanitizeSurrogates({
+          ...(post.rawTweet || {}),
+          socialListeningAi: {
+            ...currentRawAi,
+            retryCount,
+          },
+        }),
       }).catch(() => null);
       console.warn(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=failed ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} reference=${Boolean(reference.context)} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude} error=${summarizeError(error)}`);
     }
