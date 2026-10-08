@@ -433,7 +433,7 @@ module.exports = (sequelize) => {
   1. 状态为 `published` 且当前时间在 `startTime ~ endTime`；
   2. 匹配 `displayDomains` 与 `displayLanguages`；
   3. **测试阶段隔离**：若 `testingPhase === true`，仅当 `testList` 包含 `x-user-id` 或 `x-tw-id` 时返回，否则返回 `null`；
-  4. 若未投票，下发数据中 `results` 字段强行置 `null`。
+  4. 始终下发 `results` 投票统计（百分比数据本身已通过 `/all-votes` 汇总接口公开）：后台清理用户投票记录后，客户端本地仍持有"已投票"状态时依赖 `results` 退出"结果加载失败"错误态并重新投票。
 
 #### 2. 提交投票（免登录 / 登录）
 - **Path**: `POST /api/xhunt/hot-vote/topics/:topicId/vote`
@@ -465,7 +465,8 @@ module.exports = (sequelize) => {
 ```
 - **业务安全处理**：
   - 校验 `revoteCount < maxRevotes`，并在 SQL 事务内以行级锁更新；
-  - Redis Pipeline 扣减旧票并增加新票。
+  - 若历史投票记录已被后台管理员删除（客户端仍持有"已投票"本地状态），自动降级为首投重新创建记录（`revoteCount` 归零、重新计算权重快照）；
+  - Redis Pipeline 扣减旧票并增加新票（降级首投时按首投口径全量 +1）。
 
 #### 4. 获取留言列表（公开查询）
 - **Path**: `GET /api/xhunt/hot-vote/topics/:topicId/comments`

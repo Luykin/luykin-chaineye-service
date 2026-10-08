@@ -747,16 +747,14 @@ router.get(
                 inactiveReason,
               };
 
-          let results = null;
-          // 已投票用户 或 活动已结束/不可投票时，均返回投票统计结果，供前端完整查看详情与分布
-          if (hasVoted || !isVotingActive) {
-            const optionsList = Array.isArray(t.options) ? t.options : [];
-            results = await getTopicVoteDistribution(
-              t.id,
-              optionsList,
-              req.redisClient
-            );
-          }
+          // 始终返回投票统计结果：百分比数据已通过 /all-votes 汇总接口对未投票用户公开，
+          // 且后台管理员清理投票记录后，客户端本地仍持有"已投票"状态时需要 results 才能退出"结果加载失败"错误态
+          const optionsList = Array.isArray(t.options) ? t.options : [];
+          const results = await getTopicVoteDistribution(
+            t.id,
+            optionsList,
+            req.redisClient
+          );
 
           const topicPayload = {
             id: t.id,
@@ -1015,6 +1013,7 @@ router.post(
 /**
  * PUT /api/xhunt/hot-vote/topics/:topicId/vote
  * 修改投票选项（受 maxRevotes 限制）
+ * 若历史投票记录已被后台管理员删除（客户端仍持有"已投票"本地状态），自动降级为首投重新创建记录
  */
 router.put(
   "/topics/:topicId/vote",
@@ -1110,11 +1109,13 @@ router.put(
       // 解析有效用户信息
       const userInfo = await resolveVoterUserInfo(req, twitterId);
       const effectiveUserId = userInfo.effectiveUserId;
+      const safeClientIp = req.ip ? String(req.ip).substring(0, 64) : null;
 
       let oldOptionId = null;
       let newRevoteCount = 0;
       let isRecordAnonymous = false;
       let appliedVoteWeight = 1;
+      let createdFresh = false;
 
       await pgInstance.transaction(async (t) => {
         const record = await XHuntHotVoteRecord.findOne({
@@ -1124,7 +1125,31 @@ router.put(
         });
 
         if (!record) {
-          throw new Error("VOTE_RECORD_NOT_FOUND");
+          // 历史投票记录已被后台管理员清理（或客户端仍持有过期的"已投票"本地状态）：
+          // 降级为首投重新创建投票记录，避免用户陷入"无法重新投票"的死局
+          const { rank: freshRank, weight: freshWeight } = await resolveVoterRankAndWeight({
+            twitterId,
+            effectiveUserId,
+            redisClient: req.redisClient,
+          });
+          await XHuntHotVoteRecord.create(
+            {
+              topicId,
+              twitterId,
+              xHuntUserId: effectiveUserId,
+              optionId: newOptionId,
+              revoteCount: 0,
+              voteWeight: freshWeight,
+              voterRankSnapshot: freshRank,
+              isAnonymous: Boolean(req.body.isAnonymous),
+              clientIp: safeClientIp,
+            },
+            { transaction: t }
+          );
+          createdFresh = true;
+          isRecordAnonymous = Boolean(req.body.isAnonymous);
+          appliedVoteWeight = freshWeight;
+          return;
         }
 
         if (record.optionId === newOptionId) {
@@ -1212,16 +1237,24 @@ router.put(
 
       // 原子更新 Redis 缓存（旧选项 -1/-weight，新选项 +1/+weight；仅在缓存存在时自增，防止产生负数与脏数据）
       const cacheKey = `hotvote:counts:${topicId}`;
-      if (req.redisClient && oldOptionId) {
+      if (req.redisClient && (oldOptionId || createdFresh)) {
         try {
           const cacheExists = req.redisClient.exists
             ? (await req.redisClient.exists(cacheKey)) === 1
             : false;
           if (cacheExists && req.redisClient.hIncrBy) {
-            await req.redisClient.hIncrBy(cacheKey, `opt:${oldOptionId}`, -1);
-            await req.redisClient.hIncrBy(cacheKey, `opt:${newOptionId}`, 1);
-            await req.redisClient.hIncrBy(cacheKey, `opt_weight:${oldOptionId}`, -appliedVoteWeight);
-            await req.redisClient.hIncrBy(cacheKey, `opt_weight:${newOptionId}`, appliedVoteWeight);
+            if (createdFresh) {
+              // 降级首投：参与人数与目标选项计数/权重全量 +1（无旧选项可扣减）
+              await req.redisClient.hIncrBy(cacheKey, "participants", 1);
+              await req.redisClient.hIncrBy(cacheKey, "total_weight", appliedVoteWeight);
+              await req.redisClient.hIncrBy(cacheKey, `opt:${newOptionId}`, 1);
+              await req.redisClient.hIncrBy(cacheKey, `opt_weight:${newOptionId}`, appliedVoteWeight);
+            } else {
+              await req.redisClient.hIncrBy(cacheKey, `opt:${oldOptionId}`, -1);
+              await req.redisClient.hIncrBy(cacheKey, `opt:${newOptionId}`, 1);
+              await req.redisClient.hIncrBy(cacheKey, `opt_weight:${oldOptionId}`, -appliedVoteWeight);
+              await req.redisClient.hIncrBy(cacheKey, `opt_weight:${newOptionId}`, appliedVoteWeight);
+            }
             await ensureVoteCacheTtl(req.redisClient, cacheKey);
           }
           await invalidateTopicCommentsCache(req.redisClient, topicId);
@@ -1249,8 +1282,9 @@ router.put(
         },
       });
     } catch (err) {
-      if (err.message === "VOTE_RECORD_NOT_FOUND") {
-        return res.status(404).json({ success: false, error: "未找到您的历史投票记录" });
+      // 降级首投与正常投票并发撞 uk_hot_vote_topic_twitter_id 唯一索引时，返回友好错误而非 500
+      if (err instanceof UniqueConstraintError || err.name === "SequelizeUniqueConstraintError") {
+        return res.status(400).json({ success: false, error: "ALREADY_VOTED", message: "您已参与过该投票，请刷新后重试" });
       }
       if (err.message === "SAME_OPTION") {
         return res.status(400).json({ success: false, error: "您已支持该选项，无需重复修改" });
