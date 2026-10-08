@@ -12,4 +12,9 @@
 .vip-list-item:nth-child(odd) { background: var(--admin-surface-soft); }
 .vip-list-item:hover { background: var(--admin-surface-hover); }
 .vip-sync-section { margin-top: 20px; background: var(--admin-surface-soft); border: 1px dashed var(--admin-border-soft); }
-@media (max-width: 768px) { .vip-management-grid { grid-template-columns: 1fr; } .vip-input-row { flex-direction: column; } }
+.vip-input-twitter-id { width: 160px; }
+@media (max-width: 768px) {
+  .vip-management-grid { grid-template-columns: 1fr; }
+  .vip-input-row { flex-direction: column; }
+  .vip-input-twitter-id { width: 100% !important; }
+}

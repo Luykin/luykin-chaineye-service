@@ -252,12 +252,82 @@ router.get(
   }
 );
 
+async function handleUpdateTwitterId(req, res) {
+  let row;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ success: false, error: "无效的名单 ID" });
+    }
+
+    row = await XhuntVipTestUser.findByPk(id);
+    if (!row) {
+      return res.status(404).json({ success: false, error: "名单用户不存在" });
+    }
+
+    const rawTwitterId = req.body?.twitterId;
+    const normalizedTwitterId =
+      rawTwitterId != null && String(rawTwitterId).trim()
+        ? String(rawTwitterId).trim()
+        : null;
+
+    if (normalizedTwitterId && !/^\d{1,30}$/.test(normalizedTwitterId)) {
+      return res.status(400).json({ success: false, error: "Twitter ID 必须为纯数字" });
+    }
+
+    const previousTwitterId = row.twitterId;
+    row.twitterId = normalizedTwitterId;
+    await row.save();
+
+    await refreshVipCache();
+    await logAdminAction(req, {
+      action: "vip-list-update-twitter-id",
+      success: true,
+      message: `listType=${row.listType} username=${row.username} previous=${previousTwitterId || "null"} current=${normalizedTwitterId || "null"}`,
+    });
+
+    res.json({
+      success: true,
+      data: serializeVipUser(row),
+    });
+  } catch (error) {
+    console.error("[vip-lists/update-twitter-id] 更新失败:", error);
+    await logAdminAction(req, {
+      action: "vip-list-update-twitter-id",
+      success: false,
+      message: `username=${row?.username || "-"} error=${error.message || "更新失败"}`,
+    });
+    res.status(500).json({ success: false, error: error.message || "更新 Twitter ID 失败" });
+  }
+}
+
+router.put(
+  "/vip-lists/:id/twitter-id",
+  adminAuth,
+  requirePermission("vip-management"),
+  handleUpdateTwitterId
+);
+
+router.post(
+  "/vip-lists/:id/twitter-id",
+  adminAuth,
+  requirePermission("vip-management"),
+  handleUpdateTwitterId
+);
+
+router.put(
+  "/vip-lists/:id",
+  adminAuth,
+  requirePermission("vip-management"),
+  handleUpdateTwitterId
+);
+
 router.post(
   "/vip-lists/add",
   adminAuth,
   requirePermission("vip-management"),
   async (req, res) => {
-    const { listType, username } = req.body || {};
+    const { listType, username, twitterId } = req.body || {};
     try {
       if (!["vip", "internal_test"].includes(listType)) {
         return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
@@ -268,6 +338,15 @@ router.post(
         return res.status(400).json({ success: false, error: "username 不能为空" });
       }
 
+      const normalizedTwitterId =
+        twitterId != null && String(twitterId).trim()
+          ? String(twitterId).trim()
+          : null;
+
+      if (normalizedTwitterId && !/^\d{1,30}$/.test(normalizedTwitterId)) {
+        return res.status(400).json({ success: false, error: "Twitter ID 必须为纯数字" });
+      }
+
       const [row, created] = await XhuntVipTestUser.findOrCreate({
         where: {
           username: normalizedUsername,
@@ -276,14 +355,20 @@ router.post(
         defaults: {
           username: normalizedUsername,
           listType,
+          twitterId: normalizedTwitterId,
         },
       });
+
+      if (!created && normalizedTwitterId && row.twitterId !== normalizedTwitterId) {
+        row.twitterId = normalizedTwitterId;
+        await row.save();
+      }
 
       await refreshVipCache();
       await logAdminAction(req, {
         action: "vip-list-add",
         success: true,
-        message: `listType=${listType} username=${normalizedUsername} created=${created}`,
+        message: `listType=${listType} username=${normalizedUsername} twitterId=${row.twitterId || "null"} created=${created}`,
       });
 
       res.json({

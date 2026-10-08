@@ -45,11 +45,29 @@ export async function fetchFeatureTranslations() {
   return apiRequest<{ zh?: Record<string, string> }>("/api/xhunt/stats/feature-flags/translations");
 }
 
-export async function addVipListUser(listType: "vip" | "internal_test", username: string) {
+export async function addVipListUser(
+  listType: "vip" | "internal_test",
+  username: string,
+  twitterId?: string | null
+) {
   return apiRequest<{ success: boolean; data?: unknown; error?: string }>("/api/xhunt/stats/vip-lists/add", {
     method: "POST",
-    body: { listType, username },
+    body: {
+      listType,
+      username,
+      twitterId: twitterId ? twitterId.trim() : undefined,
+    },
   });
+}
+
+export async function updateVipTwitterId(id: number, twitterId: string | null) {
+  return apiRequest<{ success: boolean; data?: VipListItem; error?: string }>(
+    `/api/xhunt/stats/vip-lists/${id}/twitter-id`,
+    {
+      method: "PUT",
+      body: { twitterId },
+    }
+  );
 }
 
 export async function deleteVipListUser(id: number) {

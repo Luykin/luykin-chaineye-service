@@ -11,6 +11,7 @@ import {
   fetchVipLists,
   publishFeatureFlagsConfig,
   syncVipTwitterIds,
+  updateVipTwitterId,
 } from "@/services/feature-flags";
 import type { VipListItem } from "@/types/feature-flags";
 
@@ -19,6 +20,7 @@ function VipListCard({
   items,
   onAdd,
   onDelete,
+  onEditTwitterId,
   onBecomeCreator,
   creatorLoadingId,
   showCreatorAction,
@@ -26,43 +28,104 @@ function VipListCard({
 }: {
   title: string;
   items: VipListItem[];
-  onAdd: (username: string) => void;
+  onAdd: (username: string, twitterId?: string) => void;
   onDelete: (id: number) => void;
+  onEditTwitterId: (item: VipListItem) => void;
   onBecomeCreator?: (item: VipListItem) => void;
   creatorLoadingId?: number | null;
   showCreatorAction?: boolean;
   loading?: boolean;
 }) {
   const [value, setValue] = useState("");
+  const [twitterIdValue, setTwitterIdValue] = useState("");
+
+  const handleAdd = () => {
+    const trimmedUser = value.trim();
+    if (!trimmedUser) return;
+    onAdd(trimmedUser, twitterIdValue.trim() || undefined);
+    setValue("");
+    setTwitterIdValue("");
+  };
+
   return (
     <div className="vip-card">
-      <div className="vip-card-header"><span className="vip-card-title">{title}</span><span className="vip-card-count">{items.length} 人</span></div>
+      <div className="vip-card-header">
+        <span className="vip-card-title">{title}</span>
+        <span className="vip-card-count">{items.length} 人</span>
+      </div>
       <div className="vip-input-row">
-        <Input value={value} onChange={(event) => setValue(event.target.value)} onPressEnter={() => { if (value.trim()) { onAdd(value.trim()); setValue(""); } }} placeholder="输入用户名，回车添加" />
-        <Button type="primary" loading={loading} onClick={() => { if (value.trim()) { onAdd(value.trim()); setValue(""); } }}>添加</Button>
+        <Input
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onPressEnter={handleAdd}
+          placeholder="输入用户名"
+          style={{ flex: 1 }}
+        />
+        <Input
+          value={twitterIdValue}
+          onChange={(event) => setTwitterIdValue(event.target.value)}
+          onPressEnter={handleAdd}
+          placeholder="推特 ID（可选）"
+          className="vip-input-twitter-id"
+        />
+        <Button type="primary" loading={loading} onClick={handleAdd}>
+          添加
+        </Button>
       </div>
       <div className="vip-list">
-        {items.length ? items.map((item) => (
-          <div className="vip-list-item" key={item.id}>
-            <span>
-              {item.username}
-              {item.twitterId ? <Tag color="blue" style={{ marginLeft: 8 }}>ID: {item.twitterId}</Tag> : <Tag style={{ marginLeft: 8 }}>未同步ID</Tag>}
-            </span>
-            <Space size={6}>
-              {showCreatorAction ? (
-                <Button
-                  size="small"
-                  disabled={!item.twitterId}
-                  loading={creatorLoadingId === item.id}
-                  onClick={() => onBecomeCreator?.(item)}
+        {items.length ? (
+          items.map((item) => (
+            <div className="vip-list-item" key={item.id}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
+                <span
+                  style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={`@${item.username}`}
                 >
-                  成为认证者
+                  {item.username}
+                </span>
+                {item.twitterId ? (
+                  <Tag
+                    color="blue"
+                    style={{ cursor: "pointer", margin: 0, flexShrink: 0 }}
+                    onClick={() => onEditTwitterId(item)}
+                    title="点击修改 Twitter ID"
+                  >
+                    ID: {item.twitterId}
+                  </Tag>
+                ) : (
+                  <Tag
+                    color="warning"
+                    style={{ cursor: "pointer", margin: 0, flexShrink: 0 }}
+                    onClick={() => onEditTwitterId(item)}
+                    title="点击补充 Twitter ID"
+                  >
+                    未同步ID
+                  </Tag>
+                )}
+              </span>
+              <Space size={6} style={{ flexShrink: 0 }}>
+                <Button size="small" onClick={() => onEditTwitterId(item)}>
+                  {item.twitterId ? "修改ID" : "补充ID"}
                 </Button>
-              ) : null}
-              <Button size="small" danger onClick={() => onDelete(item.id)}>删除</Button>
-            </Space>
-          </div>
-        )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无用户" />}
+                {showCreatorAction ? (
+                  <Button
+                    size="small"
+                    disabled={!item.twitterId}
+                    loading={creatorLoadingId === item.id}
+                    onClick={() => onBecomeCreator?.(item)}
+                  >
+                    成为认证者
+                  </Button>
+                ) : null}
+                <Button size="small" danger onClick={() => onDelete(item.id)}>
+                  删除
+                </Button>
+              </Space>
+            </div>
+          ))
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无用户" />
+        )}
       </div>
     </div>
   );
@@ -76,16 +139,44 @@ export function VipManagementPage() {
   const internalTest = query.data?.data.internalTest || [];
   const isSuperAdmin = user?.role === "super";
 
+  const [editingItem, setEditingItem] = useState<VipListItem | null>(null);
+  const [editingTwitterId, setEditingTwitterId] = useState("");
+
   const addMutation = useMutation({
-    mutationFn: ({ listType, username }: { listType: "vip" | "internal_test"; username: string }) => addVipListUser(listType, username),
-    onSuccess: () => { messageApi.success("添加成功"); void query.refetch(); },
+    mutationFn: ({
+      listType,
+      username,
+      twitterId,
+    }: {
+      listType: "vip" | "internal_test";
+      username: string;
+      twitterId?: string;
+    }) => addVipListUser(listType, username, twitterId),
+    onSuccess: () => {
+      messageApi.success("添加成功");
+      void query.refetch();
+    },
     onError: (error: Error) => messageApi.error(error.message || "添加失败"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteVipListUser,
-    onSuccess: () => { messageApi.success("删除成功"); void query.refetch(); },
+    onSuccess: () => {
+      messageApi.success("删除成功");
+      void query.refetch();
+    },
     onError: (error: Error) => messageApi.error(error.message || "删除失败"),
+  });
+
+  const updateTwitterIdMutation = useMutation({
+    mutationFn: ({ id, twitterId }: { id: number; twitterId: string | null }) =>
+      updateVipTwitterId(id, twitterId),
+    onSuccess: () => {
+      messageApi.success("Twitter ID 保存成功");
+      setEditingItem(null);
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "更新 Twitter ID 失败"),
   });
 
   const syncIdMutation = useMutation({
@@ -122,7 +213,7 @@ export function VipManagementPage() {
 
   const confirmBecomeCreator = (item: VipListItem) => {
     if (!item.twitterId) {
-      messageApi.warning("该用户未同步 Twitter ID，请先同步ID信息");
+      messageApi.warning("该用户未同步 Twitter ID，请先补充或同步ID信息");
       return;
     }
     Modal.confirm({
@@ -134,6 +225,36 @@ export function VipManagementPage() {
     });
   };
 
+  const handleOpenEdit = (item: VipListItem) => {
+    setEditingItem(item);
+    setEditingTwitterId(item.twitterId || "");
+  };
+
+  const handleSaveTwitterId = () => {
+    if (!editingItem) return;
+    const trimmed = editingTwitterId.trim();
+    if (trimmed && !/^\d+$/.test(trimmed)) {
+      messageApi.error("Twitter ID 必须为纯数字（例如 44196397）");
+      return;
+    }
+    updateTwitterIdMutation.mutate({
+      id: editingItem.id,
+      twitterId: trimmed || null,
+    });
+  };
+
+  const handleAddUser = (
+    listType: "vip" | "internal_test",
+    username: string,
+    twitterId?: string
+  ) => {
+    if (twitterId && !/^\d+$/.test(twitterId)) {
+      messageApi.error("Twitter ID 必须为纯数字（例如 44196397）");
+      return;
+    }
+    addMutation.mutate({ listType, username, twitterId });
+  };
+
   const empty = useMemo(() => vip.length === 0 && internalTest.length === 0, [vip.length, internalTest.length]);
   const missingIdCount = useMemo(() => [...vip, ...internalTest].filter((item) => !item.twitterId).length, [vip, internalTest]);
 
@@ -143,8 +264,28 @@ export function VipManagementPage() {
       <div className="vip-management-container">
         <div className="vip-management-header"><h2>VIP / 内测名单管理</h2></div>
         <div className="vip-management-grid">
-          <VipListCard title="VIP 名单" items={vip} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "vip", username })} onDelete={(id) => deleteMutation.mutate(id)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
-          <VipListCard title="内测名单" items={internalTest} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "internal_test", username })} onDelete={(id) => deleteMutation.mutate(id)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
+          <VipListCard
+            title="VIP 名单"
+            items={vip}
+            loading={addMutation.isPending}
+            onAdd={(username, twitterId) => handleAddUser("vip", username, twitterId)}
+            onDelete={(id) => deleteMutation.mutate(id)}
+            onEditTwitterId={handleOpenEdit}
+            showCreatorAction={isSuperAdmin}
+            onBecomeCreator={confirmBecomeCreator}
+            creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null}
+          />
+          <VipListCard
+            title="内测名单"
+            items={internalTest}
+            loading={addMutation.isPending}
+            onAdd={(username, twitterId) => handleAddUser("internal_test", username, twitterId)}
+            onDelete={(id) => deleteMutation.mutate(id)}
+            onEditTwitterId={handleOpenEdit}
+            showCreatorAction={isSuperAdmin}
+            onBecomeCreator={confirmBecomeCreator}
+            creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null}
+          />
         </div>
         <Card size="small" className="vip-sync-section">
           <Space direction="vertical" size={8}>
@@ -161,6 +302,38 @@ export function VipManagementPage() {
           </Space>
         </Card>
       </div>
+      <Modal
+        title={editingItem?.twitterId ? `修改 Twitter ID - @${editingItem.username}` : `补充 Twitter ID - @${editingItem?.username}`}
+        open={!!editingItem}
+        onCancel={() => setEditingItem(null)}
+        onOk={handleSaveTwitterId}
+        confirmLoading={updateTwitterIdMutation.isPending}
+        okText="保存"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <div style={{ padding: "8px 0" }}>
+          <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+            部分用户的 Twitter ID 无法通过接口自动获取。手动补充纯数字 Twitter ID（Snowflake ID）后，即可直接开通创作者认证。
+          </Typography.Paragraph>
+          <div style={{ marginBottom: 8 }}>
+            <Typography.Text strong>Twitter ID（纯数字）：</Typography.Text>
+          </div>
+          <Input
+            placeholder="请输入纯数字 Twitter ID，例如 44196397"
+            value={editingTwitterId}
+            onChange={(event) => setEditingTwitterId(event.target.value.trim())}
+            onPressEnter={handleSaveTwitterId}
+            autoFocus
+            allowClear
+          />
+          <div style={{ marginTop: 8 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              提示：若清空输入并保存，将清除该用户的 Twitter ID 记录。
+            </Typography.Text>
+          </div>
+        </div>
+      </Modal>
     </PermissionGuard>
   );
 }
