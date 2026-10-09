@@ -318,7 +318,6 @@ function serializeManagerInvitation(invitation) {
 function serializeKolInvitation(invitation) {
   const item = invitation.toJSON ? invitation.toJSON() : invitation;
   const snapshot = item.invitationSnapshot || {};
-  const confirmed = item.status === "confirmed" || !!item.collaboration;
   return {
     id: item.id,
     activity: {
@@ -340,8 +339,9 @@ function serializeKolInvitation(invitation) {
       language: snapshot.language || null,
     },
     // Internal offer/reservation amounts must never be exposed as a grant or claimable amount.
-    brief: confirmed ? (snapshot.brief || null) : null,
-    requiredPoints: confirmed ? (snapshot.requiredPoints || []) : [],
+    // Brief 和必须表达事项是邀约条款，KOL 需要在接受前看到，因此全状态返回。
+    brief: snapshot.brief || null,
+    requiredPoints: snapshot.requiredPoints || [],
     acceptedAt: item.acceptedAt || null,
     reservationExpiresAt: item.reservationExpiresAt || null,
     collaboration: item.collaboration
