@@ -289,7 +289,17 @@ function normalizeInvitationSnapshot(template, invitation, activity) {
   };
 }
 
-function serializeManagerInvitation(invitation) {
+async function loadKolAvatarFallbacks(invitations) {
+  const twitterIds = [...new Set(invitations.map((item) => String(item.kolTwitterId || "").trim()).filter(Boolean))];
+  if (!twitterIds.length) return new Map();
+  const accounts = await XAccount.findAll({
+    where: { xId: { [Op.in]: twitterIds } },
+    attributes: ["xId", "avatar"],
+  });
+  return new Map(accounts.filter((account) => account.xId && account.avatar).map((account) => [String(account.xId), account.avatar]));
+}
+
+function serializeManagerInvitation(invitation, kolAvatarMap = null) {
   const item = invitation.toJSON ? invitation.toJSON() : invitation;
   const collaboration = item.collaboration || null;
   return {
@@ -300,6 +310,7 @@ function serializeManagerInvitation(invitation) {
       authCenterUserId: item.kolAuthCenterUserId || null,
       username: item.invitationSnapshot?.kol?.username || null,
       displayName: item.invitationSnapshot?.kol?.displayName || null,
+      avatarUrl: kolAvatarMap?.get(String(item.kolTwitterId)) || null,
     },
     invitationSnapshot: item.invitationSnapshot || {},
     offerAmount: String(item.offerAmount),
@@ -515,10 +526,11 @@ router.get("/activities/:activityId", async (req, res) => {
       include: [{ model: BusinessCollaboration, as: "collaboration" }],
       order: [["updatedAt", "DESC"]],
     });
+    const kolAvatarMap = await loadKolAvatarFallbacks(invitations);
     res.set("Cache-Control", "no-store");
     return res.json({
       success: true,
-      data: { ...serializeActivityForManager(activity, access), invitations: invitations.map(serializeManagerInvitation) },
+      data: { ...serializeActivityForManager(activity, access), invitations: invitations.map((invitation) => serializeManagerInvitation(invitation, kolAvatarMap)) },
     });
   } catch (error) {
     return sendError(res, error, "ACTIVITY_DETAIL_FAILED");
