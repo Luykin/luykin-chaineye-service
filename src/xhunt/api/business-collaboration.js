@@ -329,6 +329,9 @@ function serializeKolInvitation(invitation) {
       endAt: snapshot.activity?.endAt || item.activity?.endAt || null,
     },
     status: item.status,
+    // 项目方给该 KOL 的拟定报价，仅作邀约条款展示，不是可领取金额
+    offerAmount: item.offerAmount === null || item.offerAmount === undefined ? null : String(item.offerAmount),
+    currency: item.currency || null,
     invitation: {
       title: snapshot.title || null,
       message: snapshot.message || null,
