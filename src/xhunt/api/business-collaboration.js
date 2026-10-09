@@ -316,7 +316,7 @@ function serializeManagerInvitation(invitation) {
   };
 }
 
-function serializeKolInvitation(invitation) {
+function serializeKolInvitation(invitation, fallbackAvatarUrl = null) {
   const item = invitation.toJSON ? invitation.toJSON() : invitation;
   const snapshot = item.invitationSnapshot || {};
   return {
@@ -327,6 +327,7 @@ function serializeKolInvitation(invitation) {
       projectTwitterHandle: snapshot.activity?.projectTwitterHandle || item.activity?.projectTwitterHandle || null,
       projectDisplayName: snapshot.activity?.projectDisplayName || item.activity?.projectDisplayName || null,
       endAt: snapshot.activity?.endAt || item.activity?.endAt || null,
+      projectTwitterAvatarUrl: item.activity?.projectTwitterAvatarUrl || fallbackAvatarUrl || null,
     },
     status: item.status,
     // 项目方给该 KOL 的拟定报价，仅作邀约条款展示，不是可领取金额
@@ -485,16 +486,17 @@ router.get("/me", async (req, res) => {
       }) : Promise.resolve([]),
     ]);
     const managedActivityRows = accesses.filter((access) => access.activity);
-    const [managerStatsByActivity, avatarFallbacks] = await Promise.all([
+    const [managerStatsByActivity, avatarFallbacks, invitationAvatarFallbacks] = await Promise.all([
       loadManagerActivityStats(managedActivityRows.map((access) => access.activity)),
       loadProjectAvatarFallbacks(managedActivityRows.map((access) => access.activity)),
+      loadProjectAvatarFallbacks(invitations.map((invitation) => invitation.activity).filter(Boolean)),
     ]);
     res.set("Cache-Control", "no-store");
     return res.json({
       success: true,
       data: {
         managedActivities: managedActivityRows.map((access) => serializeActivityForManager(access.activity, access, managerStatsByActivity.get(String(access.activity.id)), avatarFallbacks.get(String(access.activity.id)) || null)),
-        kolTasks: invitations.map(serializeKolInvitation),
+        kolTasks: invitations.map((invitation) => serializeKolInvitation(invitation, invitationAvatarFallbacks.get(String(invitation.activityId)) || null)),
       },
     });
   } catch (error) {
