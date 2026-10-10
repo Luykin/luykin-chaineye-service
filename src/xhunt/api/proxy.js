@@ -7,7 +7,7 @@ const {
 const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
 const { checkProStatus } = require("../middleware/pro-status");
 const { applyProDataFiltering } = require("../utils/pro-data-filtering");
-const { isRequestInternalTestUser } = require("../constants/xhuntVip");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const { handleUserCreateGiftCredits } = require("../services/giftCreditsService");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
@@ -638,9 +638,9 @@ router.all(
   aiContentRateLimit,
   async (req, res) => {
     try {
-      const ret = isRequestInternalTestUser(req);
+      const ret = isRequestXHuntVip(req);
       if (!ret) {
-        // 非 内部用户 返回空数据
+        // 非 VIP 返回空数据
         ensureCorsHeaders(req, res);
         return res.status(200).json({ data: [], isVip: false });
       }
