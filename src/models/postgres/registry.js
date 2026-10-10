@@ -39,6 +39,8 @@ const BusinessCollaborationInvitationModel = require("../../xhunt/models/Busines
 const BusinessCollaborationModel = require("../../xhunt/models/BusinessCollaboration");
 const BusinessCollaborationBudgetLedgerModel = require("../../xhunt/models/BusinessCollaborationBudgetLedger");
 const BusinessCollaborationAuditLogModel = require("../../xhunt/models/BusinessCollaborationAuditLog");
+const BusinessCollaborationReviewRoundModel = require("../../xhunt/models/BusinessCollaborationReviewRound");
+const BusinessCollaborationDeliveryModel = require("../../xhunt/models/BusinessCollaborationDelivery");
 const AuthCenterXhuntUserModel = require("../../xhunt/auth-center/models/AuthCenterXhuntUser");
 const AuthCenterXhuntIdentityModel = require("../../xhunt/auth-center/models/AuthCenterXhuntIdentity");
 const AuthCenterXhuntPasswordCredentialModel = require("../../xhunt/auth-center/models/AuthCenterXhuntPasswordCredential");
@@ -108,6 +110,8 @@ function initModels(pgInstance) {
     BusinessCollaboration: BusinessCollaborationModel(pgInstance),
     BusinessCollaborationBudgetLedger: BusinessCollaborationBudgetLedgerModel(pgInstance),
     BusinessCollaborationAuditLog: BusinessCollaborationAuditLogModel(pgInstance),
+    BusinessCollaborationReviewRound: BusinessCollaborationReviewRoundModel(pgInstance),
+    BusinessCollaborationDelivery: BusinessCollaborationDeliveryModel(pgInstance),
     AuthCenterXhuntUser: AuthCenterXhuntUserModel(pgInstance),
     AuthCenterXhuntIdentity: AuthCenterXhuntIdentityModel(pgInstance),
     AuthCenterXhuntPasswordCredential: AuthCenterXhuntPasswordCredentialModel(pgInstance),

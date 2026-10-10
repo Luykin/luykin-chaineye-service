@@ -7,6 +7,8 @@ const {
   BusinessCollaborationActivityAccess,
   BusinessCollaborationInvitation,
   BusinessCollaboration,
+  BusinessCollaborationReviewRound,
+  BusinessCollaborationAuditLog,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
   XhuntVipTestUser,
@@ -528,6 +530,169 @@ router.patch("/activities/:activityId/accesses/:accessId", async (req, res) => {
     return res.json({ success: true, data: serializeAccess(access) });
   } catch (error) {
     await logAdminAction(req, { action: "business-collaboration-access-update", success: false, message: error.message }).catch(() => {});
+    return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
+  }
+});
+
+const HUMAN_DECISIONS = new Set(["approved", "changes_requested"]);
+
+function serializeReviewRoundForAdmin(row) {
+  const item = row.toJSON ? row.toJSON() : row;
+  const collaboration = item.collaboration || null;
+  const activity = collaboration?.activity || null;
+  const snapshot = collaboration?.invitation?.invitationSnapshot || {};
+  return {
+    id: item.id,
+    collaborationId: item.collaborationId,
+    roundNumber: item.roundNumber,
+    draftUrl: item.draftUrl,
+    aiStatus: item.aiStatus,
+    aiResult: item.aiResult || null,
+    aiReviewedAt: item.aiReviewedAt || null,
+    humanStatus: item.humanStatus,
+    humanComment: item.humanComment || null,
+    humanReviewerType: item.humanReviewerType || null,
+    humanReviewerAuthCenterUserId: item.humanReviewerAuthCenterUserId || null,
+    humanReviewerAdminId: item.humanReviewerAdminId || null,
+    humanReviewedAt: item.humanReviewedAt || null,
+    submittedByAuthCenterUserId: item.submittedByAuthCenterUserId || null,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    collaboration: collaboration
+      ? {
+        id: collaboration.id,
+        status: collaboration.status,
+        kolTwitterId: collaboration.kolTwitterId,
+        lockedAmount: String(collaboration.lockedAmount),
+        currency: collaboration.currency,
+      }
+      : null,
+    activity: activity ? { id: activity.id, name: activity.name, reviewerMode: activity.reviewerMode } : null,
+    invitation: {
+      title: snapshot.title || null,
+      brief: snapshot.brief || null,
+      requiredPoints: Array.isArray(snapshot.requiredPoints) ? snapshot.requiredPoints : [],
+      contentFormat: snapshot.contentFormat || null,
+      contentCount: snapshot.contentCount ?? null,
+      language: snapshot.language || null,
+      kol: snapshot.kol || null,
+    },
+  };
+}
+
+function adminRequestId(req) {
+  return String(req.headers["x-request-id"] || "").slice(0, 128) || null;
+}
+
+router.get("/review-rounds", async (req, res) => {
+  try {
+    const humanStatus = text(req.query.humanStatus, 32) || "pending";
+    const activityId = text(req.query.activityId, 64);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const activityWhere = { reviewerMode: "echohunt" };
+    if (activityId) activityWhere.id = activityId;
+    const rounds = await BusinessCollaborationReviewRound.findAll({
+      where: { humanStatus },
+      include: [{
+        model: BusinessCollaboration,
+        as: "collaboration",
+        required: true,
+        include: [
+          { model: BusinessCollaborationActivity, as: "activity", required: true, where: activityWhere },
+          { model: BusinessCollaborationInvitation, as: "invitation" },
+        ],
+      }],
+      order: [["createdAt", "ASC"]],
+      limit,
+    });
+    return res.json({ success: true, data: rounds.map(serializeReviewRoundForAdmin) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
+  }
+});
+
+router.post("/review-rounds/:roundId/human-decision", async (req, res) => {
+  try {
+    const decision = text(req.body?.decision, 32);
+    if (!HUMAN_DECISIONS.has(decision)) throw publicError("审核结论只能是 approved 或 changes_requested");
+    const comment = text(req.body?.comment, 2000);
+    if (decision === "changes_requested" && !comment) throw publicError("退回时必须填写审核意见");
+    const idempotencyKey = text(req.body?.idempotencyKey || req.headers["idempotency-key"], 128);
+    const roundInclude = [{
+      model: BusinessCollaboration,
+      as: "collaboration",
+      include: [
+        { model: BusinessCollaborationActivity, as: "activity" },
+        { model: BusinessCollaborationInvitation, as: "invitation" },
+      ],
+    }];
+    const result = await pgInstance.transaction(async (transaction) => {
+      const initial = await BusinessCollaborationReviewRound.findByPk(req.params.roundId, {
+        include: roundInclude,
+        transaction,
+      });
+      if (!initial?.collaboration) throw publicError("审核轮次不存在", 404, "REVIEW_ROUND_NOT_FOUND");
+      const activity = initial.collaboration.activity;
+      if (activity?.reviewerMode !== "echohunt") {
+        throw publicError("该活动由项目方审核，运营无权处理", 403, "REVIEW_ROUND_NOT_ASSIGNED");
+      }
+      const round = await BusinessCollaborationReviewRound.findByPk(initial.id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (idempotencyKey && round.decisionIdempotencyKey === idempotencyKey && HUMAN_DECISIONS.has(round.humanStatus)) {
+        // 幂等重放：initial 已带完整关联且反映先前决策后的状态，直接用于序列化
+        return { round: initial, replay: true };
+      }
+      if (round.aiStatus !== "passed" || round.humanStatus !== "pending") {
+        throw publicError("该轮草稿当前不能人工审核，需先通过 AI 初审", 409, "REVIEW_ROUND_NOT_DECIDABLE");
+      }
+      await round.update({
+        humanStatus: decision,
+        humanComment: comment,
+        humanReviewerType: "echohunt_admin",
+        humanReviewerAdminId: req.adminUser?.id || null,
+        humanReviewedAt: new Date(),
+        decisionIdempotencyKey: idempotencyKey,
+      }, { transaction });
+      const collaboration = await BusinessCollaboration.findByPk(round.collaborationId, { transaction, lock: transaction.LOCK.UPDATE });
+      await collaboration.update({ status: decision === "approved" ? "approved_for_publish" : "human_changes" }, { transaction });
+      await BusinessCollaborationAuditLog.create({
+        activityId: collaboration.activityId,
+        invitationId: collaboration.invitationId,
+        collaborationId: collaboration.id,
+        actorAuthCenterUserId: null,
+        actorType: "echohunt_admin",
+        action: decision === "approved" ? "human_review_approved" : "human_review_changes_requested",
+        requestId: adminRequestId(req),
+        metadata: { roundId: round.id, roundNumber: round.roundNumber, adminId: req.adminUser?.id || null, idempotencyKey },
+      }, { transaction });
+      // 决策后按主键重取（带关联、无锁），保证序列化拿到最新轮次状态与邀约快照
+      const decided = await BusinessCollaborationReviewRound.findByPk(round.id, { include: roundInclude, transaction });
+      return { round: decided, replay: false };
+    });
+    await logAdminAction(req, { action: "business-collaboration-review-decision", success: true, message: `roundId=${req.params.roundId};decision=${decision}` });
+    return res.json({ success: true, data: { round: serializeReviewRoundForAdmin(result.round), replay: result.replay } });
+  } catch (error) {
+    await logAdminAction(req, { action: "business-collaboration-review-decision", success: false, message: error.message }).catch(() => {});
+    return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
+  }
+});
+
+router.get("/audit-logs", async (req, res) => {
+  try {
+    const where = {};
+    const activityId = text(req.query.activityId, 64);
+    const collaborationId = text(req.query.collaborationId, 64);
+    const invitationId = text(req.query.invitationId, 64);
+    if (activityId) where.activityId = activityId;
+    if (collaborationId) where.collaborationId = collaborationId;
+    if (invitationId) where.invitationId = invitationId;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    const logs = await BusinessCollaborationAuditLog.findAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      limit,
+    });
+    return res.json({ success: true, data: logs.map((row) => (row.toJSON ? row.toJSON() : row)) });
+  } catch (error) {
     return res.status(error.status || 500).json({ success: false, error: error.code || error.message });
   }
 });

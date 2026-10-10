@@ -8,6 +8,7 @@ export interface CollaborationProjectAccount { twitterId: string; handle: string
 export interface CollaborationInternalTestUser { authCenterUserId?: string | null; username: string; twitterId?: string | null; }
 export interface CollaborationInvitationOverview { id: string; kol: { twitterId: string; username?: string | null; displayName?: string | null; }; offerAmount: string; currency: string; status: string; acceptedAt?: string | null; reservationExpiresAt?: string | null; declineReason?: string | null; collaboration?: { id: string; status: string; lockedAmount: string; confirmedAt?: string | null; } | null; createdAt: string; updatedAt: string; }
 export interface CollaborationActivityOverview { activity: CollaborationActivity; invitations: CollaborationInvitationOverview[]; }
+export interface CollaborationReviewRound { id: string; collaborationId: string; roundNumber: number; draftUrl: string; aiStatus: string; aiResult?: { summary?: string; issues?: Array<{ point?: string; detail?: string }> } | null; aiReviewedAt?: string | null; humanStatus: string; humanComment?: string | null; createdAt: string; collaboration?: { id: string; status: string; kolTwitterId: string; lockedAmount: string; currency: string } | null; activity?: { id: string; name: string; reviewerMode: string } | null; invitation?: { title?: string | null; brief?: string | null; requiredPoints?: string[]; contentFormat?: string | null; contentCount?: number | null; language?: string | null; kol?: { username?: string | null; displayName?: string | null } | null; }; }
 
 const apiBase = "/api/admin/business-collaboration";
 const base = `${apiBase}/activities`;
@@ -20,3 +21,12 @@ export const updateCollaborationActivity = (id: string, body: Partial<Collaborat
 export const deleteCollaborationActivity = (id: string) => apiRequest<{ success: boolean }>(`${base}/${id}`, { method: "DELETE" });
 export const grantCollaborationAccess = (id: string, body: { authCenterUserId: string; role: "project_manager" | "agency_manager"; reason?: string }) => apiRequest<{ success: boolean; data: CollaborationAccess }>(`${base}/${id}/accesses`, { method: "POST", body });
 export const updateCollaborationAccess = (activityId: string, accessId: string, body: { status: "active" | "paused" | "revoked"; reason?: string }) => apiRequest<{ success: boolean; data: CollaborationAccess }>(`${base}/${activityId}/accesses/${accessId}`, { method: "PATCH", body });
+export const fetchCollaborationReviewRounds = () => apiRequest<{ success: boolean; data: CollaborationReviewRound[] }>(`${apiBase}/review-rounds`);
+export const decideCollaborationReviewRound = (id: string, body: { decision: "approved" | "changes_requested"; comment?: string; idempotencyKey?: string }) =>
+  apiRequest<{ success: boolean; data: { round: CollaborationReviewRound; replay?: boolean } }>(`${apiBase}/review-rounds/${id}/human-decision`, {
+    method: "POST",
+    body: {
+      ...body,
+      idempotencyKey: body.idempotencyKey || `admin-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    },
+  });

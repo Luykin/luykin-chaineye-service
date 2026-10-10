@@ -9,6 +9,8 @@ const {
   BusinessCollaboration,
   BusinessCollaborationBudgetLedger,
   BusinessCollaborationAuditLog,
+  BusinessCollaborationReviewRound,
+  BusinessCollaborationDelivery,
   XHuntKolCollaboration,
   XAccount,
 } = require("../../models/postgres-start");
@@ -16,6 +18,8 @@ const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth"
 const { PROVIDERS } = require("../auth-center/services/auth");
 const { extractEvm40Address } = require("../auth-center/services/utils");
 const { decimalToCents, formatCents, sumMoney } = require("../business-collaboration/money");
+const { normalizeGoogleDocUrl, fetchGoogleDocText } = require("../business-collaboration/google-doc");
+const { runAiReviewForRound } = require("../business-collaboration/ai-review");
 const { STRATEGY_CACHE_PREFIX } = require("./echohunt-kol-match/constants");
 
 const router = express.Router();
@@ -994,6 +998,268 @@ router.post("/invitations/:invitationId/decline-by-project", async (req, res) =>
     return res.json({ success: true, data: { invitation: serializeManagerInvitation(invitation) } });
   } catch (error) {
     return sendError(res, error, "INVITATION_PROJECT_DECLINE_FAILED");
+  }
+});
+
+const DRAFT_SUBMITTABLE_STATUSES = new Set(["confirmed", "ai_rejected", "human_changes"]);
+const HUMAN_DECISIONS = new Set(["approved", "changes_requested"]);
+const PUBLISHED_URL_PATTERN = /^https:\/\/(www\.)?(x\.com|twitter\.com)\/[A-Za-z0-9_]{1,50}\/status\/\d{5,25}/;
+
+function serializeReviewRound(round) {
+  const item = round.toJSON ? round.toJSON() : round;
+  return {
+    id: item.id,
+    collaborationId: item.collaborationId,
+    roundNumber: item.roundNumber,
+    draftUrl: item.draftUrl,
+    aiStatus: item.aiStatus,
+    aiResult: item.aiResult || null,
+    aiReviewedAt: item.aiReviewedAt || null,
+    humanStatus: item.humanStatus,
+    humanComment: item.humanComment || null,
+    humanReviewerType: item.humanReviewerType || null,
+    humanReviewedAt: item.humanReviewedAt || null,
+    createdAt: item.createdAt,
+  };
+}
+
+function serializeDelivery(delivery) {
+  if (!delivery) return null;
+  const item = delivery.toJSON ? delivery.toJSON() : delivery;
+  return {
+    latestDraftUrl: item.latestDraftUrl || null,
+    publishedUrl: item.publishedUrl || null,
+    publishedAt: item.publishedAt || null,
+  };
+}
+
+router.post("/collaborations/:collaborationId/drafts", async (req, res) => {
+  try {
+    const identity = getTwitterIdentity(req);
+    const idempotencyKey = getIdempotencyKey(req);
+    const { documentId, url: draftUrl } = normalizeGoogleDocUrl(text(req.body?.draftUrl, "草稿链接", 2048, { required: true }));
+    const precheck = await fetchGoogleDocText(documentId);
+    if (!precheck.accessible) {
+      throw publicError("无法访问该 Google Docs，请将文件权限调整为「持有链接的任何人可查看」后重试", 400, "GOOGLE_DOC_NOT_ACCESSIBLE");
+    }
+    const result = await pgInstance.transaction(async (transaction) => {
+      const collaboration = await BusinessCollaboration.findByPk(req.params.collaborationId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!collaboration) throw publicError("合作不存在", 404, "COLLABORATION_NOT_FOUND");
+      if (collaboration.kolTwitterId !== identity.twitterId) throw publicError("这不是你的合作", 403, "COLLABORATION_FORBIDDEN");
+      const replayed = await BusinessCollaborationReviewRound.findOne({
+        where: { collaborationId: collaboration.id, submitIdempotencyKey: idempotencyKey },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (replayed) return { round: replayed, replay: true };
+      const latestRound = await BusinessCollaborationReviewRound.findOne({
+        where: { collaborationId: collaboration.id },
+        order: [["roundNumber", "DESC"]],
+        transaction,
+      });
+      const isStalledAi = latestRound
+        && ["pending", "processing"].includes(latestRound.aiStatus)
+        && (Date.now() - new Date(latestRound.createdAt).getTime() > 10 * 60 * 1000);
+      const submittable = DRAFT_SUBMITTABLE_STATUSES.has(collaboration.status)
+        || (collaboration.status === "draft_submitted" && (latestRound?.aiStatus === "error" || isStalledAi));
+      if (!submittable) throw publicError("当前合作状态不能提交草稿", 409, "COLLABORATION_NOT_SUBMITTABLE");
+      if (isStalledAi) {
+        await latestRound.update({
+          aiStatus: "error",
+          aiResult: { error: "stalled_timeout", message: "AI review timed out, superseded by new draft" },
+          aiReviewedAt: new Date(),
+        }, { transaction });
+      }
+      const round = await BusinessCollaborationReviewRound.create({
+        collaborationId: collaboration.id,
+        roundNumber: Number(latestRound?.roundNumber || 0) + 1,
+        draftUrl,
+        aiStatus: "pending",
+        humanStatus: "waiting_ai",
+        submittedByAuthCenterUserId: identity.authCenterUserId,
+        submitIdempotencyKey: idempotencyKey,
+      }, { transaction });
+      const delivery = await BusinessCollaborationDelivery.findOne({
+        where: { collaborationId: collaboration.id },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (delivery) {
+        await delivery.update({ latestDraftUrl: draftUrl }, { transaction });
+      } else {
+        await BusinessCollaborationDelivery.create({ collaborationId: collaboration.id, latestDraftUrl: draftUrl }, { transaction });
+      }
+      await collaboration.update({ status: "draft_submitted" }, { transaction });
+      await audit({
+        transaction,
+        req,
+        activityId: collaboration.activityId,
+        invitationId: collaboration.invitationId,
+        collaborationId: collaboration.id,
+        action: "draft_submitted",
+        actorType: "kol",
+        metadata: { roundId: round.id, roundNumber: round.roundNumber, idempotencyKey },
+      });
+      return { round, replay: false };
+    });
+    if (!result.replay) {
+      setImmediate(() => {
+        runAiReviewForRound(result.round.id).catch((error) => {
+          console.error("[business-collaboration] ai review dispatch failed:", error);
+        });
+      });
+    }
+    return res.json({ success: true, data: { round: serializeReviewRound(result.round), replay: result.replay } });
+  } catch (error) {
+    return sendError(res, error, "DRAFT_SUBMIT_FAILED");
+  }
+});
+
+router.get("/collaborations/:collaborationId/reviews", async (req, res) => {
+  try {
+    const collaboration = await BusinessCollaboration.findByPk(req.params.collaborationId, {
+      include: [
+        { model: BusinessCollaborationActivity, as: "activity" },
+        { model: BusinessCollaborationInvitation, as: "invitation" },
+        { model: BusinessCollaborationDelivery, as: "delivery" },
+      ],
+    });
+    if (!collaboration) throw publicError("合作不存在", 404, "COLLABORATION_NOT_FOUND");
+    let allowed = false;
+    try {
+      await loadActiveAccess(collaboration.activityId, req.authCenter.user.id);
+      allowed = true;
+    } catch (_) {
+      const identity = getOptionalTwitterIdentity(req);
+      allowed = Boolean(identity && identity.twitterId === collaboration.kolTwitterId);
+    }
+    if (!allowed) throw publicError("你没有权限查看该合作的审核记录", 403, "COLLABORATION_FORBIDDEN");
+    const rounds = await BusinessCollaborationReviewRound.findAll({
+      where: { collaborationId: collaboration.id },
+      order: [["roundNumber", "ASC"]],
+    });
+    res.set("Cache-Control", "no-store");
+    return res.json({
+      success: true,
+      data: {
+        collaboration: { id: collaboration.id, status: collaboration.status, confirmedAt: collaboration.confirmedAt },
+        rounds: rounds.map(serializeReviewRound),
+        delivery: serializeDelivery(collaboration.delivery),
+      },
+    });
+  } catch (error) {
+    return sendError(res, error, "COLLABORATION_REVIEWS_FAILED");
+  }
+});
+
+router.post("/review-rounds/:roundId/human-decision", async (req, res) => {
+  try {
+    const idempotencyKey = getIdempotencyKey(req);
+    const decision = text(req.body?.decision, "审核结论", 32, { required: true });
+    if (!HUMAN_DECISIONS.has(decision)) throw publicError("审核结论只能是 approved 或 changes_requested", 400, "INVALID_INPUT");
+    const comment = text(req.body?.comment, "审核意见", 2000, { required: decision === "changes_requested" });
+    const result = await pgInstance.transaction(async (transaction) => {
+      const initial = await BusinessCollaborationReviewRound.findByPk(req.params.roundId, {
+        include: [{
+          model: BusinessCollaboration,
+          as: "collaboration",
+          include: [{ model: BusinessCollaborationActivity, as: "activity" }],
+        }],
+        transaction,
+      });
+      if (!initial?.collaboration) throw publicError("审核轮次不存在", 404, "REVIEW_ROUND_NOT_FOUND");
+      const activity = initial.collaboration.activity;
+      if (activity?.reviewerMode !== "project") {
+        throw publicError("该活动由 EchoHunt 运营审核，项目方无权处理", 403, "REVIEW_ROUND_NOT_ASSIGNED");
+      }
+      await loadActiveAccess(activity.id, req.authCenter.user.id, transaction, { lock: true });
+      const round = await BusinessCollaborationReviewRound.findByPk(initial.id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (round.decisionIdempotencyKey === idempotencyKey && HUMAN_DECISIONS.has(round.humanStatus)) {
+        return { round, replay: true };
+      }
+      if (round.aiStatus !== "passed" || round.humanStatus !== "pending") {
+        throw publicError("该轮草稿当前不能人工审核，需先通过 AI 初审", 409, "REVIEW_ROUND_NOT_DECIDABLE");
+      }
+      const now = new Date();
+      await round.update({
+        humanStatus: decision,
+        humanComment: comment,
+        humanReviewerType: "project",
+        humanReviewerAuthCenterUserId: req.authCenter.user.id,
+        humanReviewedAt: now,
+        decisionIdempotencyKey: idempotencyKey,
+      }, { transaction });
+      const collaboration = await BusinessCollaboration.findByPk(round.collaborationId, { transaction, lock: transaction.LOCK.UPDATE });
+      await collaboration.update({ status: decision === "approved" ? "approved_for_publish" : "human_changes" }, { transaction });
+      await audit({
+        transaction,
+        req,
+        activityId: collaboration.activityId,
+        invitationId: collaboration.invitationId,
+        collaborationId: collaboration.id,
+        action: decision === "approved" ? "human_review_approved" : "human_review_changes_requested",
+        actorType: "manager",
+        metadata: { roundId: round.id, roundNumber: round.roundNumber, idempotencyKey },
+      });
+      return { round, replay: false };
+    });
+    return res.json({ success: true, data: { round: serializeReviewRound(result.round), replay: result.replay } });
+  } catch (error) {
+    return sendError(res, error, "REVIEW_ROUND_DECISION_FAILED");
+  }
+});
+
+router.post("/collaborations/:collaborationId/published-link", async (req, res) => {
+  try {
+    const identity = getTwitterIdentity(req);
+    const idempotencyKey = getIdempotencyKey(req);
+    const publishedUrl = text(req.body?.publishedUrl, "正式推文链接", 2048, { required: true });
+    if (!PUBLISHED_URL_PATTERN.test(publishedUrl)) {
+      throw publicError("请提供有效的 X（Twitter）推文链接", 400, "INVALID_PUBLISHED_URL");
+    }
+    const result = await pgInstance.transaction(async (transaction) => {
+      const collaboration = await BusinessCollaboration.findByPk(req.params.collaborationId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!collaboration) throw publicError("合作不存在", 404, "COLLABORATION_NOT_FOUND");
+      if (collaboration.kolTwitterId !== identity.twitterId) throw publicError("这不是你的合作", 403, "COLLABORATION_FORBIDDEN");
+      let delivery = await BusinessCollaborationDelivery.findOne({
+        where: { collaborationId: collaboration.id },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (delivery?.publishedIdempotencyKey === idempotencyKey) return { collaboration, delivery, replay: true };
+      if (collaboration.status !== "approved_for_publish") {
+        throw publicError("人工审核通过后才能提交正式链接", 409, "COLLABORATION_NOT_PUBLISHABLE");
+      }
+      const now = new Date();
+      const values = { publishedUrl, publishedAt: now, publishedIdempotencyKey: idempotencyKey };
+      if (delivery) {
+        await delivery.update(values, { transaction });
+      } else {
+        delivery = await BusinessCollaborationDelivery.create({ collaborationId: collaboration.id, ...values }, { transaction });
+      }
+      await collaboration.update({ status: "published_submitted" }, { transaction });
+      await audit({
+        transaction,
+        req,
+        activityId: collaboration.activityId,
+        invitationId: collaboration.invitationId,
+        collaborationId: collaboration.id,
+        action: "published_link_submitted",
+        actorType: "kol",
+        metadata: { publishedUrl, idempotencyKey },
+      });
+      return { collaboration, delivery, replay: false };
+    });
+    return res.json({
+      success: true,
+      data: {
+        collaboration: { id: result.collaboration.id, status: result.collaboration.status, confirmedAt: result.collaboration.confirmedAt },
+        delivery: serializeDelivery(result.delivery),
+        replay: result.replay,
+      },
+    });
+  } catch (error) {
+    return sendError(res, error, "PUBLISHED_LINK_SUBMIT_FAILED");
   }
 });
 

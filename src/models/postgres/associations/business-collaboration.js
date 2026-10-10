@@ -1,5 +1,5 @@
 /**
- * 商业合作模型关联 (Activity, Access, Invitation, Collaboration, BudgetLedger)
+ * 商业合作模型关联 (Activity, Access, Invitation, Collaboration, BudgetLedger, ReviewRound, Delivery)
  */
 function setupBusinessCollaborationAssociations({
   BusinessCollaborationActivity,
@@ -7,6 +7,8 @@ function setupBusinessCollaborationAssociations({
   BusinessCollaborationInvitation,
   BusinessCollaboration,
   BusinessCollaborationBudgetLedger,
+  BusinessCollaborationReviewRound,
+  BusinessCollaborationDelivery,
   AuthCenterXhuntUser,
 }) {
   BusinessCollaborationActivity.hasMany(BusinessCollaborationActivityAccess, {
@@ -95,6 +97,24 @@ function setupBusinessCollaborationAssociations({
     as: "budgetLedgers",
   });
   BusinessCollaborationBudgetLedger.belongsTo(BusinessCollaboration, {
+    foreignKey: "collaborationId",
+    as: "collaboration",
+  });
+
+  BusinessCollaboration.hasMany(BusinessCollaborationReviewRound, {
+    foreignKey: "collaborationId",
+    as: "reviewRounds",
+  });
+  BusinessCollaborationReviewRound.belongsTo(BusinessCollaboration, {
+    foreignKey: "collaborationId",
+    as: "collaboration",
+  });
+
+  BusinessCollaboration.hasOne(BusinessCollaborationDelivery, {
+    foreignKey: "collaborationId",
+    as: "delivery",
+  });
+  BusinessCollaborationDelivery.belongsTo(BusinessCollaboration, {
     foreignKey: "collaborationId",
     as: "collaboration",
   });

@@ -10,13 +10,16 @@ import {
   fetchCollaborationActivities,
   fetchCollaborationActivityOverview,
   fetchCollaborationInternalTestUsers,
+  fetchCollaborationReviewRounds,
   grantCollaborationAccess,
   lookupCollaborationProjectAccount,
+  decideCollaborationReviewRound,
   updateCollaborationAccess,
   updateCollaborationActivity,
   type CollaborationAccess,
   type CollaborationActivity,
   type CollaborationProjectAccount,
+  type CollaborationReviewRound,
 } from "@/services/business-collaboration";
 
 const statuses = ["draft", "open", "paused", "archived"];
@@ -108,11 +111,15 @@ export function BusinessCollaborationPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [accessActivity, setAccessActivity] = useState<CollaborationActivity | null>(null);
   const [overviewActivity, setOverviewActivity] = useState<CollaborationActivity | null>(null);
+  const [reviewQueueOpen, setReviewQueueOpen] = useState(false);
+  const [changesRound, setChangesRound] = useState<CollaborationReviewRound | null>(null);
   const [projectAccount, setProjectAccount] = useState<CollaborationProjectAccount | null>(null);
   const [form] = Form.useForm();
   const [accessForm] = Form.useForm();
+  const [changesForm] = Form.useForm();
   const query = useQuery({ queryKey: ["business-collaboration-activities"], queryFn: fetchCollaborationActivities });
   const overviewQuery = useQuery({ queryKey: ["business-collaboration-activity-overview", overviewActivity?.id], queryFn: () => fetchCollaborationActivityOverview(overviewActivity!.id), enabled: !!overviewActivity });
+  const reviewQueueQuery = useQuery({ queryKey: ["business-collaboration-review-rounds"], queryFn: fetchCollaborationReviewRounds, enabled: reviewQueueOpen });
   const internalTestUsersQuery = useQuery({ queryKey: ["business-collaboration-internal-test-users"], queryFn: fetchCollaborationInternalTestUsers, enabled: editorOpen || !!accessActivity });
   const refresh = () => void query.refetch();
   const save = useMutation({ mutationFn: (values: Record<string, unknown>) => editing ? updateCollaborationActivity(editing.id, values) : createCollaborationActivity(values), onSuccess: () => { messageApi.success("已保存"); setEditorOpen(false); setEditing(null); setProjectAccount(null); refresh(); }, onError: (error: Error) => messageApi.error(error.message) });
@@ -129,6 +136,7 @@ export function BusinessCollaborationPage() {
   const remove = useMutation({ mutationFn: deleteCollaborationActivity, onSuccess: () => { messageApi.success("已删除"); refresh(); }, onError: (error: Error) => messageApi.error(error.message) });
   const grant = useMutation({ mutationFn: (values: { authCenterUserId: string; role: "project_manager" | "agency_manager"; reason?: string }) => grantCollaborationAccess(accessActivity!.id, values), onSuccess: ({ data: access }) => { setAccessActivity((current) => current ? { ...current, accesses: [...(current.accesses || []).filter((item) => item.id !== access.id), access] } : current); messageApi.success("授权已保存"); accessForm.resetFields(); refresh(); }, onError: (error: Error) => messageApi.error(error.message) });
   const changeAccess = useMutation({ mutationFn: ({ activityId, accessId, status }: { activityId: string; accessId: string; status: "active" | "paused" | "revoked" }) => updateCollaborationAccess(activityId, accessId, { status }), onSuccess: (_, variables) => { setAccessActivity((current) => current ? { ...current, accesses: current.accesses?.map((access) => access.id === variables.accessId ? { ...access, status: variables.status } : access) } : current); refresh(); }, onError: (error: Error) => messageApi.error(error.message) });
+  const decideReview = useMutation({ mutationFn: ({ id, decision, comment }: { id: string; decision: "approved" | "changes_requested"; comment?: string }) => decideCollaborationReviewRound(id, { decision, comment }), onSuccess: () => { messageApi.success("审核结论已保存"); setChangesRound(null); void reviewQueueQuery.refetch(); }, onError: (error: Error) => messageApi.error(error.message) });
   const openEdit = (item?: CollaborationActivity) => {
     setEditing(item || null); setEditorOpen(true);
     setProjectAccount(item ? { twitterId: item.projectTwitterId, handle: item.projectTwitterHandle || "", displayName: item.projectDisplayName, avatar: item.projectTwitterAvatarUrl, banner: item.projectTwitterBannerUrl } : null);
@@ -161,7 +169,197 @@ export function BusinessCollaborationPage() {
     { title: "授权", width: 72, render: (_: unknown, row: CollaborationActivity) => <Tag>{row.accesses?.filter((access) => access.status === "active").length || 0} 人</Tag> },
     { title: "操作", width: 230, fixed: "right" as const, render: (_: unknown, row: CollaborationActivity) => <Space size={4}><Button size="small" onClick={() => setOverviewActivity(row)}>数据</Button><Button size="small" onClick={() => openEdit(row)}>编辑</Button><Button size="small" onClick={() => { setAccessActivity(row); accessForm.resetFields(); }}>授权</Button><Popconfirm title="仅 draft 且无金额承诺的活动可删除，确认继续？" onConfirm={() => remove.mutate(row.id)}><Button size="small" danger>删除</Button></Popconfirm></Space> },
   ];
-  return <PermissionGuard permission="business_collaboration_manage"><PageSection title="定向合作活动" description="按项目 X 账号归组查看活动；选择账号后自动带出资料，并为项目方人员分配可见和代发邀约权限。"><>{contextHolder}<Card title="项目活动" extra={<Space><Button icon={<ReloadOutlined />} onClick={refresh}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit()}>新建活动</Button></Space>}><Space direction="vertical" size={16} style={{ width: "100%" }}>{query.isLoading ? <div style={{ padding: 48, textAlign: "center" }}><Spin /></div> : activityGroups.length ? activityGroups.map((group) => <Card key={group.key} size="small"><ProjectAccountPreview compact account={{ twitterId: group.project.projectTwitterId, handle: group.project.projectTwitterHandle || "", displayName: group.project.projectDisplayName, avatar: group.project.projectTwitterAvatarUrl, banner: group.project.projectTwitterBannerUrl }} activityCount={group.activities.length} /><div style={{ marginTop: 12 }}><Table rowKey="id" size="small" columns={activityColumns} dataSource={group.activities} pagination={false} scroll={{ x: 1375 }} /></div></Card>) : <Empty description="暂未创建定向合作活动" />}</Space></Card><Modal open={editorOpen} title={editing ? "编辑定向合作活动" : "新建定向合作活动"} width={920} onCancel={() => { setEditorOpen(false); setEditing(null); setProjectAccount(null); }} onOk={() => form.submit()} confirmLoading={save.isPending} destroyOnClose><Form form={form} layout="vertical" onFinish={submit}><Row gutter={20}>
+  return <PermissionGuard permission="business_collaboration_manage">
+      <PageSection
+        title="定向合作活动"
+        description="按项目 X 账号归组查看活动；选择账号后自动带出资料，并为项目方人员分配可见和代发邀约权限。"
+      >
+        <>
+          {contextHolder}
+          <Card
+            title="项目活动"
+            extra={
+              <Space>
+                <Button onClick={() => setReviewQueueOpen(true)}>审核队列</Button>
+                <Button icon={<ReloadOutlined />} onClick={refresh}>刷新</Button>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit()}>新建活动</Button>
+              </Space>
+            }
+          >
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              {query.isLoading ? (
+                <div style={{ padding: 48, textAlign: "center" }}><Spin /></div>
+              ) : activityGroups.length ? (
+                activityGroups.map((group) => (
+                  <Card key={group.key} size="small">
+                    <ProjectAccountPreview
+                      compact
+                      account={{
+                        twitterId: group.project.projectTwitterId,
+                        handle: group.project.projectTwitterHandle || "",
+                        displayName: group.project.projectDisplayName,
+                        avatar: group.project.projectTwitterAvatarUrl,
+                        banner: group.project.projectTwitterBannerUrl,
+                      }}
+                      activityCount={group.activities.length}
+                    />
+                    <div style={{ marginTop: 12 }}>
+                      <Table
+                        rowKey="id"
+                        size="small"
+                        columns={activityColumns}
+                        dataSource={group.activities}
+                        pagination={false}
+                        scroll={{ x: 1375 }}
+                      />
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <Empty description="暂未创建定向合作活动" />
+              )}
+            </Space>
+          </Card>
+          <Modal
+            open={reviewQueueOpen}
+            title="EchoHunt 人工审核队列"
+            width={1120}
+            footer={<Button onClick={() => setReviewQueueOpen(false)}>关闭</Button>}
+            onCancel={() => setReviewQueueOpen(false)}
+            destroyOnClose
+          >
+            <Table
+              rowKey="id"
+              loading={reviewQueueQuery.isLoading}
+              dataSource={reviewQueueQuery.data?.data || []}
+              pagination={{ pageSize: 10 }}
+              scroll={{ x: 1050 }}
+              columns={[
+                {
+                  title: "活动 / KOL",
+                  width: 190,
+                  render: (_: unknown, row: CollaborationReviewRound) => (
+                    <>
+                      <Typography.Text strong>{row.activity?.name || "-"}</Typography.Text>
+                      <br />
+                      <Typography.Text type="secondary">
+                        {row.invitation?.kol?.displayName || row.invitation?.kol?.username || row.collaboration?.kolTwitterId || "KOL"}
+                      </Typography.Text>
+                    </>
+                  ),
+                },
+                {
+                  title: "草稿与要求",
+                  width: 310,
+                  render: (_: unknown, row: CollaborationReviewRound) => (
+                    <Space direction="vertical" size={2}>
+                      <a href={row.draftUrl} target="_blank" rel="noreferrer">
+                        查看 Google Docs 草稿
+                      </a>
+                      <Typography.Text type="secondary">
+                        {row.invitation?.title || "-"}{row.invitation?.contentFormat ? ` · ${row.invitation.contentFormat}` : ""}
+                      </Typography.Text>
+                      <Typography.Paragraph ellipsis={{ rows: 2, tooltip: row.invitation?.brief }} style={{ marginBottom: 0 }}>
+                        {row.invitation?.brief || "未配置 Brief"}
+                      </Typography.Paragraph>
+                    </Space>
+                  ),
+                },
+                {
+                  title: "AI 初审",
+                  width: 235,
+                  render: (_: unknown, row: CollaborationReviewRound) => (
+                    <Space direction="vertical" size={2}>
+                      <Tag color={row.aiStatus === "passed" ? "green" : row.aiStatus === "failed" || row.aiStatus === "error" ? "red" : "blue"}>
+                        {row.aiStatus}
+                      </Tag>
+                      <Typography.Text type="secondary">{row.aiResult?.summary || "等待 AI 结果"}</Typography.Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: "提交时间",
+                  width: 170,
+                  render: (_: unknown, row: CollaborationReviewRound) => new Date(row.createdAt).toLocaleString(),
+                },
+                {
+                  title: "操作",
+                  width: 160,
+                  fixed: "right" as const,
+                  render: (_: unknown, row: CollaborationReviewRound) =>
+                    row.aiStatus === "passed" && row.humanStatus === "pending" ? (
+                      <Space>
+                        <Button
+                          size="small"
+                          danger
+                          onClick={() => {
+                            changesForm.resetFields();
+                            setChangesRound(row);
+                          }}
+                        >
+                          退回
+                        </Button>
+                        <Popconfirm
+                          title="确认通过这轮草稿？"
+                          onConfirm={() => decideReview.mutate({ id: row.id, decision: "approved" })}
+                        >
+                          <Button size="small" type="primary" loading={decideReview.isPending}>
+                            通过
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    ) : (
+                      <Tag>{row.humanStatus}</Tag>
+                    ),
+                },
+              ]}
+            />
+          </Modal>
+          <Modal
+            open={!!changesRound}
+            title="退回草稿"
+            okText="确认退回"
+            okButtonProps={{ danger: true, loading: decideReview.isPending }}
+            onCancel={() => setChangesRound(null)}
+            onOk={() => changesForm.submit()}
+            destroyOnClose
+          >
+            <Form
+              form={changesForm}
+              layout="vertical"
+              onFinish={(values) =>
+                changesRound &&
+                decideReview.mutate({
+                  id: changesRound.id,
+                  decision: "changes_requested",
+                  comment: values.comment,
+                })
+              }
+            >
+              <Form.Item
+                name="comment"
+                label="审核意见"
+                rules={[{ required: true, whitespace: true, message: "退回时必须填写审核意见" }]}
+              >
+                <Input.TextArea rows={4} maxLength={2000} placeholder="请说明需要修改的内容" />
+              </Form.Item>
+            </Form>
+          </Modal>
+          <Modal
+            open={editorOpen}
+            title={editing ? "编辑定向合作活动" : "新建定向合作活动"}
+            width={920}
+            onCancel={() => {
+              setEditorOpen(false);
+              setEditing(null);
+              setProjectAccount(null);
+            }}
+            onOk={() => form.submit()}
+            confirmLoading={save.isPending}
+            destroyOnClose
+          >
+            <Form form={form} layout="vertical" onFinish={submit}>
+              <Row gutter={20}>
     <Col span={24}><Form.Item name="name" label={<InfoLabel label="活动名称" info="项目方和 KOL 在 EchoHunt 中看到的活动名称。" />} rules={[{ required: true }]}><Input placeholder="例如：Binance Wallet KOL 推广活动" /></Form.Item></Col>
     <Col span={24}><Form.Item name="description" label={<InfoLabel label="活动说明" info="用于说明合作目标、适合邀请的 KOL 和活动背景。" />}><Input.TextArea rows={2} placeholder="说明合作目标、适合邀请的 KOL 等信息" /></Form.Item></Col>
     <Col span={24}><Form.Item label={<InfoLabel label="项目 X 账号" info="输入 Handle 或从常用合作方中选择；系统会自动查询并保存对应的 X ID。" />} required extra="输入 @handle 或 x.com 链接后查询；下拉提供常用合作方账号。"><Form.Item name="projectTwitterHandle" noStyle rules={[{ required: true, message: "请输入或选择项目 X Handle" }]}><AutoComplete options={PROJECT_ACCOUNT_OPTIONS} onSelect={(value) => lookupProject.mutate(value)} onChange={() => { form.setFieldValue("projectTwitterId", undefined); setProjectAccount(null); }}><Input.Search placeholder="输入 @handle 或 x.com 链接" enterButton="查询" loading={lookupProject.isPending} onSearch={(value) => lookupProject.mutate(value)} /></AutoComplete></Form.Item></Form.Item><Form.Item name="projectTwitterId" hidden rules={[{ required: true, message: "请先查询并确认项目 X 账号" }]}><Input /></Form.Item></Col>
