@@ -55,7 +55,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/release-deploy", icon: <LegacySidebarIcon name="rocket" />, label: "发布上线", permission: "deploy:release", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/emergency-rollback", icon: <LegacySidebarIcon name="rotate-ccw" />, label: "紧急回滚", permission: "deploy:rollback", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/llm-test", icon: <LegacySidebarIcon name="cpu" />, label: "LLM测试", permission: "llm-test", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
-  { key: "/kol-match-config", icon: <LegacySidebarIcon name="target" />, label: "KOL Match配置", permission: ["kol-match-config:read", "kol-match-config:write", "nacos-admin"], group: "main", sidebarGroup: "echohunt", implemented: true, section: "system" },
+  { key: "/kol-match-config", icon: <LegacySidebarIcon name="target" />, label: "KOL Match配置", permission: ["kol-match-config:read", "kol-match-config:write"], group: "main", sidebarGroup: "echohunt", implemented: true, section: "system" },
   { key: "/admin-users", icon: <LegacySidebarIcon name="user" />, label: "管理员列表", permission: "admin-users", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/admin-audit-logs", icon: <LegacySidebarIcon name="clipboard" />, label: "操作记录", permission: "audit-logs:read", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
 ];

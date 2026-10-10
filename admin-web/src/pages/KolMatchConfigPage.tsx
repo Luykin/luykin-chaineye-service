@@ -945,7 +945,7 @@ export function KolMatchConfigPage() {
   const [profileDebugResult, setProfileDebugResult] = useState<KolMarketingProfileDebugResult | null>(null);
 
   const current = useMemo(() => effectiveConfig(document, activeEnv), [document, activeEnv]);
-  const canWrite = hasPermission(["kol-match-config:write", "nacos-admin"]);
+  const canWrite = hasPermission("kol-match-config:write");
   const strategyModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.strategyLlm);
   const evaluatorModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.evaluatorLlm);
   const baseModelOptions = useMemo(() => mergeModelOptions(llmModels), [llmModels]);
@@ -1279,7 +1279,7 @@ export function KolMatchConfigPage() {
   const canClearProfileCollaboration = user?.role === "super";
 
   return (
-    <PermissionGuard permission={["kol-match-config:read", "kol-match-config:write", "nacos-admin"]}>
+    <PermissionGuard permission={["kol-match-config:read", "kol-match-config:write"]}>
     <div className="kol-match-config-page">
       {contextHolder}
       <PromptGuideDrawer open={guideOpen} onClose={() => setGuideOpen(false)} />

@@ -32,7 +32,7 @@ router.use(createAdminWriteAudit((req) => (
     ? "kol-marketing-profile-debug-collaboration-delete"
     : null
 )));
-const profileDebugGuard = requirePermission(["kol-match-config:read", "kol-match-config:write", "nacos-admin"]);
+const profileDebugGuard = requirePermission(["kol-match-config:read", "kol-match-config:write"]);
 
 function getServiceStatus() {
   const pgConfigured = isPostgresReadOnlyConfigured();

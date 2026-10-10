@@ -25,8 +25,8 @@ const {
 
 const router = express.Router();
 const CONFIG_TYPE = "json";
-const KOL_MATCH_CONFIG_READ_PERMISSIONS = ["kol-match-config:read", "kol-match-config:write", "nacos-admin"];
-const KOL_MATCH_CONFIG_WRITE_PERMISSIONS = ["kol-match-config:write", "nacos-admin"];
+const KOL_MATCH_CONFIG_READ_PERMISSIONS = ["kol-match-config:read", "kol-match-config:write"];
+const KOL_MATCH_CONFIG_WRITE_PERMISSIONS = ["kol-match-config:write"];
 
 async function readNacosConfig() {
   const resp = await nacosRequest("GET", "/nacos/v1/cs/configs", {
