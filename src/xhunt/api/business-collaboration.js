@@ -92,6 +92,7 @@ const BUSINESS_COLLABORATION_EN_MESSAGES = Object.freeze({
   KOL_MATCH_PROJECT_MISMATCH: "Invitations must use an activity for the same project account as the KOL Match result.",
   KOL_NOT_ACCEPTING_INVITATIONS: "Some KOLs are not accepting new invitations.",
   OFFER_AMOUNT_BELOW_MINIMUM: "The offer amount is below this activity's minimum offer.",
+  OFFER_AMOUNT_EXCEEDS_ACTIVITY_BUDGET: "An individual KOL offer cannot exceed the activity's total budget.",
   PAYOUT_ADDRESS_CHALLENGE_EXPIRED: "The payout address verification challenge has expired. Start a new verification.",
   PAYOUT_ADDRESS_CHALLENGE_FAILED: "Unable to start payout address verification. Please try again.",
   PAYOUT_ADDRESS_CHALLENGE_STALE: "The payout address has changed. Start a new verification.",
@@ -865,7 +866,20 @@ router.post("/invitations", async (req, res) => {
 
       const minimumOffer = formatCents(decimalToCents(activity.invitationTemplate?.minimumOfferAmount || DEFAULT_MINIMUM_OFFER_AMOUNT, "活动最低邀约金额"));
       const minimumOfferCents = decimalToCents(minimumOffer, "活动最低邀约金额");
+      const fundingPoolAmount = formatCents(decimalToCents(activity.fundingPoolAmount, "活动总预算"));
+      const fundingPoolAmountCents = decimalToCents(fundingPoolAmount, "活动总预算");
       normalized.forEach((item) => {
+        if (decimalToCents(item.offerAmount, "邀约金额") > fundingPoolAmountCents) {
+          throw localizedPublicError(
+            {
+              "zh-CN": `第 ${item.kolTwitterId} 位 KOL 的邀约金额不能超过活动总预算 ${fundingPoolAmount}`,
+              en: `An individual KOL offer cannot exceed the activity's total budget of ${fundingPoolAmount}.`,
+            },
+            400,
+            "OFFER_AMOUNT_EXCEEDS_ACTIVITY_BUDGET",
+            { kolTwitterId: item.kolTwitterId, offerAmount: item.offerAmount, fundingPoolAmount }
+          );
+        }
         if (decimalToCents(item.offerAmount, "邀约金额") < minimumOfferCents) {
           throw publicError(`邀约金额不能低于活动配置的 ${minimumOffer}`, 400, "OFFER_AMOUNT_BELOW_MINIMUM");
         }
