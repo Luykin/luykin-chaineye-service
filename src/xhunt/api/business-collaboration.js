@@ -706,7 +706,7 @@ router.post("/invitations", async (req, res) => {
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
-      if (replayed.length) return replayed.map(serializeManagerInvitation);
+      if (replayed.length) return replayed.map((invitation) => serializeManagerInvitation(invitation));
       const recruitmentError = activityRecruitmentError(activity);
       if (recruitmentError) throw recruitmentError;
       const occupiedSeats = Number(activity.reservedSeatCount || 0) + Number(activity.confirmedSeatCount || 0);
@@ -780,7 +780,7 @@ router.post("/invitations", async (req, res) => {
         });
         created.push(invitation);
       }
-      return created.map(serializeManagerInvitation);
+      return created.map((invitation) => serializeManagerInvitation(invitation));
     });
     return res.status(201).json({ success: true, data });
   } catch (error) {
