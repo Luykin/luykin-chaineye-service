@@ -598,7 +598,10 @@ export function DbAdminPage() {
                           setSortOrder("DESC");
                         }}
                       >
-                        <List.Item.Meta title={<Tooltip title={item.label}><span>{item.label}</span></Tooltip>} />
+                      <List.Item.Meta
+                        title={<span className="db-admin-table-label">{item.label}</span>}
+                        description={<span className="db-admin-table-identifier">{item.table}</span>}
+                      />
                       </List.Item>
                     )}
                   />
@@ -610,7 +613,12 @@ export function DbAdminPage() {
 
         <Card
           className="db-admin-data-card"
-          title={currentTable ? <Space wrap><span>{currentTable.label}</span><Text type="secondary">{currentTable.table}</Text></Space> : "请选择表"}
+          title={currentTable ? (
+            <div className="db-admin-current-table-title">
+              <span>{currentTable.label}</span>
+              <Text type="secondary">{currentTable.table}</Text>
+            </div>
+          ) : "请选择表"}
           extra={
             <Space wrap>
               <Input

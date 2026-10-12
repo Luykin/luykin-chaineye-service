@@ -1,6 +1,6 @@
 const { QueryTypes } = require("sequelize");
 const { pgInstance } = require("../../models/postgres-start");
-const { DEFAULT_READONLY_COLUMNS, SENSITIVE_COLUMN_PATTERN, tableOverrides } = require("./config");
+const { DEFAULT_READONLY_COLUMNS, SENSITIVE_COLUMN_PATTERN, tableMetadata, tableOverrides } = require("./config");
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
@@ -21,11 +21,15 @@ function tableSql(config) {
 
 function getDefaultConfig(tableName, primaryKey = null) {
   const override = tableOverrides[tableName] || {};
+  const metadata = tableMetadata[tableName] || {
+    label: "未归类系统表",
+    description: `尚未登记业务说明的系统数据表（${tableName}）。`,
+  };
   const hasSinglePrimaryKey = !!primaryKey;
   return {
     key: tableName,
-    label: tableName,
-    description: "",
+    label: metadata.label,
+    description: metadata.description,
     schema: "public",
     table: tableName,
     primaryKey,

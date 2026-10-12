@@ -79,6 +79,41 @@
   font-weight: 700;
 }
 
+.db-admin-table-label {
+  display: block;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.db-admin-table-identifier {
+  display: block;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.db-admin-current-table-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.35;
+}
+
+.db-admin-current-table-title > span {
+  color: #1e293b;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.db-admin-current-table-title .ant-typography {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
 .db-admin-search {
   width: min(420px, 42vw);
 }
@@ -229,15 +264,11 @@
 }
 
 .db-admin-table-item .ant-list-item-meta-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
 }
 
 .db-admin-table-item .ant-list-item-meta-title > span {
-  display: inline-block;
+  display: block;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
