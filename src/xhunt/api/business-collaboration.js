@@ -44,6 +44,71 @@ const INVITATION_OVERRIDE_FIELDS = new Set([
 const DEFAULT_MINIMUM_OFFER_AMOUNT = "100.00";
 const DEFAULT_CONFIRMATION_DEADLINE_HOURS = 72;
 const INVITATION_LIMIT_MULTIPLIER = 2;
+const BUSINESS_COLLABORATION_EN_MESSAGES = Object.freeze({
+  ACTIVITY_ACCESS_FORBIDDEN: "You do not have permission to manage this collaboration activity.",
+  ACTIVITY_ARCHIVED: "Archived activities cannot confirm new collaborations.",
+  ACTIVITY_BUDGET_INSUFFICIENT: "The activity budget is insufficient to accept this invitation.",
+  ACTIVITY_DETAIL_FAILED: "Unable to load the activity details. Please try again.",
+  ACTIVITY_ENDED: "This activity has ended and cannot send or accept new invitations.",
+  ACTIVITY_LIST_FAILED: "Unable to load activities. Please try again.",
+  ACTIVITY_NOT_FOUND: "The collaboration activity was not found.",
+  ACTIVITY_NOT_OPEN: "This activity is not open for new invitations.",
+  ACTIVITY_NOT_STARTED: "This activity has not started yet.",
+  ACTIVITY_SEATS_FULL: "This activity has no remaining collaboration seats.",
+  BUSINESS_COLLABORATION_ERROR: "Unable to process the collaboration request. Please try again.",
+  BUSINESS_COLLABORATION_ME_FAILED: "Unable to load your collaboration data. Please try again.",
+  COLLABORATION_FORBIDDEN: "You do not have permission to access this collaboration.",
+  COLLABORATION_NOT_FOUND: "The collaboration was not found.",
+  COLLABORATION_NOT_PUBLISHABLE: "A published link can be submitted only after human review approval.",
+  COLLABORATION_NOT_SUBMITTABLE: "A draft cannot be submitted in the current collaboration state.",
+  COLLABORATION_REVIEWS_FAILED: "Unable to load collaboration review records. Please try again.",
+  DRAFT_SUBMIT_FAILED: "Unable to submit the draft. Please try again.",
+  GOOGLE_DOC_NOT_ACCESSIBLE: "The Google Doc is inaccessible. Set it to allow anyone with the link to view it, then try again.",
+  IDEMPOTENCY_KEY_REQUIRED: "A valid Idempotency-Key is required for all write operations.",
+  INVALID_EVM_ADDRESS: "A valid EVM payout address is required.",
+  INVALID_INPUT: "One or more request parameters are invalid.",
+  INVALID_INVITATION_BATCH: "Invite between 1 and 100 KOLs per request.",
+  INVALID_PUBLISHED_URL: "Provide a valid X (Twitter) post URL.",
+  INVITATION_ACCEPT_FAILED: "Unable to accept the invitation. Please try again.",
+  INVITATION_ALREADY_EXISTS: "The same KOL has already been invited to this activity.",
+  INVITATION_CONFIRM_FAILED: "Unable to confirm the collaboration. Please try again.",
+  INVITATION_CREATE_FAILED: "Unable to send the invitation. Please try again.",
+  INVITATION_DECLINE_FAILED: "Unable to decline the invitation. Please try again.",
+  INVITATION_DUPLICATE_IN_BATCH: "The same KOL cannot be invited more than once in a single request.",
+  INVITATION_FORBIDDEN: "This invitation does not belong to your X account.",
+  INVITATION_LIMIT_REACHED: "The invitation limit for this activity has been reached.",
+  INVITATION_NOT_ACCEPTABLE: "This invitation cannot be accepted in its current state.",
+  INVITATION_NOT_CONFIRMABLE: "Only accepted invitations can be confirmed.",
+  INVITATION_NOT_DECLINABLE: "This invitation cannot be declined in its current state.",
+  INVITATION_NOT_FOUND: "The invitation was not found.",
+  INVITATION_NOT_PROJECT_DECLINABLE: "This invitation cannot be cancelled in its current state.",
+  INVITATION_PROJECT_DECLINE_FAILED: "Unable to cancel the invitation. Please try again.",
+  INVITATION_RESERVATION_EXPIRED: "The project confirmation deadline has passed and the reserved budget has been released.",
+  KOL_IDENTITY_CONFLICT: "The current X identity conflicts with an existing collaboration profile. Contact support for help.",
+  KOL_MATCH_CONTEXT_EXPIRED: "This KOL Match session has expired. Analyze the project account again before inviting KOLs.",
+  KOL_MATCH_CONTEXT_INVALID: "This KOL Match session is invalid. Analyze the project account again before inviting KOLs.",
+  KOL_MATCH_CONTEXT_REQUIRED: "Start invitations from the AI KOL Match results page.",
+  KOL_MATCH_CONTEXT_UNAVAILABLE: "The KOL Match context is temporarily unavailable. Please try again.",
+  KOL_MATCH_PROJECT_MISMATCH: "Invitations must use an activity for the same project account as the KOL Match result.",
+  KOL_NOT_ACCEPTING_INVITATIONS: "Some KOLs are not accepting new invitations.",
+  OFFER_AMOUNT_BELOW_MINIMUM: "The offer amount is below this activity's minimum offer.",
+  PAYOUT_ADDRESS_CHALLENGE_EXPIRED: "The payout address verification challenge has expired. Start a new verification.",
+  PAYOUT_ADDRESS_CHALLENGE_FAILED: "Unable to start payout address verification. Please try again.",
+  PAYOUT_ADDRESS_CHALLENGE_STALE: "The payout address has changed. Start a new verification.",
+  PAYOUT_ADDRESS_CHALLENGE_UNAVAILABLE: "Payout address verification is temporarily unavailable. Please try again.",
+  PAYOUT_ADDRESS_GET_FAILED: "Unable to load the payout address. Please try again.",
+  PAYOUT_ADDRESS_REQUIRED: "Verify a default EVM payout address before accepting this invitation.",
+  PAYOUT_ADDRESS_SIGNATURE_INVALID: "Payout address signature verification failed.",
+  PAYOUT_ADDRESS_SIGNATURE_MISMATCH: "The payout address signature does not match the address.",
+  PAYOUT_ADDRESS_SNAPSHOT_MISSING: "This invitation has no valid payout address snapshot and cannot be confirmed.",
+  PAYOUT_ADDRESS_VERIFY_FAILED: "Unable to verify the payout address. Please try again.",
+  PUBLISHED_LINK_SUBMIT_FAILED: "Unable to submit the published link. Please try again.",
+  REVIEW_ROUND_DECISION_FAILED: "Unable to save the review decision. Please try again.",
+  REVIEW_ROUND_NOT_ASSIGNED: "This activity is reviewed by EchoHunt, so the project cannot process this review round.",
+  REVIEW_ROUND_NOT_DECIDABLE: "This draft cannot be reviewed manually until it passes the AI review.",
+  REVIEW_ROUND_NOT_FOUND: "The review round was not found.",
+  TWITTER_ID_REQUIRED: "Sign in to EchoHunt with X first.",
+});
 
 router.use(express.json({ limit: "1mb" }));
 router.use(authenticateAuthCenterToken());
@@ -57,11 +122,45 @@ function publicError(message, status = 400, code = message, details) {
   return error;
 }
 
+function getRequestLanguage(req) {
+  const raw = String(
+    req?.query?.lang ||
+      req?.query?.["x-language"] ||
+      req?.headers?.["x-echohunt-language"] ||
+      req?.headers?.["accept-language"] ||
+      ""
+  ).trim().toLowerCase();
+  const primary = raw.split(",")[0].split(";")[0].trim();
+  return primary === "en" || primary.startsWith("en-") ? "en" : "zh-CN";
+}
+
+function localizedPublicError(publicMessages, status, code, details) {
+  const error = publicError(publicMessages["zh-CN"] || publicMessages.en || code, status, code, details);
+  error.publicMessages = publicMessages;
+  return error;
+}
+
+function publicErrorCode(error, fallback) {
+  if (error.publicMessages || BUSINESS_COLLABORATION_EN_MESSAGES[error.code]) return error.code;
+  return fallback;
+}
+
+function localizedErrorMessage(error, code, req) {
+  const language = getRequestLanguage(req);
+  if (error.publicMessages?.[language]) return error.publicMessages[language];
+  if (language === "en") {
+    return BUSINESS_COLLABORATION_EN_MESSAGES[code] || "Unable to process the request. Please try again.";
+  }
+  if (error.publicMessage) return error.publicMessage;
+  return "操作失败，请稍后重试。";
+}
+
 function sendError(res, error, fallback = "BUSINESS_COLLABORATION_ERROR") {
+  const code = publicErrorCode(error, fallback);
   return res.status(error.status || 500).json({
     success: false,
-    error: error.code || error.message || fallback,
-    message: error.publicMessage || undefined,
+    error: code,
+    message: localizedErrorMessage(error, code, res.req),
     ...(error.details ? { details: error.details } : {}),
   });
 }
@@ -715,8 +814,11 @@ router.post("/invitations", async (req, res) => {
       const invitationLimit = Number(activity.seatLimit) * INVITATION_LIMIT_MULTIPLIER;
       const invitedCount = await BusinessCollaborationInvitation.count({ where: { activityId }, transaction });
       if (invitedCount + invitations.length > invitationLimit) {
-        throw publicError(
-          `本活动最多可发送 ${invitationLimit} 份邀约，已发送 ${invitedCount} 份，本次请求 ${invitations.length} 份。`,
+        throw localizedPublicError(
+          {
+            "zh-CN": `本活动最多可发送 ${invitationLimit} 份邀约，已发送 ${invitedCount} 份，本次请求 ${invitations.length} 份。`,
+            en: `This activity can send at most ${invitationLimit} invitations. ${invitedCount} have already been sent; this request contains ${invitations.length}.`,
+          },
           409,
           "INVITATION_LIMIT_REACHED",
           {
@@ -970,7 +1072,11 @@ router.post("/invitations/:invitationId/confirm", async (req, res) => {
       return { invitation, collaboration, replay: false, reservationExpired: false };
     });
     if (result.reservationExpired) {
-      return res.status(409).json({ success: false, error: "INVITATION_RESERVATION_EXPIRED", message: "项目方确认时限已过，预算预留已释放。" });
+      return sendError(
+        res,
+        publicError("项目方确认时限已过，预算预留已释放。", 409, "INVITATION_RESERVATION_EXPIRED"),
+        "INVITATION_CONFIRM_FAILED"
+      );
     }
     return res.json({
       success: true,
