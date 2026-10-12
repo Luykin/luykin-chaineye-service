@@ -434,6 +434,8 @@ function serializeManagerInvitation(invitation, kolAvatarMap = null) {
 function serializeKolInvitation(invitation, fallbackAvatarUrl = null) {
   const item = invitation.toJSON ? invitation.toJSON() : invitation;
   const snapshot = item.invitationSnapshot || {};
+  const collaboration = item.collaboration;
+  const delivery = collaboration?.delivery;
   return {
     id: item.id,
     activity: {
@@ -461,8 +463,16 @@ function serializeKolInvitation(invitation, fallbackAvatarUrl = null) {
     requiredPoints: snapshot.requiredPoints || [],
     acceptedAt: item.acceptedAt || null,
     reservationExpiresAt: item.reservationExpiresAt || null,
-    collaboration: item.collaboration
-      ? { id: item.collaboration.id, status: item.collaboration.status, confirmedAt: item.collaboration.confirmedAt }
+    collaboration: collaboration
+      ? {
+        id: collaboration.id,
+        status: collaboration.status,
+        confirmedAt: collaboration.confirmedAt,
+        publishedUrl: delivery?.publishedUrl || null,
+        delivery: delivery
+          ? { publishedUrl: delivery.publishedUrl || null }
+          : null,
+      }
       : null,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -595,7 +605,11 @@ router.get("/me", async (req, res) => {
         where: { kolTwitterId: identity.twitterId },
         include: [
           { model: BusinessCollaborationActivity, as: "activity" },
-          { model: BusinessCollaboration, as: "collaboration" },
+          {
+            model: BusinessCollaboration,
+            as: "collaboration",
+            include: [{ model: BusinessCollaborationDelivery, as: "delivery" }],
+          },
         ],
         order: [["updatedAt", "DESC"]],
       }) : Promise.resolve([]),
