@@ -407,6 +407,7 @@ async function loadKolAvatarFallbacks(invitations) {
 function serializeManagerInvitation(invitation, kolAvatarMap = null) {
   const item = invitation.toJSON ? invitation.toJSON() : invitation;
   const collaboration = item.collaboration || null;
+  const delivery = collaboration?.delivery;
   return {
     id: item.id,
     activityId: item.activityId,
@@ -425,7 +426,15 @@ function serializeManagerInvitation(invitation, kolAvatarMap = null) {
     reservationExpiresAt: item.reservationExpiresAt || null,
     declineReason: item.declineReason || null,
     collaboration: collaboration
-      ? { id: collaboration.id, status: collaboration.status, confirmedAt: collaboration.confirmedAt }
+      ? {
+        id: collaboration.id,
+        status: collaboration.status,
+        confirmedAt: collaboration.confirmedAt,
+        publishedUrl: delivery?.publishedUrl || null,
+        delivery: delivery
+          ? { publishedUrl: delivery.publishedUrl || null }
+          : null,
+      }
       : null,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -642,7 +651,11 @@ router.get("/activities/:activityId", async (req, res) => {
     if (!activity) throw publicError("定向合作活动不存在", 404, "ACTIVITY_NOT_FOUND");
     const invitations = await BusinessCollaborationInvitation.findAll({
       where: { activityId, status: { [Op.in]: [...MANAGER_VISIBLE_INVITATION_STATUSES] } },
-      include: [{ model: BusinessCollaboration, as: "collaboration" }],
+      include: [{
+        model: BusinessCollaboration,
+        as: "collaboration",
+        include: [{ model: BusinessCollaborationDelivery, as: "delivery" }],
+      }],
       order: [["updatedAt", "DESC"]],
     });
     const kolAvatarMap = await loadKolAvatarFallbacks(invitations);
