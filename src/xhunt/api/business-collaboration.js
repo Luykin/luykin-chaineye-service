@@ -43,6 +43,7 @@ const INVITATION_OVERRIDE_FIELDS = new Set([
 ]);
 const DEFAULT_MINIMUM_OFFER_AMOUNT = "100.00";
 const DEFAULT_CONFIRMATION_DEADLINE_HOURS = 72;
+const INVITATION_LIMIT_MULTIPLIER = 2;
 
 router.use(express.json({ limit: "1mb" }));
 router.use(authenticateAuthCenterToken());
@@ -709,6 +710,23 @@ router.post("/invitations", async (req, res) => {
       if (replayed.length) return replayed.map((invitation) => serializeManagerInvitation(invitation));
       const recruitmentError = activityRecruitmentError(activity);
       if (recruitmentError) throw recruitmentError;
+      // The activity row is locked above, so concurrent invitation requests for this
+      // activity are serialized before this count and the following creates.
+      const invitationLimit = Number(activity.seatLimit) * INVITATION_LIMIT_MULTIPLIER;
+      const invitedCount = await BusinessCollaborationInvitation.count({ where: { activityId }, transaction });
+      if (invitedCount + invitations.length > invitationLimit) {
+        throw publicError(
+          `本活动最多可发送 ${invitationLimit} 份邀约，已发送 ${invitedCount} 份，本次请求 ${invitations.length} 份。`,
+          409,
+          "INVITATION_LIMIT_REACHED",
+          {
+            invitationLimit,
+            invitedCount,
+            requestedCount: invitations.length,
+            remainingCount: Math.max(0, invitationLimit - invitedCount),
+          }
+        );
+      }
       const occupiedSeats = Number(activity.reservedSeatCount || 0) + Number(activity.confirmedSeatCount || 0);
       if (occupiedSeats >= Number(activity.seatLimit)) throw publicError("活动名额已满，不能发送新邀约", 409, "ACTIVITY_SEATS_FULL");
 
