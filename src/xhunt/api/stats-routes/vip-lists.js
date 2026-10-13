@@ -8,6 +8,7 @@ const { XhuntVipTestUser } = require("../../../models/postgres-start");
 const { loadVipLists, notifyRefresh } = require("../../constants/xhuntVip");
 const { logAdminAction } = require("./shared");
 const { DATA_SERVICE_BASE_URL } = require("../../constants/dataService");
+const { nacosRequest } = require("../../services/nacosConfigClient");
 
 const router = express.Router();
 const TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
@@ -93,6 +94,90 @@ async function fetchCreatorAuthByUsername(username) {
 async function refreshVipCache() {
   await loadVipLists();
   await notifyRefresh();
+}
+
+async function syncVipListsToFeatureFlags() {
+  // Keep this operation scoped to list membership so VIP managers never receive
+  // the general feature_flags_config permission or arbitrary config write access.
+  const dataId = "xhunt_config";
+  const group = "DEFAULT_GROUP";
+  const readResp = await nacosRequest("GET", "/nacos/v1/cs/configs", {
+    params: { dataId, group },
+  });
+
+  if (readResp.status !== 200) {
+    throw new Error("读取 Nacos xhunt_config 失败");
+  }
+
+  let config;
+  try {
+    const content = typeof readResp.data === "string" ? readResp.data : JSON.stringify(readResp.data);
+    config = JSON.parse(content || "{}");
+  } catch (error) {
+    throw new Error("xhunt_config 不是合法 JSON");
+  }
+
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    throw new Error("xhunt_config 格式不正确");
+  }
+
+  const rows = await XhuntVipTestUser.findAll({
+    attributes: ["username", "listType"],
+  });
+  const vipNames = rows.filter((row) => row.listType === "vip").map((row) => row.username);
+  const internalTestNames = rows
+    .filter((row) => row.listType === "internal_test")
+    .map((row) => row.username);
+
+  const canaryConfig =
+    config.canaryConfig && typeof config.canaryConfig === "object" && !Array.isArray(config.canaryConfig)
+      ? config.canaryConfig
+      : {};
+  const testConfig =
+    config.testConfig && typeof config.testConfig === "object" && !Array.isArray(config.testConfig)
+      ? config.testConfig
+      : {};
+
+  const existingCanaries = Array.isArray(canaryConfig.canaries) ? canaryConfig.canaries : [];
+  const existingTesters = Array.isArray(testConfig.testers) ? testConfig.testers : [];
+  canaryConfig.canaries = Array.from(new Set([...existingCanaries, ...vipNames]));
+  testConfig.testers = Array.from(new Set([...existingTesters, ...internalTestNames]));
+  config.canaryConfig = canaryConfig;
+  config.testConfig = testConfig;
+
+  const form = new URLSearchParams({
+    dataId,
+    group,
+    content: JSON.stringify(config, null, 2),
+    type: "json",
+  });
+  const publishResp = await nacosRequest("POST", "/nacos/v1/cs/configs", {
+    data: form.toString(),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+
+  if (publishResp.status !== 200 || (publishResp.data !== true && publishResp.data !== "true")) {
+    throw new Error("发布 Nacos xhunt_config 失败");
+  }
+}
+
+async function syncMissingTwitterId(row) {
+  if (row.twitterId) {
+    return { updated: 0, skipped: 1, failed: 0 };
+  }
+
+  try {
+    const twitterId = await fetchTwitterIdByUsername(row.username);
+    if (!twitterId) {
+      return { updated: 0, skipped: 0, failed: 1 };
+    }
+
+    row.twitterId = twitterId;
+    await row.save();
+    return { updated: 1, skipped: 0, failed: 0 };
+  } catch (error) {
+    return { updated: 0, skipped: 0, failed: 1 };
+  }
 }
 
 function requireSuperAdmin(req, res, next) {
@@ -384,6 +469,83 @@ router.post(
         message: error.message || "添加失败",
       });
       res.status(500).json({ success: false, error: error.message || "添加失败" });
+    }
+  }
+);
+
+router.post(
+  "/vip-lists/add-and-sync",
+  adminAuth,
+  requirePermission("vip-management"),
+  async (req, res) => {
+    let row;
+    try {
+      const { listType, username, twitterId } = req.body || {};
+      if (!["vip", "internal_test"].includes(listType)) {
+        return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
+      }
+
+      const normalizedUsername = normalizeUsername(username);
+      if (!normalizedUsername) {
+        return res.status(400).json({ success: false, error: "username 不能为空" });
+      }
+
+      const normalizedTwitterId =
+        twitterId != null && String(twitterId).trim() ? String(twitterId).trim() : null;
+      if (normalizedTwitterId && !/^\d{1,30}$/.test(normalizedTwitterId)) {
+        return res.status(400).json({ success: false, error: "Twitter ID 必须为纯数字" });
+      }
+
+      const [vipUser, created] = await XhuntVipTestUser.findOrCreate({
+        where: { username: normalizedUsername, listType },
+        defaults: { username: normalizedUsername, listType, twitterId: normalizedTwitterId },
+      });
+      row = vipUser;
+
+      if (!created && normalizedTwitterId && row.twitterId !== normalizedTwitterId) {
+        row.twitterId = normalizedTwitterId;
+        await row.save();
+      }
+
+      const idSync = await syncMissingTwitterId(row);
+      await refreshVipCache();
+      await syncVipListsToFeatureFlags();
+
+      await logAdminAction(req, {
+        action: "vip-list-add-and-sync",
+        success: true,
+        message: `listType=${listType} username=${normalizedUsername} created=${created} idSync=${JSON.stringify(idSync)}`,
+      });
+      res.json({ success: true, data: { user: serializeVipUser(row), created, idSync } });
+    } catch (error) {
+      console.error("[vip-lists/add-and-sync] 添加并同步失败:", error);
+      await logAdminAction(req, {
+        action: "vip-list-add-and-sync",
+        success: false,
+        message: `username=${row?.username || "-"} error=${error.message || "添加并同步失败"}`,
+      });
+      res.status(500).json({ success: false, error: error.message || "添加并同步失败" });
+    }
+  }
+);
+
+router.post(
+  "/vip-lists/sync-feature-flags",
+  adminAuth,
+  requirePermission("vip-management"),
+  async (req, res) => {
+    try {
+      await syncVipListsToFeatureFlags();
+      await logAdminAction(req, { action: "vip-list-sync-feature-flags", success: true });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[vip-lists/sync-feature-flags] 同步失败:", error);
+      await logAdminAction(req, {
+        action: "vip-list-sync-feature-flags",
+        success: false,
+        message: error.message || "同步失败",
+      });
+      res.status(500).json({ success: false, error: error.message || "同步失败" });
     }
   }
 );

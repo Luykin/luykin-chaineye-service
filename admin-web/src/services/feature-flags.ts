@@ -61,6 +61,35 @@ export async function addVipListUser(
   });
 }
 
+export async function addVipListUserAndSync(
+  listType: "vip" | "internal_test",
+  username: string,
+  twitterId?: string | null
+) {
+  return apiRequest<{
+    success: boolean;
+    data: {
+      user: VipListItem;
+      created: boolean;
+      idSync: { updated: number; skipped: number; failed: number };
+    };
+    error?: string;
+  }>("/api/xhunt/stats/vip-lists/add-and-sync", {
+    method: "POST",
+    body: {
+      listType,
+      username,
+      twitterId: twitterId ? twitterId.trim() : undefined,
+    },
+  });
+}
+
+export async function syncVipFeatureFlags() {
+  return apiRequest<{ success: boolean; error?: string }>("/api/xhunt/stats/vip-lists/sync-feature-flags", {
+    method: "POST",
+  });
+}
+
 export async function updateVipTwitterId(id: number, twitterId: string | null) {
   return apiRequest<{ success: boolean; data?: VipListItem; error?: string }>(
     `/api/xhunt/stats/vip-lists/${id}/twitter-id`,
