@@ -131,6 +131,20 @@ function VipListCard({
   );
 }
 
+async function syncListsToFeatureFlags(vip: VipListItem[], internalTest: VipListItem[]) {
+  const read = await fetchFeatureFlagsConfig();
+  const config = JSON.parse(read.data.content || "{}");
+  if (!config.canaryConfig) config.canaryConfig = { features: [], canaries: [] };
+  if (!config.testConfig) config.testConfig = { features: [], testers: [] };
+
+  const vipNames = vip.map((item) => item.username);
+  const internalNames = internalTest.map((item) => item.username);
+  config.canaryConfig.canaries = Array.from(new Set([...(config.canaryConfig.canaries || []), ...vipNames]));
+  config.testConfig.testers = Array.from(new Set([...(config.testConfig.testers || []), ...internalNames]));
+
+  return publishFeatureFlagsConfig(JSON.stringify(config, null, 2));
+}
+
 export function VipManagementPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const { user } = useAuth();
@@ -151,12 +165,21 @@ export function VipManagementPage() {
       listType: "vip" | "internal_test";
       username: string;
       twitterId?: string;
-    }) => addVipListUser(listType, username, twitterId),
-    onSuccess: () => {
-      messageApi.success("添加成功");
+    }) =>
+      (async () => {
+        const added = await addVipListUser(listType, username, twitterId);
+        // 新增用户只需要查询缺失的 ID，避免重复刷新名单中已有的 ID。
+        const idSync = await syncVipTwitterIds(false);
+        const lists = await fetchVipLists();
+        await syncListsToFeatureFlags(lists.data.vip, lists.data.internalTest);
+        return { added, idSync };
+      })(),
+    onSuccess: ({ idSync }) => {
+      const { updated, skipped, failed } = idSync.data;
+      messageApi.success(`添加完成：ID同步更新 ${updated}，跳过 ${skipped}，失败 ${failed}；已同步到功能开关`);
       void query.refetch();
     },
-    onError: (error: Error) => messageApi.error(error.message || "添加失败"),
+    onError: (error: Error) => messageApi.error(error.message || "添加后的自动同步失败，可使用下方手动同步重试"),
   });
 
   const deleteMutation = useMutation({
@@ -190,17 +213,7 @@ export function VipManagementPage() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: async () => {
-      const read = await fetchFeatureFlagsConfig();
-      const config = JSON.parse(read.data.content || "{}");
-      if (!config.canaryConfig) config.canaryConfig = { features: [], canaries: [] };
-      if (!config.testConfig) config.testConfig = { features: [], testers: [] };
-      const vipNames = vip.map((item) => item.username);
-      const internalNames = internalTest.map((item) => item.username);
-      config.canaryConfig.canaries = Array.from(new Set([...(config.canaryConfig.canaries || []), ...vipNames]));
-      config.testConfig.testers = Array.from(new Set([...(config.testConfig.testers || []), ...internalNames]));
-      return publishFeatureFlagsConfig(JSON.stringify(config, null, 2));
-    },
+    mutationFn: () => syncListsToFeatureFlags(vip, internalTest),
     onSuccess: () => messageApi.success("已同步到功能开关"),
     onError: (error: Error) => messageApi.error(error.message || "同步失败"),
   });
