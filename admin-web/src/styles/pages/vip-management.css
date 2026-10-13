@@ -1,10 +1,23 @@
-.vip-management-container { padding: 16px; }
+.vip-management-container {
+  --vip-accent: light-dark(#b7791f, #fbbf24);
+  --vip-accent-soft: light-dark(#fffbeb, color-mix(in srgb, #fbbf24 16%, var(--admin-surface)));
+  --internal-test-accent: light-dark(#4f46e5, #a5b4fc);
+  --internal-test-accent-soft: light-dark(#eef2ff, color-mix(in srgb, #a5b4fc 16%, var(--admin-surface)));
+  padding: 16px;
+}
 .vip-management-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .vip-management-header h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--admin-text); }
 .vip-management-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .vip-card { background: var(--admin-surface); border: 1px solid var(--admin-border); border-radius: 8px; padding: 16px; }
+.vip-card--vip { border-top: 3px solid var(--vip-accent); background: linear-gradient(135deg, var(--vip-accent-soft), var(--admin-surface) 42%); }
+.vip-card--internal-test { border-top: 3px solid var(--internal-test-accent); background: linear-gradient(135deg, var(--internal-test-accent-soft), var(--admin-surface) 42%); }
 .vip-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--admin-surface-hover); }
+.vip-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.vip-card-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; flex: 0 0 auto; }
+.vip-card--vip .vip-card-icon { color: var(--vip-accent); background: var(--vip-accent-soft); }
+.vip-card--internal-test .vip-card-icon { color: var(--internal-test-accent); background: var(--internal-test-accent-soft); }
 .vip-card-title { font-size: 15px; font-weight: 600; color: var(--admin-text); }
+.vip-card-descriptor { display: block; margin-top: 1px; font-size: 11px; line-height: 1.35; color: var(--admin-text-muted); }
 .vip-card-count { font-size: 12px; color: var(--admin-text-muted); background: var(--admin-surface-hover); padding: 2px 8px; border-radius: 12px; }
 .vip-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
 .vip-list { max-height: 520px; overflow-y: auto; border: 1px solid var(--admin-surface-hover); border-radius: 6px; padding: 8px; }

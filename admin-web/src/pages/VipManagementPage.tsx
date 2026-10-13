@@ -1,4 +1,5 @@
 import { Button, Card, Empty, Input, Modal, Space, Tag, Typography, message } from "antd";
+import { CrownOutlined, ExperimentOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
@@ -17,6 +18,7 @@ import type { VipListItem } from "@/types/feature-flags";
 
 function VipListCard({
   title,
+  variant,
   items,
   onAdd,
   onDelete,
@@ -27,6 +29,7 @@ function VipListCard({
   loading,
 }: {
   title: string;
+  variant: "vip" | "internal-test";
   items: VipListItem[];
   onAdd: (username: string, twitterId?: string) => void;
   onDelete: (id: number) => void;
@@ -38,6 +41,8 @@ function VipListCard({
 }) {
   const [value, setValue] = useState("");
   const [twitterIdValue, setTwitterIdValue] = useState("");
+  const Icon = variant === "vip" ? CrownOutlined : ExperimentOutlined;
+  const descriptor = variant === "vip" ? "VIP 权益" : "内测体验";
 
   const handleAdd = () => {
     const trimmedUser = value.trim();
@@ -48,9 +53,17 @@ function VipListCard({
   };
 
   return (
-    <div className="vip-card">
+    <div className={`vip-card vip-card--${variant}`}>
       <div className="vip-card-header">
-        <span className="vip-card-title">{title}</span>
+        <div className="vip-card-heading">
+          <span className="vip-card-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          <div>
+            <span className="vip-card-title">{title}</span>
+            <span className="vip-card-descriptor">{descriptor}</span>
+          </div>
+        </div>
         <span className="vip-card-count">{items.length} 人</span>
       </div>
       <div className="vip-input-row">
@@ -279,6 +292,7 @@ export function VipManagementPage() {
         <div className="vip-management-grid">
           <VipListCard
             title="VIP 名单"
+            variant="vip"
             items={vip}
             loading={addMutation.isPending}
             onAdd={(username, twitterId) => handleAddUser("vip", username, twitterId)}
@@ -290,6 +304,7 @@ export function VipManagementPage() {
           />
           <VipListCard
             title="内测名单"
+            variant="internal-test"
             items={internalTest}
             loading={addMutation.isPending}
             onAdd={(username, twitterId) => handleAddUser("internal_test", username, twitterId)}
