@@ -30,6 +30,7 @@ const {
   resolveVoterRankAndWeight,
   calculateVoteWeight,
 } = require("../utils/hot-vote-weight");
+const { resolveXLanguage } = require("../utils/request-language");
 
 const router = express.Router();
 /**
@@ -432,22 +433,6 @@ function safeParseI18n(val) {
 }
 
 /**
- * 解析客户端请求语言（支持 ?lang=en, ?x-language=en, Header x-language: en, Header accept-language: en...）
- * 归一化为 "en" 或 "zh"
- */
-function resolveRequestLang(req) {
-  const candidate =
-    req.query?.lang ||
-    req.query?.["x-language"] ||
-    req.headers?.["x-language"] ||
-    req.headers?.["accept-language"];
-  if (candidate && String(candidate).trim().toLowerCase().startsWith("en")) {
-    return "en";
-  }
-  return "zh";
-}
-
-/**
  * 多语言文案选择：优先请求语言，其次中文，最后回退到兼容旧字段
  */
 function pickI18nText(i18n, lang, fallback) {
@@ -607,7 +592,7 @@ router.get(
   async (req, res) => {
     try {
       const domain = req.query.domain || null;
-      const lang = resolveRequestLang(req);
+      const lang = resolveXLanguage(req);
       const rawTwitterId = req.headers["x-tw-id"] || req.user?.twitterId || null;
       const twitterId = rawTwitterId && /^\d{1,25}$/.test(String(rawTwitterId).trim())
         ? String(rawTwitterId).trim()
@@ -1322,7 +1307,7 @@ router.get(
   async (req, res) => {
     try {
       const { topicId } = req.params;
-      const lang = resolveRequestLang(req);
+      const lang = resolveXLanguage(req);
       const page = req.query.page || 1;
       const pageSize = req.query.pageSize || 3;
       const offset = (page - 1) * pageSize;
@@ -1594,7 +1579,7 @@ router.get(
   async (req, res) => {
     try {
       const { topicId } = req.params;
-      const lang = resolveRequestLang(req);
+      const lang = resolveXLanguage(req);
       const page = req.query.page || 1;
       const pageSize = req.query.pageSize || 20;
       const offset = (page - 1) * pageSize;
@@ -1853,7 +1838,7 @@ router.post(
       });
 
       const isAnonymous = Boolean(req.body.isAnonymous);
-      const lang = resolveRequestLang(req);
+      const lang = resolveXLanguage(req);
       const isContentSame = existingComment && existingComment.content === cleanContent;
       const isAnonSame = existingComment && Boolean(existingComment.isAnonymous) === isAnonymous;
 
