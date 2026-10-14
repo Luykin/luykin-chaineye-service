@@ -182,7 +182,7 @@ GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 GET /api/xhunt/campaigns/internal/tweet-submissions
 ```
 
-该接口接受 `campaign`、`leaderboardKey`、`from`、`to`、`cursor`、`limit`，复用对外接口的筛选和游标分页逻辑。弹窗同时展示带当前活动和筛选条件的公开接口 URL、无需 Header 的 cURL 示例及复制按钮。
+该接口接受 `campaign`、`leaderboardKey`、`from`、`to`、`cursor`、`limit`，复用对外接口的筛选和游标分页逻辑。弹窗列出当前活动的全部 `leaderboardKey`，并展示无需 Header 的公开接口 URL、cURL 示例及复制按钮；已选择榜单时示例使用当前榜单，选择“全部榜单”时示例自动代入活动的第一个榜单，确保复制后可以直接调用。
 
 具备 `campaign-tweet-submissions:delete` 权限的管理员可以删除投稿：
 
