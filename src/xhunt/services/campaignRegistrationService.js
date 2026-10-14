@@ -8,6 +8,10 @@ const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const INITIALIZE_CAMPAIGN_URL = `${DATA_SERVICE_BASE_URL}/pro/api/initialize_campaign`;
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400;
 const SPECIAL_AUTHORED_RANK = 9999999;
+const CAMPAIGN_NOT_ENABLED_MESSAGES = {
+  "zh-CN": "活动尚未开始，敬请关注。",
+  en: "This campaign has not started yet. Please stay tuned.",
+};
 
 const CAMPAIGN_DISPLAY_DOMAINS = new Set(["web3", "ai"]);
 const RANK_API_BY_DOMAIN = {
@@ -18,7 +22,12 @@ const RANK_API_BY_DOMAIN = {
 function campaignRegistrationError(code, status = 400, publicMessage, details) {
   const error = new Error(code);
   error.status = status;
-  if (publicMessage) error.publicMessage = publicMessage;
+  if (publicMessage && typeof publicMessage === "object") {
+    error.publicMessages = publicMessage;
+    error.publicMessage = publicMessage["zh-CN"] || publicMessage.en || code;
+  } else if (publicMessage) {
+    error.publicMessage = publicMessage;
+  }
   if (details !== undefined) error.details = details;
   return error;
 }
@@ -280,7 +289,7 @@ async function loadCampaignConfigForRegistration(campaignKey, req, options = {})
   }
 
   if (!found) throw campaignRegistrationError("INVALID_CAMPAIGN", 400, "Invalid campaign identifier");
-  if (!found.enabled) throw campaignRegistrationError("CAMPAIGN_NOT_ENABLED", 400, "Campaign is not enabled");
+  if (!found.enabled) throw campaignRegistrationError("CAMPAIGN_NOT_ENABLED", 400, CAMPAIGN_NOT_ENABLED_MESSAGES);
   validateTestingCampaignAccess(found, req, { channel: options.channel, viewer: options.viewer });
   validateCampaignWindow(found, { allowComingSoonWarmup: !!options.allowComingSoonWarmup });
   return found;

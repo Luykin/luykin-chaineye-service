@@ -916,7 +916,6 @@ async function getManagedCampaignPayloadByKey(campaignKey, { includeTesting = fa
   if (!key) return null;
   const where = {
     isDeleted: false,
-    enabled: true,
     campaignKey: key,
   };
   if (!includeTesting) {
