@@ -21,6 +21,7 @@ import type { WebsiteCampaignRecord } from "@/types/nacos";
 import type { VipListItem } from "@/types/feature-flags";
 import { CampaignRegistrationsModal, getRegistrationCampaignKey } from "@/components/campaigns/CampaignRegistrationsModal";
 import { ExternalLeaderboardAdapterCard } from "@/components/campaigns/ExternalLeaderboardAdapter";
+import customLeaderboardKeyContract from "../../../shared/xhunt/custom-leaderboard-key-contract.json";
 import tweetSubmissionContract from "../../../shared/xhunt/tweet-submission-contract.json";
 
 const { TextArea } = Input;
@@ -121,6 +122,10 @@ const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_VALUES = new Set(
 const TWEET_SUBMISSION_PERIOD_VALUES = new Set<string>(
   tweetSubmissionContract.periods,
 );
+const CUSTOM_LEADERBOARD_KEY_PATTERN = new RegExp(
+  customLeaderboardKeyContract.allowedPattern,
+  customLeaderboardKeyContract.flags,
+);
 const TARGET_ACCOUNT_OPTIONS = [
   { value: "xhunt_ai", label: "XHunt AI · @xhunt_ai" },
   { value: "Mantle_Official", label: "Mantle · @Mantle_Official" },
@@ -184,6 +189,17 @@ function normalizeTweetSubmissionEditorConfig(value: unknown) {
     periodLimit: source.periodLimit === undefined || source.periodLimit === null ? undefined : Number(source.periodLimit),
     totalLimit: source.totalLimit === undefined || source.totalLimit === null ? undefined : Number(source.totalLimit),
   };
+}
+
+function normalizeCustomLeaderboardKey(value: unknown) {
+  return String(value || "").trim().normalize("NFC");
+}
+
+function isValidCustomLeaderboardKey(value: unknown) {
+  const key = normalizeCustomLeaderboardKey(value);
+  return !!key
+    && Array.from(key).length <= customLeaderboardKeyContract.maxLength
+    && CUSTOM_LEADERBOARD_KEY_PATTERN.test(key);
 }
 
 type AnyObj = Record<string, any>;
@@ -1587,9 +1603,12 @@ export function NacosCampaignsPage() {
               );
             if (!String(item.unit || "").trim())
               errors.push(`${label} 奖励单位不能为空`);
+            const leaderboardId = normalizeCustomLeaderboardKey(item.id);
+            if (item.id !== undefined && item.id !== null) item.id = leaderboardId;
+            if (leaderboardId && !isValidCustomLeaderboardKey(leaderboardId))
+              errors.push(`${label} 榜单 ID 只能包含文字、数字、空格、下划线或连字符，且不能超过 ${customLeaderboardKeyContract.maxLength} 个字符`);
             item.tweetSubmission = normalizeTweetSubmissionEditorConfig(item.tweetSubmission);
             if (item.tweetSubmission.enabled) {
-              const leaderboardId = String(item.id || "").trim();
               if (!leaderboardId)
                 errors.push(`${label} 开启推文提交时榜单 ID 不能为空`);
               else if (tweetSubmissionLeaderboardIds.has(leaderboardId))
@@ -3563,9 +3582,8 @@ function getCustomLeaderboardFullTitle(item: AnyObj) {
   );
 }
 
-// 与后端 src/xhunt/utils/custom-leaderboard-key.js 保持一致，改动需同步。
 function getCustomLeaderboardAdapterKey(item: AnyObj, index: number) {
-  return String(item?.id || item?.distributionType || `custom-${index}`).trim();
+  return normalizeCustomLeaderboardKey(item?.id || item?.distributionType || `custom-${index}`);
 }
 
 function getCustomLeaderboardRewardText(item: AnyObj) {
@@ -3636,6 +3654,7 @@ function CustomLeaderboards({
   const panels = items.map((it: AnyObj, i: number) => {
     const leaderboardKey = getCustomLeaderboardAdapterKey(it, i);
     const hasDuplicateAdapterKey = !!leaderboardKey && adapterKeyCounts[leaderboardKey] > 1;
+    const hasInvalidAdapterKey = !!leaderboardKey && !isValidCustomLeaderboardKey(leaderboardKey);
     return ({
     key: String(i),
     label: <CustomLeaderboardSummary item={it} index={i} />,
@@ -3651,7 +3670,7 @@ function CustomLeaderboards({
     children: (
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
       <Row gutter={[12, 12]}>
-        <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，建议填写；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} placeholder="cohort" /></Field></Col>
+        <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，支持中英文、数字、空格、下划线和连字符；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} onBlur={(e) => update("customLeaderboards", i, "id", normalizeCustomLeaderboardKey(e.target.value))} placeholder="内容榜单" /></Field></Col>
         <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
         <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
         <Col xs={24} md={8}>
@@ -3707,10 +3726,12 @@ function CustomLeaderboards({
         leaderboardKey={leaderboardKey}
         leaderboardTitle={getCustomLeaderboardDisplayTitle(it, i)}
         isSuperAdmin={!!isSuperAdmin}
-        disabled={!nacosCampaignId || !leaderboardKey || hasDuplicateAdapterKey}
+        disabled={!nacosCampaignId || !leaderboardKey || hasDuplicateAdapterKey || hasInvalidAdapterKey}
         disabledReason={
           hasDuplicateAdapterKey
             ? "多个自定义榜单使用了相同的榜单 ID / 机制 key；请填写唯一的榜单 ID 后再配置适配器。"
+            : hasInvalidAdapterKey
+              ? `榜单 ID 只能包含文字、数字、空格、下划线或连字符，且不能超过 ${customLeaderboardKeyContract.maxLength} 个字符。`
             : undefined
         }
         onMessage={onMessage}

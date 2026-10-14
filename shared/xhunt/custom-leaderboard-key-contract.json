@@ -1,0 +1,5 @@
+{
+  "maxLength": 128,
+  "allowedPattern": "^[\\p{L}\\p{N}\\p{M}_ -]+$",
+  "flags": "u"
+}

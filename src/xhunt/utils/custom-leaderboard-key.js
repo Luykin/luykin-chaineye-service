@@ -1,7 +1,27 @@
-// 自定义榜单适配器 key 推导的唯一实现，后端各服务与 admin-web 前端保持一致：
-// admin-web/src/pages/NacosCampaignsPage.tsx getCustomLeaderboardAdapterKey
-function getCustomLeaderboardAdapterKey(item, index) {
-  return String(item?.id || item?.distributionType || `custom-${index}`).trim();
+const customLeaderboardKeyContract = require("../../../shared/xhunt/custom-leaderboard-key-contract.json");
+
+const CUSTOM_LEADERBOARD_KEY_PATTERN = new RegExp(
+  customLeaderboardKeyContract.allowedPattern,
+  customLeaderboardKeyContract.flags
+);
+
+function normalizeCustomLeaderboardKey(value) {
+  return String(value || "").trim().normalize("NFC");
 }
 
-module.exports = { getCustomLeaderboardAdapterKey };
+function isValidCustomLeaderboardKey(value) {
+  const key = normalizeCustomLeaderboardKey(value);
+  return !!key
+    && Array.from(key).length <= customLeaderboardKeyContract.maxLength
+    && CUSTOM_LEADERBOARD_KEY_PATTERN.test(key);
+}
+
+function getCustomLeaderboardAdapterKey(item, index) {
+  return normalizeCustomLeaderboardKey(item?.id || item?.distributionType || `custom-${index}`);
+}
+
+module.exports = {
+  getCustomLeaderboardAdapterKey,
+  isValidCustomLeaderboardKey,
+  normalizeCustomLeaderboardKey,
+};

@@ -33,7 +33,10 @@ const {
 const {
   invalidateCampaignConfigCache,
 } = require("../utils/campaign-config-cache");
-const { getCustomLeaderboardAdapterKey } = require("../utils/custom-leaderboard-key");
+const {
+  getCustomLeaderboardAdapterKey,
+  normalizeCustomLeaderboardKey,
+} = require("../utils/custom-leaderboard-key");
 const {
   normalizePublicLang,
   normalizePublicSlug,
@@ -108,7 +111,7 @@ async function getExternalAdapterContext(nacosCampaignId, leaderboardKey) {
   const campaignKey = String(record.campaignKey || record.nacosPayload?.campaignKey || "").trim();
   const payload = record.nacosPayload?.leaderboardConfig || record.nacosPayload || {};
   const customLeaderboards = Array.isArray(payload.customLeaderboards) ? payload.customLeaderboards : [];
-  const requestedKey = String(leaderboardKey || "").trim();
+  const requestedKey = normalizeCustomLeaderboardKey(leaderboardKey);
   const matchedEntries = customLeaderboards
     .map((item, index) => ({ item, index, key: getCustomLeaderboardAdapterKey(item, index) }))
     .filter((entry) => entry.key === requestedKey);

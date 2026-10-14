@@ -6,6 +6,7 @@ const {
   XhuntCampaignTweetSubmission,
 } = require("../../models/postgres-start");
 const tweetSubmissionContract = require("../../../shared/xhunt/tweet-submission-contract.json");
+const { normalizeCustomLeaderboardKey } = require("../utils/custom-leaderboard-key");
 
 const PERIODS = new Set(tweetSubmissionContract.periods);
 const CURSOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,7 +47,7 @@ function getTweetSubmissionLeaderboards(campaignConfig = {}) {
   const items = Array.isArray(campaignConfig.customLeaderboards) ? campaignConfig.customLeaderboards : [];
   return items
     .map((item, index) => {
-      const leaderboardKey = String(item?.id || "").trim();
+      const leaderboardKey = normalizeCustomLeaderboardKey(item?.id);
       const config = normalizeTweetSubmissionConfig(item?.tweetSubmission);
       return { item, index, leaderboardKey, ...config };
     })
@@ -54,7 +55,7 @@ function getTweetSubmissionLeaderboards(campaignConfig = {}) {
 }
 
 function findTweetSubmissionLeaderboard(campaignConfig, leaderboardKey) {
-  const key = String(leaderboardKey || "").trim();
+  const key = normalizeCustomLeaderboardKey(leaderboardKey);
   const matches = getTweetSubmissionLeaderboards(campaignConfig).filter((item) => item.leaderboardKey === key);
   return matches.length === 1 ? matches[0] : null;
 }
@@ -211,7 +212,9 @@ async function getUserTweetSubmissions({
   limit,
 }) {
   const leaderboards = getTweetSubmissionLeaderboards(campaignConfig);
-  const requestedLeaderboardKey = parseOptionalQueryString(leaderboardKey, "INVALID_LEADERBOARD_KEY");
+  const requestedLeaderboardKey = normalizeCustomLeaderboardKey(
+    parseOptionalQueryString(leaderboardKey, "INVALID_LEADERBOARD_KEY")
+  );
   const selectedLeaderboards = requestedLeaderboardKey
     ? leaderboards.filter((item) => item.leaderboardKey === requestedLeaderboardKey)
     : leaderboards;
@@ -345,7 +348,9 @@ async function listExternalTweetSubmissions({ campaignKey, leaderboardKey, from,
     throw submissionError("INVALID_DATE_RANGE", 400, "from must not be later than to");
   }
   const where = { campaignKey };
-  const normalizedLeaderboardKey = parseOptionalQueryString(leaderboardKey, "INVALID_LEADERBOARD_KEY");
+  const normalizedLeaderboardKey = normalizeCustomLeaderboardKey(
+    parseOptionalQueryString(leaderboardKey, "INVALID_LEADERBOARD_KEY")
+  );
   if (normalizedLeaderboardKey) where.leaderboardKey = normalizedLeaderboardKey;
   const submittedAt = {};
   if (fromDate) submittedAt[Op.gte] = fromDate;

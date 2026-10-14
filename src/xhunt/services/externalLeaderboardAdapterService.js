@@ -3,7 +3,11 @@ const crypto = require("crypto");
 const { Op } = require("sequelize");
 const { structuredChat } = require("../../lib/llm");
 const { DATA_SERVICE_BASE_URL, PUBLIC_DATA_SERVICE_BASE_URL } = require("../constants/dataService");
-const { getCustomLeaderboardAdapterKey } = require("../utils/custom-leaderboard-key");
+const {
+  getCustomLeaderboardAdapterKey,
+  isValidCustomLeaderboardKey,
+  normalizeCustomLeaderboardKey,
+} = require("../utils/custom-leaderboard-key");
 const {
   XhuntExternalLeaderboardAdapter,
 } = require("../../models/postgres-start");
@@ -58,8 +62,8 @@ function cleanCampaignKey(value) {
 }
 
 function cleanLeaderboardKey(value) {
-  const key = String(value || "").trim();
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(key)) throw error("leaderboardKey 格式不正确");
+  const key = normalizeCustomLeaderboardKey(value);
+  if (!isValidCustomLeaderboardKey(key)) throw error("leaderboardKey 格式不正确");
   return key;
 }
 
