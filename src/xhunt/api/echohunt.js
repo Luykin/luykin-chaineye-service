@@ -7,6 +7,7 @@ function cleanUrlOrNull(val) {
 
 const express = require("express");
 const axios = require("axios");
+const crypto = require("crypto");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const { Op } = require("sequelize");
 const {
@@ -65,6 +66,12 @@ const {
   isYziLabsCampaign,
 } = require("../services/campaignLeaderboardService");
 const {
+  normalizeTweetSubmissionConfig,
+  createTweetSubmission,
+  getUserTweetSubmissions,
+  listExternalTweetSubmissions,
+} = require("../services/campaignTweetSubmissionService");
+const {
   createBindingChallenge,
   getBindingStatus,
   verifyBindingPost,
@@ -85,6 +92,7 @@ router.use("/social-listening", socialListeningPublicRoutes);
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
 const ECHOHUNT_OAUTH_STATE_TTL_SECONDS = 8 * 60;
+const ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY = String(process.env.ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY || "").trim();
 const authModels = {
   pgInstance,
   AuthCenterXhuntUser,
@@ -129,6 +137,19 @@ function publicError(message, status = 400, publicMessage) {
   err.status = status;
   if (publicMessage) err.publicMessage = publicMessage;
   return err;
+}
+
+function assertTweetSubmissionExportAccess(req) {
+  if (!ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY) {
+    throw publicError("TWEET_SUBMISSION_EXPORT_NOT_CONFIGURED", 503, "Tweet submission export is not configured");
+  }
+  const authorization = String(req.headers.authorization || "");
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  const actual = Buffer.from(token);
+  const expected = Buffer.from(ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY);
+  if (!token || actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) {
+    throw publicError("UNAUTHORIZED", 401, "Unauthorized");
+  }
 }
 
 function normalizeLang(value) {
@@ -479,6 +500,7 @@ function summarizeCustomLeaderboards(list, lang = "zh-CN") {
     const name = localizeTextValue(item.name, lang, id);
     const shortName = localizeTextValue(item.short_name, lang, name);
     const emptyText = localizeTextValue(item.empty_text || item.emptyText, lang, "");
+    const tweetSubmission = normalizeTweetSubmissionConfig(item.tweetSubmission);
     return {
       id,
       name,
@@ -489,6 +511,14 @@ function summarizeCustomLeaderboards(list, lang = "zh-CN") {
       participantCount: item.participantCount ?? null,
       distributionType: item.distributionType || null,
       unit: item.unit || null,
+      tweetSubmission: tweetSubmission.enabled
+        ? {
+            enabled: true,
+            period: tweetSubmission.period,
+            periodLimit: tweetSubmission.periodLimit,
+            totalLimit: tweetSubmission.totalLimit,
+          }
+        : { enabled: false },
     };
   });
 }
@@ -1734,6 +1764,73 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
     });
   } catch (error) {
     return sendError(res, error, "ECHOHUNT_CAMPAIGN_ME_FAILED");
+  }
+});
+
+router.get("/campaigns/:campaignKey/tweet-submissions", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    const record = await findCampaignRecord(req.params.campaignKey);
+    if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
+    const campaignKey = record.campaignKey || normalizeCampaign(req.params.campaignKey);
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    const campaignConfig = buildPluginCampaign(record, { channel: "echohunt" });
+    const data = await getUserTweetSubmissions({
+      campaignKey,
+      campaignConfig,
+      twitterIdentity,
+      leaderboardKey: req.query.leaderboardKey,
+      cursor: req.query.cursor,
+      limit: req.query.limit,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_TWEET_SUBMISSIONS_FAILED");
+  }
+});
+
+router.post(
+  "/campaigns/:campaignKey/leaderboards/:leaderboardKey/tweet-submissions",
+  authenticateAuthCenterToken(),
+  async (req, res) => {
+    try {
+      const record = await findCampaignRecord(req.params.campaignKey);
+      if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
+      const campaignKey = record.campaignKey || normalizeCampaign(req.params.campaignKey);
+      const twitterIdentity = getTwitterIdentityFromAuth(req);
+      const campaignConfig = buildPluginCampaign(record, { channel: "echohunt" });
+      const data = await createTweetSubmission({
+        campaignKey,
+        leaderboardKey: req.params.leaderboardKey,
+        campaignConfig,
+        twitterIdentity,
+        authCenterUserId: req.authCenter?.user?.id || null,
+        tweetUrl: req.body?.tweetUrl,
+      });
+      return res.status(201).json({ success: true, data });
+    } catch (error) {
+      if (error.details) return sendError(res, error, "ECHOHUNT_TWEET_SUBMISSION_CREATE_FAILED", { details: error.details });
+      return sendError(res, error, "ECHOHUNT_TWEET_SUBMISSION_CREATE_FAILED");
+    }
+  }
+);
+
+router.get("/external/campaigns/:campaignKey/tweet-submissions", async (req, res) => {
+  try {
+    assertTweetSubmissionExportAccess(req);
+    const record = await findCampaignRecord(req.params.campaignKey);
+    if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
+    const campaignKey = record.campaignKey || normalizeCampaign(req.params.campaignKey);
+    const data = await listExternalTweetSubmissions({
+      campaignKey,
+      leaderboardKey: req.query.leaderboardKey,
+      from: req.query.from,
+      to: req.query.to,
+      cursor: req.query.cursor,
+      limit: req.query.limit,
+    });
+    return res.json({ success: true, data: { campaignKey, ...data } });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_TWEET_SUBMISSION_EXPORT_FAILED");
   }
 });
 

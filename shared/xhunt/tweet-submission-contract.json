@@ -1,0 +1,20 @@
+{
+  "periods": ["day", "week"],
+  "defaultPeriod": "day",
+  "periodLimit": {
+    "min": 1,
+    "max": 100
+  },
+  "totalLimit": {
+    "min": 1,
+    "max": 1000
+  },
+  "userHistoryPage": {
+    "defaultLimit": 20,
+    "maxLimit": 50
+  },
+  "externalHistoryPage": {
+    "defaultLimit": 100,
+    "maxLimit": 500
+  }
+}

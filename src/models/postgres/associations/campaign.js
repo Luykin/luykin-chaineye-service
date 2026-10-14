@@ -6,6 +6,7 @@ function setupCampaignAssociations({
   MantleRegistration,
   MantleRegistration2,
   CampaignRegistration,
+  XhuntCampaignTweetSubmission,
   XPrivateMessage,
 }) {
   // MantleRegistration 关系（与用户关联）
@@ -36,6 +37,23 @@ function setupCampaignAssociations({
   CampaignRegistration.belongsTo(XHuntUser, {
     foreignKey: "xHuntUserId",
     as: "xHuntUser",
+  });
+
+  XHuntUser.hasMany(XhuntCampaignTweetSubmission, {
+    foreignKey: "xHuntUserId",
+    as: "campaignTweetSubmissions",
+  });
+  XhuntCampaignTweetSubmission.belongsTo(XHuntUser, {
+    foreignKey: "xHuntUserId",
+    as: "xHuntUser",
+  });
+  CampaignRegistration.hasMany(XhuntCampaignTweetSubmission, {
+    foreignKey: "campaignRegistrationId",
+    as: "tweetSubmissions",
+  });
+  XhuntCampaignTweetSubmission.belongsTo(CampaignRegistration, {
+    foreignKey: "campaignRegistrationId",
+    as: "campaignRegistration",
   });
 
   // XPrivateMessage 关系（私信）

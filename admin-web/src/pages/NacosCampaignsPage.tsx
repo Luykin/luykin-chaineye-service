@@ -21,6 +21,7 @@ import type { WebsiteCampaignRecord } from "@/types/nacos";
 import type { VipListItem } from "@/types/feature-flags";
 import { CampaignRegistrationsModal, getRegistrationCampaignKey } from "@/components/campaigns/CampaignRegistrationsModal";
 import { ExternalLeaderboardAdapterCard } from "@/components/campaigns/ExternalLeaderboardAdapter";
+import tweetSubmissionContract from "../../../shared/xhunt/tweet-submission-contract.json";
 
 const { TextArea } = Input;
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -117,6 +118,9 @@ const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS = [
 const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_VALUES = new Set(
   CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value),
 );
+const TWEET_SUBMISSION_PERIOD_VALUES = new Set<string>(
+  tweetSubmissionContract.periods,
+);
 const TARGET_ACCOUNT_OPTIONS = [
   { value: "xhunt_ai", label: "XHunt AI · @xhunt_ai" },
   { value: "Mantle_Official", label: "Mantle · @Mantle_Official" },
@@ -167,6 +171,21 @@ function normalizeCustomLeaderboardDisplayChannels(value: unknown) {
     : CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value);
 }
 
+function normalizeTweetSubmissionEditorConfig(value: unknown) {
+  const source = value && typeof value === "object" ? value as AnyObj : {};
+  const rawPeriod = String(
+    source.period || tweetSubmissionContract.defaultPeriod,
+  )
+    .trim()
+    .toLowerCase();
+  return {
+    enabled: source.enabled === true,
+    period: rawPeriod,
+    periodLimit: source.periodLimit === undefined || source.periodLimit === null ? undefined : Number(source.periodLimit),
+    totalLimit: source.totalLimit === undefined || source.totalLimit === null ? undefined : Number(source.totalLimit),
+  };
+}
+
 type AnyObj = Record<string, any>;
 export const DISPLAY_METRIC_OPTIONS = [
   { value: "hunters", label: "总 Hunters" },
@@ -186,6 +205,12 @@ export interface CustomLeaderboardConfig {
   short_name?: string | { zh?: string; en?: string };
   empty_text?: string | { zh?: string; en?: string };
   displayChannels?: string[];
+  tweetSubmission?: {
+    enabled?: boolean;
+    period?: "day" | "week";
+    periodLimit?: number | null;
+    totalLimit?: number | null;
+  };
 }
 type CampaignConfig = {
   version: number;
@@ -424,6 +449,7 @@ function normalizeCampaign(
     unit: it?.unit || "",
     empty_text: normalizeI18nText(it?.empty_text || it?.emptyText),
     displayChannels: normalizeCustomLeaderboardDisplayChannels(it?.displayChannels),
+    tweetSubmission: normalizeTweetSubmissionEditorConfig(it?.tweetSubmission),
   }));
   if (Array.isArray(c.displayMetrics)) {
     const filtered = c.displayMetrics.filter((it: unknown) => typeof it === "string" && DEFAULT_DISPLAY_METRICS.includes(it));
@@ -559,7 +585,7 @@ function makeNewCampaign(): AnyObj {
     includeCreator: false,
     showSponsoredPolicy: true,
     allowEmailRegistration: false,
-    leaderboardMode: "traditional",
+    leaderboardMode: "custom",
     leaderboardApiUrl: DEFAULT_CUSTOM_LEADERBOARD_API_URL,
     userActivityApiUrl: DEFAULT_CUSTOM_USER_ACTIVITY_API_URL,
     mockCustomLeaderboardDataEnabled: false,
@@ -1535,6 +1561,7 @@ export function NacosCampaignsPage() {
           !c.customLeaderboards.length
         )
           errors.push(`${prefix}: 自定义模式下至少需要添加一个榜单`);
+        const tweetSubmissionLeaderboardIds = new Set<string>();
         (Array.isArray(c.customLeaderboards) ? c.customLeaderboards : []).forEach(
           (item: AnyObj, leaderboardIdx: number) => {
             const label = `${prefix}: 自定义榜单 #${leaderboardIdx + 1}`;
@@ -1560,6 +1587,22 @@ export function NacosCampaignsPage() {
               );
             if (!String(item.unit || "").trim())
               errors.push(`${label} 奖励单位不能为空`);
+            item.tweetSubmission = normalizeTweetSubmissionEditorConfig(item.tweetSubmission);
+            if (item.tweetSubmission.enabled) {
+              const leaderboardId = String(item.id || "").trim();
+              if (!leaderboardId)
+                errors.push(`${label} 开启推文提交时榜单 ID 不能为空`);
+              else if (tweetSubmissionLeaderboardIds.has(leaderboardId))
+                errors.push(`${label} 开启推文提交的榜单 ID 不能重复：${leaderboardId}`);
+              else
+                tweetSubmissionLeaderboardIds.add(leaderboardId);
+              if (!TWEET_SUBMISSION_PERIOD_VALUES.has(item.tweetSubmission.period))
+                errors.push(`${label} 限额周期必须是 day 或 week`);
+              if (!Number.isInteger(item.tweetSubmission.periodLimit) || item.tweetSubmission.periodLimit < tweetSubmissionContract.periodLimit.min || item.tweetSubmission.periodLimit > tweetSubmissionContract.periodLimit.max)
+                errors.push(`${label} 周期内提交上限必须是 ${tweetSubmissionContract.periodLimit.min}-${tweetSubmissionContract.periodLimit.max} 的整数`);
+              if (!Number.isInteger(item.tweetSubmission.totalLimit) || item.tweetSubmission.totalLimit < tweetSubmissionContract.totalLimit.min || item.tweetSubmission.totalLimit > tweetSubmissionContract.totalLimit.max)
+                errors.push(`${label} 累计提交上限必须是 ${tweetSubmissionContract.totalLimit.min}-${tweetSubmissionContract.totalLimit.max} 的整数`);
+            }
             item.displayChannels = normalizeCustomLeaderboardDisplayChannels(
               item.displayChannels,
             );
@@ -1950,6 +1993,7 @@ export function NacosCampaignsPage() {
           distributionType: "equal",
           unit: "USDT",
           displayChannels: ["plugin", "echohunt"],
+          tweetSubmission: { enabled: false, period: "day", periodLimit: undefined, totalLimit: undefined },
         });
       if (kind === "tags")
         c[kind].push({
@@ -2902,8 +2946,8 @@ function CampaignEditor(props: {
               </Col>
               <Col xs={24} sm={12} md={8} xl={12}>
                 <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                  <InfoLabel info="传统模式配置 POI/POW/征文；自定义模式配置多个榜单。">活动模式</InfoLabel>
-                  <Segmented size="small" block value={c.leaderboardMode || "traditional"} onChange={(value) => setCampaignPath("leaderboardMode", String(value))} options={[{ value: "traditional", label: "传统" }, { value: "custom", label: "自定义" }]} />
+                  <InfoLabel info="新活动仅支持自定义榜单；传统模式已废弃，保留历史活动的只读兼容。">活动模式</InfoLabel>
+                  {c.leaderboardMode === "traditional" ? <AntTag color="orange">传统模式（已废弃）</AntTag> : <AntTag color="green">自定义榜单</AntTag>}
                 </Space>
               </Col>
             </Row>
@@ -3556,6 +3600,7 @@ function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number
       <AntTag color="gold">{getCustomLeaderboardRewardText(item)}</AntTag>
       <AntTag color="green">{item.participantCount || "-"} 人</AntTag>
       <AntTag>{getDistributionLabel(item.distributionType)}</AntTag>
+      {item.tweetSubmission?.enabled ? <AntTag color="magenta">主动投稿</AntTag> : null}
       {item.empty_text?.zh || item.empty_text?.en ? <AntTag color="purple">占位: {item.empty_text?.zh || item.empty_text?.en}</AntTag> : null}
       {channels.map((channel) => (
         <AntTag key={channel} color={channel === "echohunt" ? "purple" : "cyan"}>
@@ -3634,6 +3679,18 @@ function CustomLeaderboards({
         <Col xs={12} md={4}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
         <Col xs={12} md={4}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
         <Col xs={12} md={4}><Field label="单位"><Input value={it.unit || ""} onChange={(e) => update("customLeaderboards", i, "unit", e.target.value)} placeholder="USDT" /></Field></Col>
+        <Col xs={24} md={8}>
+          <Field label={<InfoLabel info="开启后，已报名的 EchoHunt 用户可向当前榜单主动投稿 X/Twitter 推文；活动结束后自动禁止投稿。">主动投稿</InfoLabel>} inline>
+            <Switch checked={it.tweetSubmission?.enabled === true} onChange={(enabled) => update("customLeaderboards", i, "tweetSubmission.enabled", enabled)} />
+          </Field>
+        </Col>
+        {it.tweetSubmission?.enabled ? (
+          <>
+            <Col xs={24} md={8}><Field label="限额周期"><Select value={it.tweetSubmission?.period || "day"} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.period", value)} options={[{ value: "day", label: "每天" }, { value: "week", label: "每周" }]} /></Field></Col>
+            <Col xs={12} md={8}><Field label="周期内最多提交"><InputNumber min={tweetSubmissionContract.periodLimit.min} max={tweetSubmissionContract.periodLimit.max} value={it.tweetSubmission?.periodLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.periodLimit", value)} addonAfter="篇" /></Field></Col>
+            <Col xs={12} md={8}><Field label="累计最多提交"><InputNumber min={tweetSubmissionContract.totalLimit.min} max={tweetSubmissionContract.totalLimit.max} value={it.tweetSubmission?.totalLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.totalLimit", value)} addonAfter="篇" /></Field></Col>
+          </>
+        ) : null}
         <Col xs={24} md={12}>
           <Field label={<InfoLabel info="该自定义榜单无数据时的占位提示文案，默认展示“暂无数据。”。">空数据占位文案（中文）</InfoLabel>}>
             <Input value={it.empty_text?.zh || ""} onChange={(e) => update("customLeaderboards", i, "empty_text.zh", e.target.value)} placeholder="暂无数据。" />
