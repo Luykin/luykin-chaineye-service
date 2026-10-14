@@ -198,6 +198,20 @@ async function requestXApiWithIdentity(identity, request) {
   }
 }
 
+async function getEchohuntTweetText(identity, tweetId) {
+  const normalizedTweetId = normalizeTwitterId(tweetId);
+  if (!normalizedTweetId) return null;
+
+  const response = await requestXApiWithIdentity(identity, (accessToken) =>
+    axios.get(`${X_API_BASE_URL}/tweets/${encodeURIComponent(normalizedTweetId)}`, {
+      timeout: 3000,
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  );
+  const text = response?.data?.data?.text;
+  return typeof text === "string" && text.trim() ? text : null;
+}
+
 async function resolveTwitterFollowTargetId(target, identity, redisClient) {
   if (target.twitterId) return target.twitterId;
   const handle = target.handle;
@@ -254,6 +268,7 @@ module.exports = {
   generateEchohuntTwitterAuthUrl,
   getEchohuntTwitterTokens,
   getEchohuntTwitterUserInfo,
+  getEchohuntTweetText,
   getTwitterFollowTaskTarget,
   verifyEchohuntTwitterFollowTask,
 };

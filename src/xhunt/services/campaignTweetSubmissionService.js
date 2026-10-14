@@ -7,6 +7,8 @@ const {
 } = require("../../models/postgres-start");
 const tweetSubmissionContract = require("../../../shared/xhunt/tweet-submission-contract.json");
 const { normalizeCustomLeaderboardKey } = require("../utils/custom-leaderboard-key");
+const { buildTweetDisplayTitle } = require("../utils/tweet-display-title");
+const { getEchohuntTweetText } = require("./twitter-echohunt");
 
 const PERIODS = new Set(tweetSubmissionContract.periods);
 const CURSOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -129,6 +131,7 @@ function serializeSubmission(record) {
     leaderboardKey: item.leaderboardKey,
     tweetId: item.tweetId,
     tweetUrl: item.tweetUrl,
+    title: item.tweetTitle || null,
     submittedAt: item.submittedAt,
     user: {
       twitterId: item.twitterId || null,
@@ -141,14 +144,22 @@ function lockKey(campaignKey, leaderboardKey, xHuntUserId) {
   return crypto.createHash("sha256").update(`${campaignKey}:${leaderboardKey}:${xHuntUserId}`).digest("hex");
 }
 
-async function createTweetSubmission({ campaignKey, leaderboardKey, campaignConfig, twitterIdentity, authCenterUserId, tweetUrl }) {
+async function createTweetSubmission({
+  campaignKey,
+  leaderboardKey,
+  campaignConfig,
+  twitterIdentity,
+  twitterIdentityRecord,
+  authCenterUserId,
+  tweetUrl,
+}) {
   const leaderboard = findTweetSubmissionLeaderboard(campaignConfig, leaderboardKey);
   if (!leaderboard) throw submissionError("TWEET_SUBMISSION_DISABLED", 400, "Tweet submission is not enabled for this leaderboard");
   assertSubmissionWindow(campaignConfig);
   if (!twitterIdentity?.twitterId) throw submissionError("TWITTER_ID_REQUIRED", 400, "Please connect your X account first");
   const parsedTweet = parseTweetUrl(tweetUrl);
 
-  return pgInstance.transaction(async (transaction) => {
+  const result = await pgInstance.transaction(async (transaction) => {
     const registration = await CampaignRegistration.findOne({
       where: { campaign: campaignKey, twitterId: twitterIdentity.twitterId },
       order: [["registeredAt", "DESC"]],
@@ -199,8 +210,26 @@ async function createTweetSubmission({ campaignKey, leaderboardKey, campaignConf
       config: leaderboard,
       transaction,
     });
-    return { submission: serializeSubmission(submission), usage: nextUsage };
+    return { submission, usage: nextUsage };
   });
+
+  if (twitterIdentityRecord) {
+    try {
+      const tweetText = await getEchohuntTweetText(twitterIdentityRecord, parsedTweet.tweetId);
+      const tweetTitle = buildTweetDisplayTitle(tweetText);
+      if (tweetTitle) {
+        const [updatedCount] = await XhuntCampaignTweetSubmission.update(
+          { tweetTitle },
+          { where: { id: result.submission.id } }
+        );
+        if (updatedCount) result.submission.setDataValue("tweetTitle", tweetTitle);
+      }
+    } catch (_) {
+      // Tweet metadata is optional and must never prevent a valid submission.
+    }
+  }
+
+  return { submission: serializeSubmission(result.submission), usage: result.usage };
 }
 
 async function getUserTweetSubmissions({

@@ -13,6 +13,7 @@ module.exports = (sequelize) => sequelize.define(
     twitterUsername: { type: DataTypes.STRING(255), allowNull: true },
     tweetId: { type: DataTypes.STRING(32), allowNull: false },
     tweetUrl: { type: DataTypes.TEXT, allowNull: false },
+    tweetTitle: { type: DataTypes.STRING(255), allowNull: true },
     submittedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   },
   {

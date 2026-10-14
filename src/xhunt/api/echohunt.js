@@ -1797,12 +1797,14 @@ router.post(
       if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
       const campaignKey = record.campaignKey || normalizeCampaign(req.params.campaignKey);
       const twitterIdentity = getTwitterIdentityFromAuth(req);
+      const twitterIdentityRecord = getTwitterIdentityRecordFromAuth(req);
       const campaignConfig = buildPluginCampaign(record, { channel: "echohunt" });
       const data = await createTweetSubmission({
         campaignKey,
         leaderboardKey: req.params.leaderboardKey,
         campaignConfig,
         twitterIdentity,
+        twitterIdentityRecord,
         authCenterUserId: req.authCenter?.user?.id || null,
         tweetUrl: req.body?.tweetUrl,
       });

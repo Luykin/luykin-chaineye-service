@@ -87,9 +87,10 @@ XhuntCampaignTweetSubmission
 ├── twitter_username           VARCHAR(255) NULL
 ├── tweet_id                   VARCHAR(32) NOT NULL
 ├── tweet_url                  TEXT NOT NULL            -- 规范化为 x.com/status URL
+├── tweet_title                VARCHAR(255) NULL         -- X API 正文派生的展示标题
 ├── submitted_at               TIMESTAMPTZ NOT NULL
 ├── created_at / updated_at    TIMESTAMPTZ NOT NULL
-└── （记录不可变；本期不提供删除功能）
+└── （投稿事实不可变；仅允许在提交后补充 tweet_title，本期不提供删除功能）
 ```
 
 建议约束和索引：
@@ -131,7 +132,8 @@ INDEX  (campaign_registration_id)
 3. 只接受 `x.com`、`www.x.com`、`twitter.com`、`www.twitter.com` 的 status URL，提取纯数字 Tweet ID；拒绝其它 URL、缺少 status ID 和无效协议。保存统一的 `https://x.com/<handle>/status/<id>` 格式。
 4. 在一个数据库事务内取得以 `campaignKey + leaderboardKey + xhuntUserId` 为粒度的 PostgreSQL advisory transaction lock；再计算周期内与累计的数量。
 5. 任一上限已满时返回 `409 SUBMISSION_LIMIT_REACHED`，附带剩余量；重复 tweet 返回 `409 TWEET_ALREADY_SUBMITTED`。
-6. 插入记录并返回新记录、最新使用量和剩余量。
+6. 插入记录并提交事务后，使用当前用户的 X OAuth token 调用官方 `GET /2/tweets/{id}`；获取正文成功时取第一个非空行并截断为 80 个字符，保存为展示标题。查询失败、限流、鉴权失败或超时不影响投稿成功。
+7. 返回新记录、可选的 `title`、最新使用量和剩余量。历史接口只读取已保存标题，不在列表查询时调用 X API。
 
 采用事务锁而不是“先 count、后 insert”，避免两个并发请求都看到尚有 1 个名额而双双成功。限额时间统一按 UTC 计算：日从 `00:00:00Z` 开始，周从周一 `00:00:00Z` 开始；该口径需要在 UI 提示中明确。
 
@@ -162,6 +164,7 @@ GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
         "leaderboardKey": "content",
         "tweetId": "1234567890123456789",
         "tweetUrl": "https://x.com/example/status/1234567890123456789",
+        "title": "Tweet display title",
         "submittedAt": "2026-10-14T08:00:00.000Z",
         "user": { "twitterId": "...", "username": "example" }
       }
@@ -217,7 +220,7 @@ GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 - `components/campaign/SignupPanel.tsx`
 - 现有中英文文案来源文件（按该项目 i18n 结构补齐）
 
-不包含：X API 拉取/审计、内容审核、反作弊、榜单积分计算、管理员手动删改提交、CSV 下载、传统活动自动迁移。
+不包含：X API 内容审计、内容审核、反作弊、榜单积分计算、管理员手动删改提交、CSV 下载、传统活动自动迁移。
 
 ## 8. 验收与测试
 
@@ -231,6 +234,7 @@ GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 6. 按 UTC 日/周边界正确重置周期额度，累计额度不重置。
 7. 个人历史只能读取本人记录；外部接口无有效 API key 返回 `401`，分页不会因新写入而跳项。
 8. 外部响应不含邮箱、钱包、token 或报名内部字段。
+9. X API 能返回推文正文时保存并返回展示标题；查不到、超时或限流时投稿仍成功且 `title` 为 `null`。
 
 ## 9. 已确认产品规则
 
