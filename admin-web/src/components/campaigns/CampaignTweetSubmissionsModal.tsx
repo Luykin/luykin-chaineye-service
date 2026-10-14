@@ -67,7 +67,6 @@ export function CampaignTweetSubmissionsModal({
     () => getLeaderboardOptions(campaignConfig),
     [campaignConfig],
   );
-  const exampleLeaderboardKey = leaderboardKey || leaderboardOptions[0]?.value || "";
 
   async function loadPage({
     cursor,
@@ -207,12 +206,12 @@ export function CampaignTweetSubmissionsModal({
       `/api/xhunt/echohunt/external/campaigns/${encodeURIComponent(campaign)}/tweet-submissions`,
       origin,
     );
-    if (exampleLeaderboardKey) url.searchParams.set("leaderboardKey", exampleLeaderboardKey);
+    if (leaderboardKey) url.searchParams.set("leaderboardKey", leaderboardKey);
     if (dateRange?.[0]) url.searchParams.set("from", dateRange[0].toISOString());
     if (dateRange?.[1]) url.searchParams.set("to", dateRange[1].toISOString());
     url.searchParams.set("limit", String(pageSize));
     return url.toString();
-  }, [campaign, exampleLeaderboardKey, dateRange, pageSize]);
+  }, [campaign, leaderboardKey, dateRange, pageSize]);
 
   const curlExample = `curl '${externalUrl}'`;
 
@@ -362,24 +361,24 @@ export function CampaignTweetSubmissionsModal({
             type="warning"
             showIcon
             message="公开只读接口，无需鉴权"
-            description="任何获得该地址的人都可以读取该活动的投稿记录。示例优先使用当前选择的榜单；选择“全部榜单”时，会自动代入该活动的第一个榜单。"
+            description="任何获得该地址的人都可以读取该活动的投稿记录。默认查询整个活动的全部榜单；只有在上方选择具体榜单时，示例才会附加 leaderboardKey。"
             style={{ marginBottom: 12 }}
           />
           <Space direction="vertical" size={8} style={{ width: "100%" }}>
-            <Text strong>当前活动的榜单（leaderboardKey）</Text>
+            <Text strong>可选榜单筛选值（leaderboardKey）</Text>
             {leaderboardOptions.length ? (
               <Space wrap size={[4, 4]}>
                 {leaderboardOptions.map((option) => (
                   <Tag
                     key={option.value}
-                    color={option.value === exampleLeaderboardKey ? "blue" : undefined}
+                    color={option.value === leaderboardKey ? "blue" : undefined}
                   >
                     {option.label}
                   </Tag>
                 ))}
               </Space>
             ) : (
-              <Text type="secondary">当前活动没有可用榜单，示例将省略 leaderboardKey。</Text>
+              <Text type="secondary">当前活动没有配置榜单筛选值。</Text>
             )}
             <Text strong>接口地址</Text>
             <Input.TextArea value={externalUrl} readOnly autoSize={{ minRows: 2, maxRows: 4 }} />

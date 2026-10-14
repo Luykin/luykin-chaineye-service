@@ -1803,9 +1803,8 @@ router.post(
 
 router.get("/external/campaigns/:campaignKey/tweet-submissions", async (req, res) => {
   try {
-    const record = await findCampaignRecord(req.params.campaignKey);
-    if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
-    const campaignKey = record.campaignKey || normalizeCampaign(req.params.campaignKey);
+    const campaignKey = normalizeCampaign(req.params.campaignKey);
+    if (!campaignKey) throw publicError("CAMPAIGN_REQUIRED", 400, "Campaign is required");
     const data = await listExternalTweetSubmissions({
       campaignKey,
       leaderboardKey: req.query.leaderboardKey,

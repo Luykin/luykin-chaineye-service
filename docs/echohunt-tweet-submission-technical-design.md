@@ -147,7 +147,7 @@ INDEX  (campaign_registration_id)
 GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 ```
 
-查询参数：`leaderboardKey`（可选）、`from`、`to`（ISO-8601）、`cursor`、`limit`（最大 500）。按 `submittedAt DESC, id DESC` 游标分页，避免 offset 在持续写入时产生漏读/重读。由于接口无需鉴权，调用方应把响应中的 Twitter 标识和投稿内容视为公开数据，服务端仍只返回分析必需字段。
+查询参数：`leaderboardKey`（可选）、`from`、`to`（ISO-8601）、`cursor`、`limit`（最大 500）。默认返回该活动全部榜单的投稿，只有显式传入 `leaderboardKey` 时才按榜单筛选。接口直接使用路径中的活动 key 查询投稿记录，不要求该活动仍存在于公开网站活动列表。结果按 `submittedAt DESC, id DESC` 游标分页，避免 offset 在持续写入时产生漏读/重读。由于接口无需鉴权，调用方应把响应中的 Twitter 标识和投稿内容视为公开数据，服务端仍只返回分析必需字段。
 
 返回仅包含分析必需字段：
 
@@ -182,7 +182,7 @@ GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 GET /api/xhunt/campaigns/internal/tweet-submissions
 ```
 
-该接口接受 `campaign`、`leaderboardKey`、`from`、`to`、`cursor`、`limit`，复用对外接口的筛选和游标分页逻辑。弹窗列出当前活动的全部 `leaderboardKey`，并展示无需 Header 的公开接口 URL、cURL 示例及复制按钮；已选择榜单时示例使用当前榜单，选择“全部榜单”时示例自动代入活动的第一个榜单，确保复制后可以直接调用。
+该接口接受 `campaign`、`leaderboardKey`、`from`、`to`、`cursor`、`limit`，复用对外接口的筛选和游标分页逻辑。弹窗列出当前活动可选的 `leaderboardKey`，并展示无需 Header 的公开接口 URL、cURL 示例及复制按钮；默认示例不携带 `leaderboardKey`，用于查询整个活动，只有管理员主动选择具体榜单后才追加筛选参数。
 
 具备 `campaign-tweet-submissions:delete` 权限的管理员可以删除投稿：
 
