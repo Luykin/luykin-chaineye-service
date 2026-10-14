@@ -282,16 +282,16 @@ const CACHE_POLICIES = {
   PRIVATE_USER: "private-user",
 };
 
-// 默认缓存分组：public 缓存 10 分钟
+// 默认缓存分组：public 缓存 3 分钟
 const DEFAULT_CACHE_PATHS = [/.*/];
 
-// 短缓存分组：public 缓存 5 分钟
+// 短缓存分组：public 缓存 1 分钟
 const SHORT_CACHE_PATHS = ["twitter/trending_tweets"];
 
 // 完全不缓存分组：需要实时返回或不允许缓存的接口放这里
 const NO_CACHE_PATHS = [];
 
-// 私有人信息分组：private 缓存 5 分钟，避免共享缓存复用用户态响应
+// 私有人信息分组：private 缓存 1 分钟，避免共享缓存复用用户态响应
 const PRIVATE_USER_CACHE_PATHS = [
   /\/me$/,
   /^\/auth(?:\/|$)/
@@ -410,17 +410,17 @@ function setBrowserCacheHeaders(res, req) {
   }
 
   if (cachePolicy === CACHE_POLICIES.PRIVATE_USER) {
-    setTimedCacheHeaders(res, 5 * 60, "private");
+    setTimedCacheHeaders(res, 1 * 60, "private");
     res.setHeader("Vary", "Authorization, X-User-ID, X-Device-Fingerprint");
     return;
   }
 
   if (cachePolicy === CACHE_POLICIES.SHORT) {
-    setTimedCacheHeaders(res, 5 * 60);
+    setTimedCacheHeaders(res, 1 * 60);
     return;
   }
 
-  setTimedCacheHeaders(res, 10 * 60);
+  setTimedCacheHeaders(res, 3 * 60);
 }
 
 // 获取目标URL
