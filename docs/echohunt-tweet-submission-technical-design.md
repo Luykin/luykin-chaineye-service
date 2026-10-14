@@ -90,7 +90,7 @@ XhuntCampaignTweetSubmission
 ├── tweet_title                VARCHAR(255) NULL         -- X API 正文派生的展示标题
 ├── submitted_at               TIMESTAMPTZ NOT NULL
 ├── created_at / updated_at    TIMESTAMPTZ NOT NULL
-└── （投稿事实不可变；仅允许在提交后补充 tweet_title，本期不提供删除功能）
+└── （业务侧不提供删除；具有独立权限的管理员可在后台物理删除并留下审计日志）
 ```
 
 建议约束和索引：
@@ -141,15 +141,13 @@ INDEX  (campaign_registration_id)
 
 ### 5.2 外部分析查询接口
 
-建议提供独立的 machine-to-machine 只读接口，而不是把 EchoHunt 用户 JWT 交给外部系统：
+提供独立的公开只读接口，不需要 EchoHunt 用户 JWT 或额外 API Key：
 
 ```text
 GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 ```
 
-查询参数：`leaderboardKey`（可选）、`from`、`to`（ISO-8601）、`cursor`、`limit`（最大 500）。按 `submittedAt DESC, id DESC` 游标分页，避免 offset 在持续写入时产生漏读/重读。
-
-认证建议：配置 `ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY`，调用方使用 `Authorization: Bearer <key>`；通过 timing-safe compare 校验，并记录调用时间、请求来源、活动和结果数的审计日志。接口应加独立限流，并且禁止把该 key 放入网站前端或 Nacos 配置。
+查询参数：`leaderboardKey`（可选）、`from`、`to`（ISO-8601）、`cursor`、`limit`（最大 500）。按 `submittedAt DESC, id DESC` 游标分页，避免 offset 在持续写入时产生漏读/重读。由于接口无需鉴权，调用方应把响应中的 Twitter 标识和投稿内容视为公开数据，服务端仍只返回分析必需字段。
 
 返回仅包含分析必需字段：
 
@@ -184,7 +182,15 @@ GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 GET /api/xhunt/campaigns/internal/tweet-submissions
 ```
 
-该接口接受 `campaign`、`leaderboardKey`、`from`、`to`、`cursor`、`limit`，复用对外接口的筛选和游标分页逻辑，但不要求浏览器持有对外导出密钥。弹窗同时展示带当前活动和筛选条件的对外接口 URL、Bearer Header cURL 示例及复制按钮；示例只显示密钥占位符，不把服务器密钥暴露到前端。
+该接口接受 `campaign`、`leaderboardKey`、`from`、`to`、`cursor`、`limit`，复用对外接口的筛选和游标分页逻辑。弹窗同时展示带当前活动和筛选条件的公开接口 URL、无需 Header 的 cURL 示例及复制按钮。
+
+具备 `campaign-tweet-submissions:delete` 权限的管理员可以删除投稿：
+
+```text
+DELETE /api/xhunt/campaigns/internal/tweet-submissions/:id?campaign=:campaignKey
+```
+
+删除为不可恢复的物理删除，成功和“记录不存在”失败都会写入后台审计日志，审计 action 为 `campaign-tweet-submission-delete`；删除后该记录不再参与周期和累计限额计算。
 
 ## 6. 前端方案
 
@@ -230,7 +236,7 @@ GET /api/xhunt/campaigns/internal/tweet-submissions
 - `components/campaign/SignupPanel.tsx`
 - 现有中英文文案来源文件（按该项目 i18n 结构补齐）
 
-不包含：X API 内容审计、内容审核、反作弊、榜单积分计算、管理员手动删改提交、CSV 下载、传统活动自动迁移。
+不包含：X API 内容审计、内容审核、反作弊、榜单积分计算、管理员修改投稿内容、CSV 下载、传统活动自动迁移。
 
 ## 8. 验收与测试
 
@@ -242,9 +248,10 @@ GET /api/xhunt/campaigns/internal/tweet-submissions
 4. 未登录、未报名、活动不存在、榜单不存在、榜单未启用、窗口关闭、非法 URL、重复 tweet、周期上限、总上限分别返回稳定错误码。
 5. 两个并发 POST 在最后一个名额时最多一条成功。
 6. 按 UTC 日/周边界正确重置周期额度，累计额度不重置。
-7. 个人历史只能读取本人记录；外部接口无有效 API key 返回 `401`，分页不会因新写入而跳项。
+7. 个人历史只能读取本人记录；外部接口无需鉴权，分页不会因新写入而跳项。
 8. 外部响应不含邮箱、钱包、token 或报名内部字段。
 9. X API 能返回推文正文时保存并返回展示标题；查不到、超时或限流时投稿仍成功且 `title` 为 `null`。
+10. 无删除权限的管理员收到 `403`；有权限的管理员删除成功后记录消失、投稿限额释放，并可在后台审计日志中检索到该操作。
 
 ## 9. 已确认产品规则
 

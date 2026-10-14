@@ -241,6 +241,16 @@ export async function fetchCampaignTweetSubmissionsAdmin(params: {
   );
 }
 
+export async function deleteCampaignTweetSubmissionAdmin(id: string, campaign?: string) {
+  const query = new URLSearchParams();
+  if (campaign?.trim()) query.set("campaign", campaign.trim());
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiRequest<{ success: boolean; data?: unknown; error?: string }>(
+    `/api/xhunt/campaigns/internal/tweet-submissions/${encodeURIComponent(id)}${suffix}`,
+    { method: "DELETE" },
+  );
+}
+
 export type EchohuntDebugTokenUser = {
   id: string;
   authCenterUserId?: string | null;

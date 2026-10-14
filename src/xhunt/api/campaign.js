@@ -16,6 +16,7 @@ const {
   CampaignRegistration,
   XHuntUser,
   XHuntBinanceSquareBinding,
+  XhuntCampaignTweetSubmission,
 } = require("../../models/postgres-start");
 const {
   getManagedCampaignPayloadByKey,
@@ -547,6 +548,60 @@ router.get(
         error: err.message || "服务器内部错误（admin campaign tweet submissions）",
         message: err.publicMessage || undefined,
       });
+    }
+  }
+);
+
+// 管理后台：删除活动投稿记录
+router.delete(
+  "/internal/tweet-submissions/:id",
+  adminAuth,
+  requirePermission("campaign-tweet-submissions:delete"),
+  async (req, res) => {
+    const id = String(req.params.id || "").trim();
+    const campaignKey = normalizeCampaign(req.query.campaign);
+    try {
+      if (!id) return res.status(400).json({ success: false, error: "id 为必填字段" });
+
+      const where = { id };
+      if (campaignKey) where.campaignKey = campaignKey;
+      const record = await XhuntCampaignTweetSubmission.findOne({ where });
+      if (!record) {
+        await writeAdminAudit(req, {
+          action: "campaign-tweet-submission-delete",
+          success: false,
+          message: `删除活动投稿记录失败（未找到记录）: submissionId=${id}${campaignKey ? `, campaign=${campaignKey}` : ""}`,
+        });
+        return res.status(404).json({ success: false, error: "投稿记录不存在或已删除" });
+      }
+
+      const safeRecord = {
+        id: record.id,
+        campaignKey: record.campaignKey,
+        leaderboardKey: record.leaderboardKey,
+        tweetId: record.tweetId,
+        tweetUrl: record.tweetUrl,
+        twitterId: record.twitterId,
+        twitterUsername: record.twitterUsername,
+        submittedAt: record.submittedAt,
+      };
+      await record.destroy();
+      await writeAdminAudit(req, {
+        action: "campaign-tweet-submission-delete",
+        success: true,
+        message: `删除活动投稿记录成功: campaign=${safeRecord.campaignKey}, leaderboard=${safeRecord.leaderboardKey}, tweetId=${safeRecord.tweetId}`,
+        payload: safeRecord,
+      });
+
+      return res.json({ success: true, data: safeRecord });
+    } catch (err) {
+      console.error("Admin campaign tweet submission delete error:", err);
+      await writeAdminAudit(req, {
+        action: "campaign-tweet-submission-delete",
+        success: false,
+        message: `删除活动投稿记录异常: ${err.message || err}`,
+      });
+      return res.status(500).json({ success: false, error: "服务器内部错误（delete campaign tweet submission）" });
     }
   }
 );

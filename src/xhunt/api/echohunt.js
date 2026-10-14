@@ -7,7 +7,6 @@ function cleanUrlOrNull(val) {
 
 const express = require("express");
 const axios = require("axios");
-const crypto = require("crypto");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const { Op } = require("sequelize");
 const {
@@ -92,7 +91,6 @@ router.use("/social-listening", socialListeningPublicRoutes);
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
 const ECHOHUNT_OAUTH_STATE_TTL_SECONDS = 8 * 60;
-const ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY = String(process.env.ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY || "").trim();
 const authModels = {
   pgInstance,
   AuthCenterXhuntUser,
@@ -137,19 +135,6 @@ function publicError(message, status = 400, publicMessage) {
   err.status = status;
   if (publicMessage) err.publicMessage = publicMessage;
   return err;
-}
-
-function assertTweetSubmissionExportAccess(req) {
-  if (!ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY) {
-    throw publicError("TWEET_SUBMISSION_EXPORT_NOT_CONFIGURED", 503, "Tweet submission export is not configured");
-  }
-  const authorization = String(req.headers.authorization || "");
-  const token = authorization.replace(/^Bearer\s+/i, "").trim();
-  const actual = Buffer.from(token);
-  const expected = Buffer.from(ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY);
-  if (!token || actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) {
-    throw publicError("UNAUTHORIZED", 401, "Unauthorized");
-  }
 }
 
 function normalizeLang(value) {
@@ -1818,7 +1803,6 @@ router.post(
 
 router.get("/external/campaigns/:campaignKey/tweet-submissions", async (req, res) => {
   try {
-    assertTweetSubmissionExportAccess(req);
     const record = await findCampaignRecord(req.params.campaignKey);
     if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
     const campaignKey = record.campaignKey || normalizeCampaign(req.params.campaignKey);

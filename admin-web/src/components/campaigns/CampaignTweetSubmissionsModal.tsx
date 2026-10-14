@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, DatePicker, Input, Modal, Select, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, DatePicker, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
 import type { Dayjs } from "dayjs";
-import { fetchCampaignTweetSubmissionsAdmin } from "@/services/nacos";
+import { useAuth } from "@/app/auth";
+import {
+  deleteCampaignTweetSubmissionAdmin,
+  fetchCampaignTweetSubmissionsAdmin,
+} from "@/services/nacos";
 import type { CampaignTweetSubmissionItem } from "@/types/nacos";
 
 const { RangePicker } = DatePicker;
@@ -44,7 +48,10 @@ export function CampaignTweetSubmissionsModal({
   onClose: () => void;
   onToast?: (message: string, type?: "success" | "error" | "info") => void;
 }) {
+  const { hasPermission } = useAuth();
+  const canDelete = hasPermission("campaign-tweet-submissions:delete");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [rows, setRows] = useState<CampaignTweetSubmissionItem[]>([]);
   const [leaderboardKey, setLeaderboardKey] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>(null);
@@ -167,6 +174,32 @@ export function CampaignTweetSubmissionsModal({
     });
   }
 
+  async function deleteRecord(record: CampaignTweetSubmissionItem) {
+    setDeletingId(record.id);
+    try {
+      await deleteCampaignTweetSubmissionAdmin(record.id, campaign);
+      onToast?.("投稿记录已删除", "success");
+      const targetPageIndex = rows.length <= 1 && pageIndex > 0 ? pageIndex - 1 : pageIndex;
+      if (targetPageIndex !== pageIndex) {
+        setPageCursors((current) => current.slice(0, targetPageIndex + 1));
+      }
+      await loadPage({
+        cursor: pageCursors[targetPageIndex] || null,
+        nextPageIndex: targetPageIndex,
+        nextLeaderboardKey: appliedLeaderboardKey,
+        nextDateRange: appliedDateRange,
+        nextPageSize: appliedPageSize,
+      });
+    } catch (error) {
+      onToast?.(
+        `删除失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const externalUrl = useMemo(() => {
     const origin = typeof window === "undefined" ? "https://your-domain.example" : window.location.origin;
     const url = new URL(
@@ -180,10 +213,7 @@ export function CampaignTweetSubmissionsModal({
     return url.toString();
   }, [campaign, leaderboardKey, dateRange, pageSize]);
 
-  const curlExample = [
-    `curl '${externalUrl}' \\`,
-    "  -H 'Authorization: Bearer <ECHOHUNT_TWEET_SUBMISSION_EXPORT_API_KEY>'",
-  ].join("\n");
+  const curlExample = `curl '${externalUrl}'`;
 
   async function copyText(value: string, label: string) {
     try {
@@ -236,8 +266,8 @@ export function CampaignTweetSubmissionsModal({
                 options={[20, 50, 100].map((value) => ({ value, label: `${value} 条/页` }))}
               />
             </Space>
-            <Button type="primary" loading={loading} onClick={queryFirstPage}>查询</Button>
-            <Button disabled={loading} onClick={resetFilters}>重置</Button>
+            <Button type="primary" loading={loading} disabled={!!deletingId} onClick={queryFirstPage}>查询</Button>
+            <Button disabled={loading || !!deletingId} onClick={resetFilters}>重置</Button>
           </Space>
         </Card>
 
@@ -247,7 +277,7 @@ export function CampaignTweetSubmissionsModal({
           loading={loading}
           dataSource={rows}
           pagination={false}
-          scroll={{ x: 900 }}
+          scroll={{ x: 1000 }}
           locale={{ emptyText: "当前筛选条件下暂无投稿记录" }}
           columns={[
             {
@@ -286,24 +316,52 @@ export function CampaignTweetSubmissionsModal({
               width: 190,
               render: formatDateTime,
             },
+            {
+              title: "操作",
+              key: "actions",
+              width: 110,
+              fixed: "right",
+              render: (_value, record) =>
+                canDelete ? (
+                  <Popconfirm
+                    title="删除投稿记录"
+                    description={`确认删除 @${record.user?.username || record.user?.twitterId || "该用户"} 的这条投稿？此操作不可恢复，删除后对应投稿限额会释放。`}
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => void deleteRecord(record)}
+                  >
+                    <Button
+                      size="small"
+                      danger
+                      disabled={!!deletingId && deletingId !== record.id}
+                      loading={deletingId === record.id}
+                    >
+                      删除
+                    </Button>
+                  </Popconfirm>
+                ) : (
+                  <Tag>无删除权限</Tag>
+                ),
+            },
           ]}
         />
 
         <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
           <Text type="secondary">第 {pageIndex + 1} 页 · 本页 {rows.length} 条</Text>
           <Space>
-            <Button disabled={loading || pageIndex === 0} onClick={loadPreviousPage}>上一页</Button>
-            <Button disabled={loading || !nextCursor} onClick={loadNextPage}>下一页</Button>
+            <Button disabled={loading || !!deletingId || pageIndex === 0} onClick={loadPreviousPage}>上一页</Button>
+            <Button disabled={loading || !!deletingId || !nextCursor} onClick={loadNextPage}>下一页</Button>
           </Space>
         </Space>
 
         <Card size="small">
           <Title level={5} style={{ marginTop: 0 }}>对外投稿查询接口</Title>
           <Alert
-            type="info"
+            type="warning"
             showIcon
-            message="供外部数据服务使用"
-            description="请求必须携带独立 Bearer Key。这里仅提供占位符示例，不会向管理后台页面暴露服务器密钥。筛选条件会同步到下方示例 URL。"
+            message="公开只读接口，无需鉴权"
+            description="任何获得该地址的人都可以读取该活动的投稿记录；筛选条件会同步到下方示例 URL。"
             style={{ marginBottom: 12 }}
           />
           <Space direction="vertical" size={8} style={{ width: "100%" }}>
