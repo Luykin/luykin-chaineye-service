@@ -176,6 +176,16 @@ GET /api/xhunt/echohunt/external/campaigns/:campaignKey/tweet-submissions
 
 不返回邮箱、EVM 地址、Auth Center token、内部报名备注等无关个人数据。外部消费者如需活动配置，可从现有公开活动接口获得；本接口只提供提交事实。
 
+### 5.3 管理后台查询
+
+活动管理页在“查询报名名单”右侧提供“查询投稿记录”入口。管理后台通过管理员 Cookie 和 `nacos_config` 权限访问：
+
+```text
+GET /api/xhunt/campaigns/internal/tweet-submissions
+```
+
+该接口接受 `campaign`、`leaderboardKey`、`from`、`to`、`cursor`、`limit`，复用对外接口的筛选和游标分页逻辑，但不要求浏览器持有对外导出密钥。弹窗同时展示带当前活动和筛选条件的对外接口 URL、Bearer Header cURL 示例及复制按钮；示例只显示密钥占位符，不把服务器密钥暴露到前端。
+
 ## 6. 前端方案
 
 ### 6.1 活动数据和 API client

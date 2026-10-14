@@ -6,6 +6,7 @@ import type {
   WebsiteCampaignListResponse,
   WebsiteCampaignSyncResponse,
   CampaignRegistrationListResponse,
+  CampaignTweetSubmissionListResponse,
 } from "@/types/nacos";
 
 
@@ -217,6 +218,26 @@ export async function deleteCampaignRegistrationAdmin(id: string, campaign?: str
   return apiRequest<{ success: boolean; data?: unknown; error?: string }>(
     `/api/xhunt/campaigns/internal/registrations/${encodeURIComponent(id)}${suffix}`,
     { method: "DELETE" }
+  );
+}
+
+export async function fetchCampaignTweetSubmissionsAdmin(params: {
+  campaign: string;
+  leaderboardKey?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  query.set("campaign", params.campaign);
+  query.set("limit", String(params.limit || 50));
+  if (params.leaderboardKey?.trim()) query.set("leaderboardKey", params.leaderboardKey.trim());
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
+  if (params.cursor) query.set("cursor", params.cursor);
+  return apiRequest<CampaignTweetSubmissionListResponse>(
+    `/api/xhunt/campaigns/internal/tweet-submissions?${query.toString()}`
   );
 }
 

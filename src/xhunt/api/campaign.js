@@ -38,6 +38,9 @@ const {
   getCustomUserActivityData,
   isYziLabsCampaign,
 } = require("../services/campaignLeaderboardService");
+const {
+  listExternalTweetSubmissions,
+} = require("../services/campaignTweetSubmissionService");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
@@ -512,6 +515,38 @@ router.get(
     } catch (err) {
       console.error("Admin campaign registrations query error:", err);
       return res.status(500).json({ success: false, error: "服务器内部错误（admin campaign registrations）" });
+    }
+  }
+);
+
+// 管理后台：活动投稿记录查询
+router.get(
+  "/internal/tweet-submissions",
+  adminAuth,
+  requirePermission("nacos_config"),
+  async (req, res) => {
+    try {
+      const campaignKey = normalizeCampaign(req.query.campaign);
+      if (!campaignKey) {
+        return res.status(400).json({ success: false, error: "campaign 为必填字段" });
+      }
+
+      const data = await listExternalTweetSubmissions({
+        campaignKey,
+        leaderboardKey: req.query.leaderboardKey,
+        from: req.query.from,
+        to: req.query.to,
+        cursor: req.query.cursor,
+        limit: req.query.limit,
+      });
+      return res.json({ success: true, data: { campaignKey, ...data } });
+    } catch (err) {
+      console.error("Admin campaign tweet submissions query error:", err);
+      return res.status(err.status || 500).json({
+        success: false,
+        error: err.message || "服务器内部错误（admin campaign tweet submissions）",
+        message: err.publicMessage || undefined,
+      });
     }
   }
 );

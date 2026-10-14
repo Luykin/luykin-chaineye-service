@@ -89,6 +89,31 @@ export interface CampaignRegistrationListResponse {
   error?: string;
 }
 
+export interface CampaignTweetSubmissionItem {
+  id: string;
+  campaignKey: string;
+  leaderboardKey: string;
+  tweetId: string;
+  tweetUrl: string;
+  title?: string | null;
+  submittedAt: string;
+  user: {
+    twitterId?: string | null;
+    username?: string | null;
+  };
+}
+
+export interface CampaignTweetSubmissionListResponse {
+  success: boolean;
+  data: {
+    campaignKey: string;
+    items: CampaignTweetSubmissionItem[];
+    nextCursor: string | null;
+  };
+  error?: string;
+  message?: string;
+}
+
 export type CampaignRegistrationRankDomain = "web3" | "ai";
 
 export interface CampaignRegistrationRankItem {

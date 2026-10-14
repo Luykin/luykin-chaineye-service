@@ -20,6 +20,7 @@ import { fetchVipLists } from "@/services/feature-flags";
 import type { WebsiteCampaignRecord } from "@/types/nacos";
 import type { VipListItem } from "@/types/feature-flags";
 import { CampaignRegistrationsModal, getRegistrationCampaignKey } from "@/components/campaigns/CampaignRegistrationsModal";
+import { CampaignTweetSubmissionsModal } from "@/components/campaigns/CampaignTweetSubmissionsModal";
 import { ExternalLeaderboardAdapterCard } from "@/components/campaigns/ExternalLeaderboardAdapter";
 import customLeaderboardKeyContract from "../../../shared/xhunt/custom-leaderboard-key-contract.json";
 import tweetSubmissionContract from "../../../shared/xhunt/tweet-submission-contract.json";
@@ -1044,6 +1045,9 @@ export function NacosCampaignsPage() {
   const [registrationsOpen, setRegistrationsOpen] = useState(false);
   const [registrationsCampaign, setRegistrationsCampaign] = useState("");
   const [registrationsCampaignConfig, setRegistrationsCampaignConfig] = useState<AnyObj | null>(null);
+  const [tweetSubmissionsOpen, setTweetSubmissionsOpen] = useState(false);
+  const [tweetSubmissionsCampaign, setTweetSubmissionsCampaign] = useState("");
+  const [tweetSubmissionsCampaignConfig, setTweetSubmissionsCampaignConfig] = useState<AnyObj | null>(null);
   const [echohuntTokenOpen, setEchohuntTokenOpen] = useState(false);
   const [echohuntTokenKeyword, setEchohuntTokenKeyword] = useState("");
   const [echohuntTokenUsers, setEchohuntTokenUsers] = useState<EchohuntDebugTokenUser[]>([]);
@@ -1903,6 +1907,23 @@ export function NacosCampaignsPage() {
     setRegistrationsOpen(true);
   }
 
+  function openTweetSubmissionsModal(target?: AnyObj | null) {
+    const campaign = getRegistrationCampaignKey(target || websiteTarget);
+    if (!campaign) {
+      showToast("当前活动缺少 campaignKey，无法查询投稿记录", "error");
+      return;
+    }
+    const campaignConfig =
+      target?.nacosPayload && typeof target.nacosPayload === "object"
+        ? clone(target.nacosPayload)
+        : target
+          ? clone(target)
+          : null;
+    setTweetSubmissionsCampaign(campaign);
+    setTweetSubmissionsCampaignConfig(campaignConfig);
+    setTweetSubmissionsOpen(true);
+  }
+
   function setListCollapsedAndStore(value: boolean) {
     setListCollapsed(value);
     localStorage.setItem("nacos-campaigns-list-collapsed", value ? "1" : "0");
@@ -2356,9 +2377,10 @@ export function NacosCampaignsPage() {
                     ℹ️ 当前正在编辑“网页独有数据 /
                     插件已下架数据”。这类活动已从主活动配置中移除，
                     所以只支持网站数据库配置，不展示活动主配置部分。
-                    <div style={{ marginTop: 8 }}>
+                    <Space size={8} wrap style={{ marginTop: 8 }}>
                       <Button size="small" onClick={() => openRegistrationsModal(selectedWebsiteRecord)}>查询报名名单</Button>
-                    </div>
+                      <Button size="small" onClick={() => openTweetSubmissionsModal(selectedWebsiteRecord)}>查询投稿记录</Button>
+                    </Space>
                   </div>
                 </div>
               </div>
@@ -2371,6 +2393,7 @@ export function NacosCampaignsPage() {
                   websiteDirty={websiteDirty}
                   websiteStatus={websiteForm.webStatus}
                   onOpenRegistrations={() => openRegistrationsModal(c)}
+                  onOpenTweetSubmissions={() => openTweetSubmissionsModal(c)}
                 />
                 <CampaignEditor
                   c={c}
@@ -2625,6 +2648,14 @@ export function NacosCampaignsPage() {
         onToast={showToast}
       />
 
+      <CampaignTweetSubmissionsModal
+        open={tweetSubmissionsOpen}
+        campaign={tweetSubmissionsCampaign}
+        campaignConfig={tweetSubmissionsCampaignConfig}
+        onClose={() => setTweetSubmissionsOpen(false)}
+        onToast={showToast}
+      />
+
 
       <Modal
         open={jsonPreviewOpen}
@@ -2786,12 +2817,14 @@ function CampaignBrief({
   websiteDirty,
   websiteStatus,
   onOpenRegistrations,
+  onOpenTweetSubmissions,
 }: {
   c: AnyObj;
   dirty: boolean;
   websiteDirty: boolean;
   websiteStatus: string;
   onOpenRegistrations: () => void;
+  onOpenTweetSubmissions: () => void;
 }) {
   const stage = getCampaignStage(c);
   const taskCount = Array.isArray(c.tasks) ? c.tasks.length : 0;
@@ -2819,11 +2852,14 @@ function CampaignBrief({
           <span>{c.id || "未生成 ID"}</span>
           <span>网站 {websiteStatus || "draft"}</span>
         </div>
-        <div style={{ marginTop: 10 }}>
+        <Space size={8} wrap style={{ marginTop: 10 }}>
           <Button size="small" onClick={onOpenRegistrations}>
             查询报名名单
           </Button>
-        </div>
+          <Button size="small" onClick={onOpenTweetSubmissions}>
+            查询投稿记录
+          </Button>
+        </Space>
       </div>
       <div className="campaign-brief-stats">
         <div className="campaign-brief-stat">
