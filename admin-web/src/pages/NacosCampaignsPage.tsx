@@ -24,6 +24,7 @@ import { CampaignTweetSubmissionsModal } from "@/components/campaigns/CampaignTw
 import { ExternalLeaderboardAdapterCard } from "@/components/campaigns/ExternalLeaderboardAdapter";
 import customLeaderboardKeyContract from "../../../shared/xhunt/custom-leaderboard-key-contract.json";
 import tweetSubmissionContract from "../../../shared/xhunt/tweet-submission-contract.json";
+import leaderboardColumnContract from "../../../shared/xhunt/leaderboard-column-contract.json";
 
 const { TextArea } = Input;
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -120,6 +121,13 @@ const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS = [
 const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_VALUES = new Set(
   CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value),
 );
+const CUSTOM_LEADERBOARD_HIDDEN_COLUMN_OPTIONS = leaderboardColumnContract.hideableColumns.map((item) => ({
+  value: item.key,
+  label: `${item.label.zh}（${item.key}）`,
+}));
+const CUSTOM_LEADERBOARD_HIDDEN_COLUMN_VALUES = new Set(
+  CUSTOM_LEADERBOARD_HIDDEN_COLUMN_OPTIONS.map((item) => item.value),
+);
 const TWEET_SUBMISSION_PERIOD_VALUES = new Set<string>(
   tweetSubmissionContract.periods,
 );
@@ -177,6 +185,17 @@ function normalizeCustomLeaderboardDisplayChannels(value: unknown) {
     : CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value);
 }
 
+function normalizeCustomLeaderboardHiddenColumns(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim())
+        .filter((item) => CUSTOM_LEADERBOARD_HIDDEN_COLUMN_VALUES.has(item)),
+    ),
+  );
+}
+
 function normalizeTweetSubmissionEditorConfig(value: unknown) {
   const source = value && typeof value === "object" ? value as AnyObj : {};
   const rawPeriod = String(
@@ -222,6 +241,7 @@ export interface CustomLeaderboardConfig {
   short_name?: string | { zh?: string; en?: string };
   empty_text?: string | { zh?: string; en?: string };
   displayChannels?: string[];
+  hiddenColumns?: string[];
   tweetSubmission?: {
     enabled?: boolean;
     period?: "day" | "week";
@@ -466,6 +486,7 @@ function normalizeCampaign(
     unit: it?.unit || "",
     empty_text: normalizeI18nText(it?.empty_text || it?.emptyText),
     displayChannels: normalizeCustomLeaderboardDisplayChannels(it?.displayChannels),
+    hiddenColumns: normalizeCustomLeaderboardHiddenColumns(it?.hiddenColumns),
     tweetSubmission: normalizeTweetSubmissionEditorConfig(it?.tweetSubmission),
   }));
   if (Array.isArray(c.displayMetrics)) {
@@ -1629,6 +1650,9 @@ export function NacosCampaignsPage() {
             item.displayChannels = normalizeCustomLeaderboardDisplayChannels(
               item.displayChannels,
             );
+            item.hiddenColumns = normalizeCustomLeaderboardHiddenColumns(
+              item.hiddenColumns,
+            );
           },
         );
       }
@@ -2033,6 +2057,7 @@ export function NacosCampaignsPage() {
           distributionType: "equal",
           unit: "USDT",
           displayChannels: ["plugin", "echohunt"],
+          hiddenColumns: [],
           tweetSubmission: { enabled: false, period: "day", periodLimit: undefined, totalLimit: undefined },
         });
       if (kind === "tags")
@@ -3725,6 +3750,26 @@ function CustomLeaderboards({
                 )
               }
               options={CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS}
+            />
+          </Field>
+        </Col>
+        <Col xs={24} md={8}>
+          <Field label={<InfoLabel info="该榜单在 EchoHunt 前端要隐藏的表格列，按列 key 配置；留空则不隐藏。">隐藏列</InfoLabel>}>
+            <Select
+              mode="multiple"
+              allowClear
+              maxTagCount="responsive"
+              placeholder="不隐藏"
+              value={normalizeCustomLeaderboardHiddenColumns(it.hiddenColumns)}
+              onChange={(values) =>
+                update(
+                  "customLeaderboards",
+                  i,
+                  "hiddenColumns",
+                  normalizeCustomLeaderboardHiddenColumns(values),
+                )
+              }
+              options={CUSTOM_LEADERBOARD_HIDDEN_COLUMN_OPTIONS}
             />
           </Field>
         </Col>

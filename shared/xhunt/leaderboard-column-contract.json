@@ -1,0 +1,16 @@
+{
+  "hideableColumns": [
+    { "key": "rank", "label": { "zh": "排名", "en": "Rank" } },
+    { "key": "hunter", "label": { "zh": "Hunter", "en": "Hunter" } },
+    { "key": "author", "label": { "zh": "作者", "en": "Author" } },
+    { "key": "award", "label": { "zh": "奖励", "en": "Award" } },
+    { "key": "post", "label": { "zh": "推文", "en": "Post" } },
+    { "key": "reward", "label": { "zh": "奖励金额", "en": "Reward" } },
+    { "key": "tweets", "label": { "zh": "推文数", "en": "Tweets" } },
+    { "key": "views", "label": { "zh": "浏览量", "en": "Views" } },
+    { "key": "likes", "label": { "zh": "点赞数", "en": "Likes" } },
+    { "key": "kolEngages", "label": { "zh": "KOL 互动", "en": "KOL Engages" } },
+    { "key": "invites", "label": { "zh": "邀请", "en": "Invites" } },
+    { "key": "share", "label": { "zh": "Mindshare 占比", "en": "Mindshare %" } }
+  ]
+}

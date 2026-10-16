@@ -83,7 +83,21 @@ const {
 const echohuntKolMatchRoutes = require("./echohunt-kol-match");
 const businessCollaborationRoutes = require("./business-collaboration");
 const socialListeningPublicRoutes = require("../social-listening/api/public");
+const leaderboardColumnContract = require("../../../shared/xhunt/leaderboard-column-contract.json");
 const router = express.Router();
+
+const HIDEABLE_COLUMN_KEYS = new Set(leaderboardColumnContract.hideableColumns.map((item) => item.key));
+
+function normalizeHiddenColumns(value) {
+  const list = Array.isArray(value) ? value : [];
+  return Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim())
+        .filter((item) => HIDEABLE_COLUMN_KEYS.has(item)),
+    ),
+  );
+}
 
 router.use("/kol-match", echohuntKolMatchRoutes);
 router.use("/business-collaboration", businessCollaborationRoutes);
@@ -496,6 +510,7 @@ function summarizeCustomLeaderboards(list, lang = "zh-CN") {
       participantCount: item.participantCount ?? null,
       distributionType: item.distributionType || null,
       unit: item.unit || null,
+      hiddenColumns: normalizeHiddenColumns(item.hiddenColumns),
       tweetSubmission: tweetSubmission.enabled
         ? {
             enabled: true,
