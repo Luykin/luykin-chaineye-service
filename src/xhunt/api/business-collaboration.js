@@ -512,6 +512,9 @@ async function loadActivityForUpdate(activityId, transaction) {
 
 async function assertKolMatchProjectContext(req, activity, strategyId) {
   const normalizedStrategyId = String(strategyId || "").trim();
+  // 方案 A：拥有活动管理权限的调用方在直接邀约场景下可省略 kolMatchStrategyId；
+  // 若传入了 strategyId，则继续校验其有效性及与活动项目 Twitter ID 的绑定关系。
+  if (!normalizedStrategyId) return;
   if (!/^[a-zA-Z0-9_-]{8,80}$/.test(normalizedStrategyId)) {
     throw publicError("请从 AI 精准匹配结果页发起邀约", 400, "KOL_MATCH_CONTEXT_REQUIRED");
   }

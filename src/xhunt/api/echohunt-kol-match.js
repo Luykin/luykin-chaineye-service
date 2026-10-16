@@ -2369,6 +2369,84 @@ async function queryKolProfileByHandle(handle, filterInput = {}) {
   return row || null;
 }
 
+const KOL_SEARCH_MIN_QUERY_LENGTH = 3;
+const KOL_SEARCH_MAX_LIMIT = 30;
+
+function escapeLikePattern(value) {
+  return String(value || "").replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+async function queryKolProfilesByFuzzySearch(rawQuery, options = {}) {
+  const cleanedQuery = String(rawQuery || "")
+    .trim()
+    .replace(/^@+/, "")
+    .slice(0, 64)
+    .trim();
+  if (cleanedQuery.length < KOL_SEARCH_MIN_QUERY_LENGTH) {
+    throw publicError("KOL_SEARCH_QUERY_TOO_SHORT", 400, "请输入至少 3 个字符进行搜索。", {
+      quotaCharged: false,
+      minLength: KOL_SEARCH_MIN_QUERY_LENGTH,
+    });
+  }
+  const requestedLimit = Number(options.limit);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.floor(requestedLimit), 1), KOL_SEARCH_MAX_LIMIT)
+    : KOL_SEARCH_MAX_LIMIT;
+  const domain = normalizeDomain(options.domain, "Web3");
+  const market = normalizeMarket(options.market, "GLOBAL");
+  const lowerQuery = cleanedQuery.toLowerCase();
+  const escapedQuery = escapeLikePattern(lowerQuery);
+  const containsPattern = `%${escapedQuery}%`;
+  const prefixPattern = `${escapedQuery}%`;
+  const db = getPostgresReadOnlyInstance();
+  const personProfileTypeFilter = getKolMarketingPersonProfileFilterSql("k");
+  const personProfileTypeClause = personProfileTypeFilter.clause ? `
+      AND ${personProfileTypeFilter.clause}` : "";
+  // 注意：模糊搜索不计入任何配额，且不过滤 collaboration_accepting_new_invitations = false，
+  // 以便前端能搜索出配置了“不合作”的 KOL 并展示其不合作状态（禁止勾选发起邀约）。
+  const sql = `
+    WITH matched AS MATERIALIZED (
+      SELECT
+        k.twitter_user_id,
+        CASE
+          WHEN lower(ltrim(coalesce(k.handle, u.profile ->> 'username', ''), '@')) = $exactQuery THEN 0
+          WHEN lower(ltrim(coalesce(k.handle, u.profile ->> 'username', ''), '@')) LIKE $prefixPattern ESCAPE '\\' THEN 1
+          WHEN lower(coalesce(k.name, u.name::text, u.profile ->> 'name', '')) LIKE $prefixPattern ESCAPE '\\' THEN 2
+          WHEN lower(ltrim(coalesce(k.handle, u.profile ->> 'username', ''), '@')) LIKE $containsPattern ESCAPE '\\' THEN 3
+          ELSE 4
+        END AS match_priority,
+        k.followers
+      FROM dev.kol_marketing_profile k
+      LEFT JOIN dev.twitter_user u ON u.id = k.twitter_user_id
+      WHERE k.active IS TRUE
+        AND (
+          lower(ltrim(coalesce(k.handle, u.profile ->> 'username', ''), '@')) LIKE $containsPattern ESCAPE '\\'
+          OR lower(coalesce(k.name, u.name::text, u.profile ->> 'name', '')) LIKE $containsPattern ESCAPE '\\'
+        )${personProfileTypeClause}
+      ORDER BY match_priority ASC, k.followers DESC NULLS LAST
+      LIMIT $limit
+    )
+    SELECT ${getKolSelectSql({ lastActiveExpression: "NULL::timestamptz" })}
+    FROM matched
+    JOIN dev.kol_marketing_profile k ON k.twitter_user_id = matched.twitter_user_id
+    LEFT JOIN dev.twitter_user u ON u.id = k.twitter_user_id
+    ORDER BY matched.match_priority ASC, matched.followers DESC NULLS LAST, "influenceRank" ASC NULLS LAST
+  `;
+  const rows = await db.query(sql, {
+    bind: {
+      exactQuery: lowerQuery,
+      prefixPattern,
+      containsPattern,
+      limit,
+      domain,
+      market,
+      ...(personProfileTypeFilter.bind || {}),
+    },
+    type: QueryTypes.SELECT,
+  });
+  return { rows, limit };
+}
+
 async function queryKolProfileByTwitterUserId(twitterUserId, filterInput = {}) {
   const normalizedId = normalizeTwitterUserId(twitterUserId);
   if (!normalizedId) throw publicError("KOL_ID_INVALID", 400, "KOL ID 不合法。", { quotaCharged: false });
@@ -3064,6 +3142,39 @@ router.post("/ai-search", dispatchByEchohuntEnv("ai-search", aiSearchHandler));
 router.post("/ai-search/stream", dispatchByEchohuntEnv("ai-search-stream", aiSearchStreamHandler));
 router.get("/results/:resultId", dispatchByEchohuntEnv("saved-result", savedResultHandler));
 router.post("/filter-search", dispatchByEchohuntEnv("filter-search", filterSearchHandler));
+const kolsSearchHandler = async (req, res) => {
+  const configError = getPgServiceConfigError();
+  if (configError) {
+    return sendError(res, publicError("KOL_MATCH_SERVICE_UNAVAILABLE", 503, "KOL Match 服务暂不可用，请稍后再试。", { reason: configError }));
+  }
+
+  try {
+    const rawQuery = req.query.q ?? req.query.query ?? req.query.handle ?? "";
+    const { rows, limit } = await queryKolProfilesByFuzzySearch(rawQuery, {
+      limit: req.query.limit,
+      domain: req.query.domain,
+      market: req.query.market,
+    });
+    const items = rows.map((row) => {
+      const domain = normalizeDomain(req.query.domain, Array.isArray(row.domains) && row.domains.includes("AI") ? "AI" : "Web3");
+      const market = normalizeMarket(req.query.market || row.language, row.language || "GLOBAL");
+      return mapKolProfile(row, { domain, market, lang: req.query.lang, briefTerms: [] });
+    });
+    return res.json({
+      success: true,
+      data: {
+        items,
+        total: items.length,
+        limit,
+        quotaCharged: false,
+      },
+    });
+  } catch (error) {
+    return sendError(res, error, "KOL_SEARCH_FAILED");
+  }
+};
+
+router.get("/kols/search", dispatchByEchohuntEnv("kols-search", kolsSearchHandler));
 router.get("/kols/lookup", dispatchByEchohuntEnv("kols-lookup", kolsLookupHandler));
 router.get("/kols/:twitterUserId", dispatchByEchohuntEnv("kols-detail", kolsDetailHandler));
 
