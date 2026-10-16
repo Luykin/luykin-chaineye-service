@@ -3,8 +3,8 @@
 > 首次记录日期：2026-08-31
 > 最近更新：2026-09-01
 > 后端仓库：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`
-> 关联方案文档：`docs/social-listening-technical-implementation.md`
-> 关联时序图：`docs/social-listening-sequence-diagrams/`
+> 关联方案文档：`docs/2026-9/social-listening-technical-implementation.md`
+> 关联时序图：`docs/2026-9/social-listening-sequence-diagrams/`
 
 ## 1. 当前结论
 

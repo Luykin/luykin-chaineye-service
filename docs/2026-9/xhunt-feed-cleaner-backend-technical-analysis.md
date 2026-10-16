@@ -1,7 +1,7 @@
 # XHunt 智能信息流净化 (X-Cleaner) 后端技术分析与架构设计方案
 
 > **文档版本**：v1.0.0  
-> **归档路径**：`docs/xhunt-feed-cleaner-backend-technical-analysis.md`  
+> **归档路径**：`docs/2026-9/xhunt-feed-cleaner-backend-technical-analysis.md`  
 > **关联前端规范**：`tweet-hunt-extension/docs/xhunt-feed-cleaner-design.md`  
 > **涉及子系统**：  
 > - `enterprise-admin` (后端 API Server / PostgreSQL / Redis / Nacos Client)  

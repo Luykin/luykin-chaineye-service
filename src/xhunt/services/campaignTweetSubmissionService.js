@@ -83,13 +83,23 @@ function parseTweetUrl(rawUrl) {
   return { tweetId, tweetUrl: `https://x.com/${handle}/status/${tweetId}` };
 }
 
-function getPeriodStart(period, now = new Date()) {
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getPeriodStart(period, now = new Date(), campaignStartAt) {
+  if (period === "week" && campaignStartAt instanceof Date && !Number.isNaN(campaignStartAt.getTime())) {
+    const elapsedWeeks = Math.max(0, Math.floor((now.getTime() - campaignStartAt.getTime()) / WEEK_MS));
+    return new Date(campaignStartAt.getTime() + elapsedWeeks * WEEK_MS);
+  }
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   if (period === "week") {
     const daysSinceMonday = (start.getUTCDay() + 6) % 7;
     start.setUTCDate(start.getUTCDate() - daysSinceMonday);
   }
   return start;
+}
+
+function getCampaignStartAt(campaignConfig) {
+  return new Date(campaignConfig?.enrollmentWindow?.startAt || "");
 }
 
 function assertSubmissionWindow(campaignConfig, now = new Date()) {
@@ -103,12 +113,12 @@ function assertSubmissionWindow(campaignConfig, now = new Date()) {
   }
 }
 
-async function getUsage({ campaignKey, leaderboardKey, xHuntUserId, config, transaction, now = new Date() }) {
+async function getUsage({ campaignKey, leaderboardKey, xHuntUserId, config, transaction, now = new Date(), campaignStartAt }) {
   const where = { campaignKey, leaderboardKey, xHuntUserId };
   const [totalUsed, periodUsed] = await Promise.all([
     XhuntCampaignTweetSubmission.count({ where, transaction }),
     XhuntCampaignTweetSubmission.count({
-      where: { ...where, submittedAt: { [Op.gte]: getPeriodStart(config.period, now) } },
+      where: { ...where, submittedAt: { [Op.gte]: getPeriodStart(config.period, now, campaignStartAt) } },
       transaction,
     }),
   ]);
@@ -187,6 +197,7 @@ async function createTweetSubmission({
       xHuntUserId: registration.xHuntUserId,
       config: leaderboard,
       transaction,
+      campaignStartAt: getCampaignStartAt(campaignConfig),
     });
     if (!usage.periodRemaining || !usage.totalRemaining) {
       throw submissionError("SUBMISSION_LIMIT_REACHED", 409, "Submission limit reached", usage);
@@ -209,6 +220,7 @@ async function createTweetSubmission({
       xHuntUserId: registration.xHuntUserId,
       config: leaderboard,
       transaction,
+      campaignStartAt: getCampaignStartAt(campaignConfig),
     });
     return { submission, usage: nextUsage };
   });
@@ -272,6 +284,7 @@ async function getUserTweetSubmissions({
         leaderboardKey: leaderboard.leaderboardKey,
         xHuntUserId: registration.xHuntUserId,
         config: leaderboard,
+        campaignStartAt: getCampaignStartAt(campaignConfig),
       }),
       listSubmissionPage({
         where: {

@@ -1,7 +1,7 @@
 # KOL Match 定向合作活动（TCC）实施进度核对
 
 > 核对日期：2026-10-10（取代 2026-10-09 版）
-> 依据文档：`docs/kol-match-business-collaboration-technical-analysis-20260917.md`（下称「技术文档」）
+> 依据文档：`docs/2026-9/kol-match-business-collaboration-technical-analysis-20260917.md`（下称「技术文档」）
 > 核对范围：后端 `luykin-chaineye-service`（含 admin-web）、前端 `XHunt.website/apps/echohunt`
 > 结论：**阶段 1-4 已完成（阶段 4 于 2026-10-10 收尾，迁移待 DB 可达后执行、端到端联调待进行），阶段 5-6 未开始。**
 

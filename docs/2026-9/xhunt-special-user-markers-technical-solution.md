@@ -2,7 +2,7 @@
 
 > **文档版本**：v1.2.0（实施完成版）  
 > **更新时间**：2026-09-26  
-> **归档路径**：`docs/xhunt-special-user-markers-technical-solution.md`  
+> **归档路径**：`docs/2026-9/xhunt-special-user-markers-technical-solution.md`  
 > **涉及代码库**：  
 > - **后端系统**：`enterprise-admin`（Express.js / PostgreSQL / Redis / Sequelize）  
 > - **管理后台**：`admin-web`（React 18 / Ant Design / React Query）  
