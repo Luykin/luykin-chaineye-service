@@ -196,7 +196,7 @@ function normalizeManualWinnerRow(item, index, unit, distinctRewards = [], curre
   const author = rawName || handle || `Winner #${order}`;
   const post = String(item?.post || item?.title || "").trim();
   const url = cleanUrlOrNull(item?.url);
-  const reward = formatManualWinnerReward(item?.reward ?? item?.prize, unit);
+  const reward = formatManualWinnerReward(item?.reward, unit);
   return {
     rank,
     order,
@@ -224,7 +224,7 @@ function normalizeManualWinnerRow(item, index, unit, distinctRewards = [], curre
 
 function normalizeManualWinnerRows(rows, unit) {
   const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && typeof row === "object");
-  const rewardNums = cleanRows.map((row) => parseRewardNumericValue(row.reward ?? row.prize));
+  const rewardNums = cleanRows.map((row) => parseRewardNumericValue(row.reward));
   const distinctRewards = getDistinctRewardTiers(rewardNums);
   return cleanRows.map((row, index) =>
     normalizeManualWinnerRow(row, index, unit, distinctRewards, rewardNums[index])
@@ -659,7 +659,7 @@ function simplifyWinnerRow(row, track) {
     avatar: row.avatar || null,
     post: row.post || row.title || null,
     url: row.url || null,
-    reward: row.reward || row.prize || null,
+    reward: row.reward || null,
     trackReward: track?.reward || null,
     raw: row,
   };

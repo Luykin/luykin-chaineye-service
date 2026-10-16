@@ -340,19 +340,26 @@ router.get("/custom-user-activity", securityMiddleware, authenticateTokenOptiona
 
     let requestUsername = normalizeTesterHandle(req.user?.username || req.headers["x-user-id"]);
     if (!requestUsername && customLeaderboards.some((item) => item?.isEssayContest === true)) {
-      const lookupIds = [twitterId, userId ? String(userId).trim() : ""].filter(Boolean);
-      if (lookupIds.length) {
-        const userRecord = await XHuntUser.findOne({
-          where: {
-            [Op.or]: [
-              { twitterId: { [Op.in]: lookupIds } },
-              { id: { [Op.in]: lookupIds } },
-            ],
-          },
-          attributes: ["username"],
-        }).catch(() => null);
-        if (userRecord?.username) {
-          requestUsername = normalizeTesterHandle(userRecord.username);
+      const normalizedUserId = userId ? String(userId).trim() : "";
+      const lookupTwitterIds = [...new Set([twitterId, normalizedUserId].filter(Boolean))];
+      const lookupConditions = [];
+      if (lookupTwitterIds.length) {
+        lookupConditions.push({ twitterId: { [Op.in]: lookupTwitterIds } });
+      }
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalizedUserId)) {
+        lookupConditions.push({ id: normalizedUserId });
+      }
+      if (lookupConditions.length) {
+        try {
+          const userRecord = await XHuntUser.findOne({
+            where: { [Op.or]: lookupConditions },
+            attributes: ["username"],
+          });
+          if (userRecord?.username) {
+            requestUsername = normalizeTesterHandle(userRecord.username);
+          }
+        } catch (lookupError) {
+          console.warn("[CustomUserActivity] username lookup warn:", lookupError.message || lookupError);
         }
       }
     }
