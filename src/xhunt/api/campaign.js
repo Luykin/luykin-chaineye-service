@@ -338,10 +338,29 @@ router.get("/custom-user-activity", securityMiddleware, authenticateTokenOptiona
       return res.status(400).json({ success: false, error: "twitter identity is required" });
     }
 
+    let requestUsername = normalizeTesterHandle(req.user?.username || req.headers["x-user-id"]);
+    if (!requestUsername && customLeaderboards.some((item) => item?.isEssayContest === true)) {
+      const lookupIds = [twitterId, userId ? String(userId).trim() : ""].filter(Boolean);
+      if (lookupIds.length) {
+        const userRecord = await XHuntUser.findOne({
+          where: {
+            [Op.or]: [
+              { twitterId: { [Op.in]: lookupIds } },
+              { id: { [Op.in]: lookupIds } },
+            ],
+          },
+          attributes: ["username"],
+        }).catch(() => null);
+        if (userRecord?.username) {
+          requestUsername = normalizeTesterHandle(userRecord.username);
+        }
+      }
+    }
     const data = await getCustomUserActivityData(campaignConfig, userId, {
       campaign: normalizedCampaign,
       channel: "plugin",
       twitterId,
+      username: requestUsername,
     });
 
     res.set("Cache-Control", "private, max-age=300");

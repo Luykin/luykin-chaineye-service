@@ -89,13 +89,55 @@ function isCustomLeaderboardVisibleOnChannel(item, channel) {
   return normalizeCustomLeaderboardDisplayChannels(item?.displayChannels).includes(normalizedChannel);
 }
 
+function normalizeEssayContestWinnerItem(item) {
+  const obj = toSafeObject(item, {});
+  const handler = String(obj.handler || obj.username || obj.handle || "")
+    .trim()
+    .replace(/^@+/, "");
+  const normalized = {
+    name: String(obj.name || obj.author || "").trim(),
+    handler,
+    avatar: String(obj.avatar || obj.image || "").trim(),
+    reward: obj.reward === undefined || obj.reward === null ? "" : String(obj.reward).trim(),
+  };
+  if (obj.award !== undefined && obj.award !== null && String(obj.award).trim()) {
+    normalized.award = String(obj.award).trim();
+  }
+  if (obj.post !== undefined || obj.title !== undefined) {
+    const post = String(obj.post || obj.title || "").trim();
+    if (post) normalized.post = post;
+  }
+  if (obj.url !== undefined && obj.url !== null && String(obj.url).trim()) {
+    normalized.url = String(obj.url).trim();
+  }
+  return normalized;
+}
+
+function normalizeEssayContestWinners(list) {
+  return toSafeArray(list)
+    .map(normalizeEssayContestWinnerItem)
+    .filter((item) => item.name || item.handler || item.avatar || item.reward || item.post || item.url);
+}
+
+function hasCustomEssayContestLeaderboard(nacosPayload) {
+  const payload = toSafeObject(nacosPayload, {});
+  if (payload.leaderboardMode !== "custom") return false;
+  return toSafeArray(payload.customLeaderboards).some((item) => item?.isEssayContest === true);
+}
+
 function filterCustomLeaderboardsByChannel(list, channel) {
   return toSafeArray(list)
     .filter((item) => isCustomLeaderboardVisibleOnChannel(item, channel))
-    .map((item) => ({
-      ...toSafeObject(item, {}),
-      displayChannels: normalizeCustomLeaderboardDisplayChannels(item?.displayChannels),
-    }));
+    .map((item) => {
+      const safeItem = toSafeObject(item, {});
+      const isEssayContest = safeItem.isEssayContest === true;
+      return {
+        ...safeItem,
+        isEssayContest,
+        winners: isEssayContest ? normalizeEssayContestWinners(safeItem.winners) : [],
+        displayChannels: normalizeCustomLeaderboardDisplayChannels(safeItem.displayChannels),
+      };
+    });
 }
 
 
@@ -1087,7 +1129,10 @@ async function saveWebsiteCampaignConfig(identifier, payload) {
       if (nacosPayload.enablePowLeaderboard === true && !nextValues.claimPowContractAddress) {
         throw new Error("当前活动已开启 POW，claim 状态下必须填写 POW 合约地址");
       }
-      if (nacosPayload.enableEssayContest === true && !nextValues.claimEssayContractAddress) {
+      if (
+        (nacosPayload.enableEssayContest === true || hasCustomEssayContestLeaderboard(nacosPayload)) &&
+        !nextValues.claimEssayContractAddress
+      ) {
         throw new Error("当前活动已开启征文大赛，claim 状态下必须填写征文大赛合约地址");
       }
     }

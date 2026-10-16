@@ -242,6 +242,16 @@ export interface CustomLeaderboardConfig {
   empty_text?: string | { zh?: string; en?: string };
   displayChannels?: string[];
   hiddenColumns?: string[];
+  isEssayContest?: boolean;
+  winners?: Array<{
+    name?: string;
+    handler?: string;
+    avatar?: string;
+    reward?: string;
+    award?: string;
+    post?: string;
+    url?: string;
+  }>;
   tweetSubmission?: {
     enabled?: boolean;
     period?: "day" | "week";
@@ -375,6 +385,39 @@ function normalizeI18nText(value: unknown) {
   return { zh: String(value || ""), en: "" };
 }
 
+function normalizeEssayWinnerList(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .filter((item) => item && typeof item === "object")
+    .map((item: AnyObj) => ({
+      name: String(item.name || ""),
+      handler: String(item.handler || item.username || item.handle || ""),
+      avatar: String(item.avatar || ""),
+      reward: item.reward === undefined || item.reward === null ? "" : String(item.reward),
+      ...(item.award !== undefined ? { award: String(item.award || "") } : {}),
+      ...(item.post !== undefined || item.title !== undefined
+        ? { post: String(item.post || item.title || "") }
+        : {}),
+      ...(item.url !== undefined ? { url: String(item.url || "") } : {}),
+    }));
+}
+
+function hasCustomEssayContest(target?: AnyObj | null) {
+  if (!target) return false;
+  const payload =
+    target.nacosPayload && typeof target.nacosPayload === "object"
+      ? target.nacosPayload
+      : target;
+  const mode = payload.leaderboardMode || target.leaderboardMode;
+  if (mode !== "custom") return false;
+  const list = Array.isArray(payload.customLeaderboards)
+    ? payload.customLeaderboards
+    : Array.isArray(target.customLeaderboards)
+      ? target.customLeaderboards
+      : [];
+  return list.some((item: AnyObj) => item?.isEssayContest === true);
+}
+
 function normalizeConfig(obj: unknown): CampaignConfig {
   const out =
     obj && typeof obj === "object"
@@ -485,6 +528,8 @@ function normalizeCampaign(
     distributionType: it?.distributionType || "",
     unit: it?.unit || "",
     empty_text: normalizeI18nText(it?.empty_text || it?.emptyText),
+    isEssayContest: it?.isEssayContest === true,
+    winners: normalizeEssayWinnerList(it?.winners),
     displayChannels: normalizeCustomLeaderboardDisplayChannels(it?.displayChannels),
     hiddenColumns: normalizeCustomLeaderboardHiddenColumns(it?.hiddenColumns),
     tweetSubmission: normalizeTweetSubmissionEditorConfig(it?.tweetSubmission),
@@ -1647,6 +1692,8 @@ export function NacosCampaignsPage() {
               if (!Number.isInteger(item.tweetSubmission.totalLimit) || item.tweetSubmission.totalLimit < tweetSubmissionContract.totalLimit.min || item.tweetSubmission.totalLimit > tweetSubmissionContract.totalLimit.max)
                 errors.push(`${label} 累计提交上限必须是 ${tweetSubmissionContract.totalLimit.min}-${tweetSubmissionContract.totalLimit.max} 的整数`);
             }
+            item.isEssayContest = item.isEssayContest === true;
+            item.winners = item.isEssayContest ? normalizeEssayWinnerList(item.winners) : [];
             item.displayChannels = normalizeCustomLeaderboardDisplayChannels(
               item.displayChannels,
             );
@@ -1813,7 +1860,8 @@ export function NacosCampaignsPage() {
       );
       const essayEnabled = !!(
         websiteTarget?.enableEssayContest ||
-        websiteTarget?.nacosPayload?.enableEssayContest
+        websiteTarget?.nacosPayload?.enableEssayContest ||
+        hasCustomEssayContest(websiteTarget)
       );
       if (status === "claim") {
         if (!websiteForm.claimPoiContractAddress.trim())
@@ -2056,6 +2104,8 @@ export function NacosCampaignsPage() {
           participantCount: undefined,
           distributionType: "equal",
           unit: "USDT",
+          isEssayContest: false,
+          winners: [],
           displayChannels: ["plugin", "echohunt"],
           hiddenColumns: [],
           tweetSubmission: { enabled: false, period: "day", periodLimit: undefined, totalLimit: undefined },
@@ -2145,7 +2195,8 @@ export function NacosCampaignsPage() {
   );
   const essayEnabled = !!(
     websiteTarget?.enableEssayContest ||
-    websiteTarget?.nacosPayload?.enableEssayContest
+    websiteTarget?.nacosPayload?.enableEssayContest ||
+    hasCustomEssayContest(websiteTarget)
   );
   const selectedEchohuntTokenUser = echohuntTokenUsers.find(
     (item) => item.id === echohuntTokenUserId,
@@ -3680,6 +3731,11 @@ function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number
       <AntTag color="gold">{getCustomLeaderboardRewardText(item)}</AntTag>
       <AntTag color="green">{item.participantCount || "-"} 人</AntTag>
       <AntTag>{getDistributionLabel(item.distributionType)}</AntTag>
+      {item.isEssayContest ? (
+        <AntTag color="purple">
+          征文大赛{Array.isArray(item.winners) && item.winners.length ? ` (${item.winners.length}人)` : ""}
+        </AntTag>
+      ) : null}
       {item.tweetSubmission?.enabled ? <AntTag color="magenta">主动投稿</AntTag> : null}
       {hiddenColumns.length ? <AntTag color="volcano">隐藏 {hiddenColumns.length} 列</AntTag> : null}
       {item.empty_text?.zh || item.empty_text?.en ? <AntTag color="purple">占位: {item.empty_text?.zh || item.empty_text?.en}</AntTag> : null}
@@ -3840,21 +3896,142 @@ function CustomLeaderboards({
           </Row>
         ) : null}
       </div>
-      <ExternalLeaderboardAdapterCard
-        nacosCampaignId={nacosCampaignId}
-        leaderboardKey={leaderboardKey}
-        leaderboardTitle={getCustomLeaderboardDisplayTitle(it, i)}
-        isSuperAdmin={!!isSuperAdmin}
-        disabled={!nacosCampaignId || !leaderboardKey || hasDuplicateAdapterKey || hasInvalidAdapterKey}
-        disabledReason={
-          hasDuplicateAdapterKey
-            ? "多个自定义榜单使用了相同的榜单 ID / 机制 key；请填写唯一的榜单 ID 后再配置适配器。"
-            : hasInvalidAdapterKey
-              ? `榜单 ID 只能包含文字、数字、空格、下划线或连字符，且不能超过 ${customLeaderboardKeyContract.maxLength} 个字符。`
-            : undefined
-        }
-        onMessage={onMessage}
-      />
+      <div
+        style={{
+          padding: "10px 12px",
+          borderRadius: 8,
+          border: "1px solid var(--admin-border-soft, #e5e7eb)",
+          background: "var(--admin-surface-subtle, rgba(148, 163, 184, 0.06))",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <Space size={8}>
+            <strong style={{ fontSize: 12 }}>征文大赛（手动录入获奖名单）</strong>
+            <Tooltip title="开启后可直接在下方手动录入获奖名单，接口返回结构与旧版征文大赛及标准榜单完全兼容；开启后将自动隐藏外部榜单数据适配器。">
+              <QuestionCircleOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
+            </Tooltip>
+            <span style={{ color: "#8c8c8c", fontSize: 12 }}>
+              {it.isEssayContest
+                ? `已开启手动录入（当前 ${Array.isArray(it.winners) ? it.winners.length : 0} 位获奖者），无需外部适配器`
+                : "关闭时使用外部榜单数据适配器或接口返回数据"}
+            </span>
+          </Space>
+          <Switch
+            checked={it.isEssayContest === true}
+            onChange={(enabled) => {
+              update("customLeaderboards", i, "isEssayContest", enabled);
+              if (enabled && !Array.isArray(it.winners)) {
+                update("customLeaderboards", i, "winners", []);
+              }
+            }}
+          />
+        </div>
+        {it.isEssayContest ? (
+          <div style={{ marginTop: 12 }}>
+            <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>获奖名单</span>
+              <Button
+                size="small"
+                onClick={() => {
+                  const nextWinners = Array.isArray(it.winners) ? [...it.winners] : [];
+                  nextWinners.push({ name: "", handler: "", avatar: "", reward: "", award: "", post: "", url: "" });
+                  update("customLeaderboards", i, "winners", nextWinners);
+                }}
+              >
+                + 添加获奖者
+              </Button>
+            </Space>
+            {!Array.isArray(it.winners) || !it.winners.length ? (
+              <EmptyHint>暂无获奖者，可点击右上角「+ 添加获奖者」手动录入。</EmptyHint>
+            ) : (
+              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                {it.winners.map((winner: AnyObj, wIdx: number) => {
+                  const updateWinnerField = (field: string, val: string) => {
+                    const nextWinners = (Array.isArray(it.winners) ? it.winners : []).map((w: AnyObj, idx: number) =>
+                      idx === wIdx ? { ...w, [field]: val } : w,
+                    );
+                    update("customLeaderboards", i, "winners", nextWinners);
+                  };
+                  const moveWinner = (delta: number) => {
+                    const nextWinners = Array.isArray(it.winners) ? [...it.winners] : [];
+                    const to = wIdx + delta;
+                    if (wIdx < 0 || to < 0 || wIdx >= nextWinners.length || to >= nextWinners.length) return;
+                    [nextWinners[wIdx], nextWinners[to]] = [nextWinners[to], nextWinners[wIdx]];
+                    update("customLeaderboards", i, "winners", nextWinners);
+                  };
+                  const removeWinner = () => {
+                    const nextWinners = (Array.isArray(it.winners) ? it.winners : []).filter((_: AnyObj, idx: number) => idx !== wIdx);
+                    update("customLeaderboards", i, "winners", nextWinners);
+                  };
+                  return (
+                    <Card
+                      size="small"
+                      key={wIdx}
+                      title={`获奖者 #${wIdx + 1}`}
+                      extra={<RepActions onUp={() => moveWinner(-1)} onDown={() => moveWinner(1)} onRemove={removeWinner} />}
+                    >
+                      <Row gutter={[12, 12]}>
+                        <Col xs={24} md={6}>
+                          <Field label="姓名">
+                            <Input value={winner.name || ""} onChange={(e) => updateWinnerField("name", e.target.value)} placeholder="例如：Captain Kent" />
+                          </Field>
+                        </Col>
+                        <Col xs={24} md={6}>
+                          <Field label="推特账号">
+                            <Input value={winner.handler || ""} onChange={(e) => updateWinnerField("handler", e.target.value)} placeholder="例如：captain_kent" />
+                          </Field>
+                        </Col>
+                        <Col xs={24} md={8}>
+                          <Field label="头像 URL">
+                            <Input value={winner.avatar || ""} onChange={(e) => updateWinnerField("avatar", e.target.value)} placeholder="https://pbs.twimg.com/..." />
+                          </Field>
+                        </Col>
+                        <Col xs={24} md={4}>
+                          <Field label="奖励">
+                            <Input value={winner.reward || ""} onChange={(e) => updateWinnerField("reward", e.target.value)} placeholder="1,000 USDC" />
+                          </Field>
+                        </Col>
+                        <Col xs={24} md={6}>
+                          <Field label="奖项（可选，留空按名次生成）">
+                            <Input value={winner.award || ""} onChange={(e) => updateWinnerField("award", e.target.value)} placeholder="🥇 1st Prize" />
+                          </Field>
+                        </Col>
+                        <Col xs={24} md={9}>
+                          <Field label="获奖作品标题（可选）">
+                            <Input value={winner.post || ""} onChange={(e) => updateWinnerField("post", e.target.value)} placeholder="填写后展示 Winning Post 列" />
+                          </Field>
+                        </Col>
+                        <Col xs={24} md={9}>
+                          <Field label="推文链接（可选）">
+                            <Input value={winner.url || ""} onChange={(e) => updateWinnerField("url", e.target.value)} placeholder="https://x.com/..." />
+                          </Field>
+                        </Col>
+                      </Row>
+                    </Card>
+                  );
+                })}
+              </Space>
+            )}
+          </div>
+        ) : null}
+      </div>
+      {!it.isEssayContest ? (
+        <ExternalLeaderboardAdapterCard
+          nacosCampaignId={nacosCampaignId}
+          leaderboardKey={leaderboardKey}
+          leaderboardTitle={getCustomLeaderboardDisplayTitle(it, i)}
+          isSuperAdmin={!!isSuperAdmin}
+          disabled={!nacosCampaignId || !leaderboardKey || hasDuplicateAdapterKey || hasInvalidAdapterKey}
+          disabledReason={
+            hasDuplicateAdapterKey
+              ? "多个自定义榜单使用了相同的榜单 ID / 机制 key；请填写唯一的榜单 ID 后再配置适配器。"
+              : hasInvalidAdapterKey
+                ? `榜单 ID 只能包含文字、数字、空格、下划线或连字符，且不能超过 ${customLeaderboardKeyContract.maxLength} 个字符。`
+                : undefined
+          }
+          onMessage={onMessage}
+        />
+      ) : null}
       </Space>
     ),
     });

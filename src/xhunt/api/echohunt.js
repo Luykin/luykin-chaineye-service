@@ -500,6 +500,8 @@ function summarizeCustomLeaderboards(list, lang = "zh-CN") {
     const shortName = localizeTextValue(item.short_name, lang, name);
     const emptyText = localizeTextValue(item.empty_text || item.emptyText, lang, "");
     const tweetSubmission = normalizeTweetSubmissionConfig(item.tweetSubmission);
+    const isEssayContest = item.isEssayContest === true;
+    const winners = isEssayContest && Array.isArray(item.winners) ? item.winners : [];
     return {
       id,
       name,
@@ -510,6 +512,8 @@ function summarizeCustomLeaderboards(list, lang = "zh-CN") {
       participantCount: item.participantCount ?? null,
       distributionType: item.distributionType || null,
       unit: item.unit || null,
+      isEssayContest,
+      winners,
       hiddenColumns: normalizeHiddenColumns(item.hiddenColumns),
       tweetSubmission: tweetSubmission.enabled
         ? {
@@ -525,18 +529,22 @@ function summarizeCustomLeaderboards(list, lang = "zh-CN") {
 
 function buildCustomLeaderboardTrackSummaries(pluginCampaign, lang = "zh-CN") {
   if (pluginCampaign?.leaderboardMode !== "custom") return [];
-  return summarizeCustomLeaderboards(pluginCampaign.customLeaderboards, lang).map((item) => ({
-    id: item.id,
-    type: "leaderboard",
-    title: item.name || item.id,
-    shortTitle: item.short_name || item.name || item.id,
-    sourceKey: item.id,
-    winnerKey: null,
-    reward: item.amount === null || item.amount === undefined || item.amount === "" ? null : `${item.amount}${item.unit ? ` ${item.unit}` : ""}`,
-    emptyText: item.emptyText || null,
-    empty_text: item.empty_text || item.emptyText || null,
-    counts: {},
-  }));
+  return summarizeCustomLeaderboards(pluginCampaign.customLeaderboards, lang).map((item) => {
+    const isEssay = item.isEssayContest === true;
+    const winnerCount = Array.isArray(item.winners) ? item.winners.length : 0;
+    return {
+      id: item.id,
+      type: isEssay ? "winners" : "leaderboard",
+      title: item.name || item.id,
+      shortTitle: item.short_name || item.name || item.id,
+      sourceKey: isEssay ? null : item.id,
+      winnerKey: isEssay ? item.id : null,
+      reward: item.amount === null || item.amount === undefined || item.amount === "" ? null : `${item.amount}${item.unit ? ` ${item.unit}` : ""}`,
+      emptyText: item.emptyText || null,
+      empty_text: item.empty_text || item.emptyText || null,
+      counts: isEssay && winnerCount ? { winners: winnerCount } : {},
+    };
+  });
 }
 
 function buildRewardSummary(pluginCampaign, lang = "zh-CN") {
@@ -654,10 +662,17 @@ function isCampaignEffectivelyEnded(item) {
 function collectBundleLeaderboardRows(bundle) {
   const rows = [];
   const leaderboards = bundle?.leaderboards?.all || bundle?.leaderboards || {};
-  if (!leaderboards || typeof leaderboards !== "object") return rows;
-  Object.values(leaderboards).forEach((value) => {
-    if (Array.isArray(value)) rows.push(...value);
-  });
+  if (leaderboards && typeof leaderboards === "object") {
+    Object.values(leaderboards).forEach((value) => {
+      if (Array.isArray(value)) rows.push(...value);
+    });
+  }
+  const winners = bundle?.winners || {};
+  if (winners && typeof winners === "object") {
+    Object.values(winners).forEach((value) => {
+      if (Array.isArray(value)) rows.push(...value);
+    });
+  }
   return rows;
 }
 
@@ -783,7 +798,7 @@ function summarizeLeaderboardBundle(bundle, rawResponse = null) {
   });
 
   const countFromTracks = (Array.isArray(bundle?.tracks) ? bundle.tracks : []).reduce((max, track) => {
-    const allCount = Number(track?.counts?.all);
+    const allCount = Number(track?.counts?.all ?? track?.counts?.winners);
     return Number.isFinite(allCount) ? Math.max(max, allCount) : max;
   }, 0);
 
@@ -896,6 +911,7 @@ function normalizeCustomUserActivityForBundle(campaign, rawActivity, user) {
 
   return {
     ...rawActivity,
+    __isUserActivity: true,
     leaderboards,
   };
 }
@@ -917,7 +933,13 @@ async function fetchCustomCampaignHistoryFromInterfaces(campaign, user, campaign
         normalizeCustomUserActivityForBundle(campaign, rawActivity, user)
       );
       const found = findUserInBundle(activityBundle, user);
-      if (found) return found;
+      const customLeaderboards = Array.isArray(campaign?.leaderboardConfig?.customLeaderboards)
+        ? campaign.leaderboardConfig.customLeaderboards
+        : [];
+      const hasNonEssayTrack = customLeaderboards.some((item) => item?.isEssayContest !== true);
+      if (found && ((found.tracks && found.tracks.length > 0) || !hasNonEssayTrack)) {
+        return found;
+      }
     } catch (activityError) {
       console.warn("[EchoHunt] custom user activity fetch warn:", activityError.message || activityError);
     }
@@ -995,7 +1017,11 @@ function mergeHistoricalCampaignSources(...sources) {
 function shouldFetchDynamicCampaignHistory(campaign, campaignKey) {
   if (campaign?.leaderboardConfig?.leaderboardMode !== "custom") return false;
   const config = campaign.leaderboardConfig || {};
+  const hasEssayWinners = (Array.isArray(config.customLeaderboards) ? config.customLeaderboards : []).some(
+    (item) => item?.isEssayContest === true && Array.isArray(item?.winners) && item.winners.length > 0
+  );
   return !!(
+    hasEssayWinners ||
     config.userActivityApiUrl ||
     config.leaderboardApiUrl ||
     config.mockCustomLeaderboardDataEnabled ||

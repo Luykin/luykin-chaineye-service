@@ -71,6 +71,181 @@ function formatCustomReward(item) {
   return `${amount}${unit ? ` ${unit}` : ""}`;
 }
 
+function defaultMedalByRank(rank) {
+  if (rank === 1) return "🥇";
+  if (rank === 2) return "🥈";
+  if (rank === 3) return "🥉";
+  return "";
+}
+
+function defaultPrizeByRank(rank) {
+  if (rank === 1) return "1st Prize";
+  if (rank === 2) return "2nd Prize";
+  if (rank === 3) return "3rd Prize";
+  return `#${rank}`;
+}
+
+function defaultAwardByRank(rank) {
+  const medal = defaultMedalByRank(rank);
+  const prize = defaultPrizeByRank(rank);
+  return medal ? `${medal} ${prize}` : prize;
+}
+
+function formatManualWinnerReward(reward, unit) {
+  const raw = String(reward ?? "").trim();
+  if (!raw) return null;
+  const cleanUnit = String(unit || "").trim();
+  if (!cleanUnit) return raw;
+  if (/^\d[\d,]*(\.\d+)?$/.test(raw)) {
+    return `${raw} ${cleanUnit}`;
+  }
+  return raw;
+}
+
+function parseRewardNumericValue(reward) {
+  if (reward === null || reward === undefined) return null;
+  const cleaned = String(reward).replace(/,/g, "").trim();
+  const match = cleaned.match(/-?\d+(\.\d+)?/);
+  if (!match) return null;
+  const val = Number(match[0]);
+  return Number.isFinite(val) && val > 0 ? val : null;
+}
+
+function getDistinctRewardTiers(rewardNums = []) {
+  return [...new Set(rewardNums.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0))].sort(
+    (a, b) => b - a
+  );
+}
+
+function resolveManualWinnerAwardInfo(row = {}, index = 0, distinctRewards = [], currentRewardNum = null) {
+  const rawAward = String(row?.award || row?.prize || "").trim();
+  const explicitMedal = String(row?.medal || "").trim();
+  const explicitRank = Number(row?.rank);
+  const fallbackOrder = Number.isFinite(explicitRank) && explicitRank > 0 ? explicitRank : index + 1;
+
+  if (rawAward) {
+    if (/(?:🥇|🏅|🏆|\b1st\b|first|一等奖|第一名|冠军)/i.test(rawAward)) {
+      const medal = explicitMedal || (rawAward.includes("🏅") ? "🏅" : rawAward.includes("🏆") ? "🏆" : "🥇");
+      const prize = String(row?.prize || "").trim() || rawAward.replace(/^(?:🥇|🏅|🏆)\s*/, "").trim() || "1st Prize";
+      const award = /^(?:🥇|🏅|🏆)/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      return { rank: 1, order: index + 1, award, medal, prize };
+    }
+    if (/(?:🥈|\b2nd\b|second|二等奖|第二名|亚军)/i.test(rawAward)) {
+      const medal = explicitMedal || "🥈";
+      const prize = String(row?.prize || "").trim() || rawAward.replace(/^🥈\s*/, "").trim() || "2nd Prize";
+      const award = /^🥈/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      return { rank: 2, order: index + 1, award, medal, prize };
+    }
+    if (/(?:🥉|\b3rd\b|third|三等奖|第三名|季军)/i.test(rawAward)) {
+      const medal = explicitMedal || "🥉";
+      const prize = String(row?.prize || "").trim() || rawAward.replace(/^🥉\s*/, "").trim() || "3rd Prize";
+      const award = /^🥉/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      return { rank: 3, order: index + 1, award, medal, prize };
+    }
+    const numMatch = rawAward.match(/^#?(\d+)$/);
+    const parsedRank = numMatch ? Number(numMatch[1]) : fallbackOrder;
+    return {
+      rank: parsedRank,
+      order: index + 1,
+      award: numMatch ? `#${parsedRank}` : rawAward,
+      medal: explicitMedal || "",
+      prize: String(row?.prize || rawAward).trim(),
+    };
+  }
+
+  if (distinctRewards.length >= 2 && currentRewardNum !== null) {
+    const tierIdx = distinctRewards.indexOf(currentRewardNum);
+    if (tierIdx >= 0 && tierIdx <= 2) {
+      const tierRank = tierIdx + 1;
+      return {
+        rank: tierRank,
+        order: index + 1,
+        award: defaultAwardByRank(tierRank),
+        medal: defaultMedalByRank(tierRank),
+        prize: defaultPrizeByRank(tierRank),
+      };
+    }
+    return {
+      rank: fallbackOrder,
+      order: index + 1,
+      award: `#${fallbackOrder}`,
+      medal: "",
+      prize: `#${fallbackOrder}`,
+    };
+  }
+
+  return {
+    rank: fallbackOrder,
+    order: index + 1,
+    award: defaultAwardByRank(fallbackOrder),
+    medal: explicitMedal || defaultMedalByRank(fallbackOrder),
+    prize: defaultPrizeByRank(fallbackOrder),
+  };
+}
+
+function normalizeManualWinnerRow(item, index, unit, distinctRewards = [], currentRewardNum = null) {
+  const { rank, order, award, medal, prize } = resolveManualWinnerAwardInfo(
+    item,
+    index,
+    distinctRewards,
+    currentRewardNum
+  );
+  const username = normalizeHandle(item?.handler || item?.username || item?.handle || item?.author || item?.screen_name);
+  const handle = username ? `@${username}` : "";
+  const rawName = String(item?.name || "").trim();
+  const author = rawName || handle || `Winner #${order}`;
+  const post = String(item?.post || item?.title || "").trim();
+  const url = cleanUrlOrNull(item?.url);
+  const reward = formatManualWinnerReward(item?.reward ?? item?.prize, unit);
+  return {
+    rank,
+    order,
+    award,
+    medal,
+    prize,
+    author,
+    name: rawName || username || author,
+    displayName: rawName || username || author,
+    username,
+    handler: username,
+    handle,
+    twitterId: item?.twitterId || item?.twitter_id || item?.user_id || null,
+    avatar: cleanUrlOrNull(item?.avatar || item?.image || item?.profile_image_url),
+    post,
+    title: post,
+    url,
+    reward,
+    score: null,
+    gpt: null,
+    gemini: null,
+    raw: item,
+  };
+}
+
+function normalizeManualWinnerRows(rows, unit) {
+  const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && typeof row === "object");
+  const rewardNums = cleanRows.map((row) => parseRewardNumericValue(row.reward ?? row.prize));
+  const distinctRewards = getDistinctRewardTiers(rewardNums);
+  return cleanRows.map((row, index) =>
+    normalizeManualWinnerRow(row, index, unit, distinctRewards, rewardNums[index])
+  );
+}
+
+function buildWinnerColumnsFromRows(rows) {
+  const hasPost = (Array.isArray(rows) ? rows : []).some(
+    (row) => Boolean((row?.post && String(row.post).trim()) || (row?.title && String(row.title).trim()) || row?.url)
+  );
+  const columns = [
+    { key: "award", label: "Prize", type: "text" },
+    { key: "author", label: "Username", type: "user" },
+  ];
+  if (hasPost) {
+    columns.push({ key: "post", label: "Winning Post", type: "link" });
+  }
+  columns.push({ key: "reward", label: "Reward", type: "text" });
+  return columns;
+}
+
 function buildCustomLeaderboardTracks(campaign) {
   const config = campaign?.leaderboardConfig || {};
   const lang = campaign?.lang || "en";
@@ -78,11 +253,39 @@ function buildCustomLeaderboardTracks(campaign) {
   const customLeaderboards = Array.isArray(config.customLeaderboards) ? config.customLeaderboards : [];
   if (!customLeaderboards.length) return null;
 
+  const allLeaderboards = {};
+  const winners = {};
   const tracks = customLeaderboards.map((item, index) => {
     const id = String(item?.id || item?.distributionType || `custom-${index}`).trim() || `custom-${index}`;
     const title = pickLocalizedText(item?.name, id, lang);
     const shortTitle = pickLocalizedText(item?.short_name, title, lang);
     const emptyText = pickLocalizedText(item?.empty_text || item?.emptyText, "", lang);
+    if (item?.isEssayContest === true) {
+      const winnerRows = normalizeManualWinnerRows(item?.winners, item?.unit);
+      winners[id] = winnerRows;
+      return {
+        id,
+        type: "winners",
+        title,
+        shortTitle,
+        sourceKey: null,
+        winnerKey: id,
+        reward: formatCustomReward(item),
+        emptyText: emptyText || undefined,
+        empty_text: emptyText || undefined,
+        counts: { winners: winnerRows.length },
+        customConfig: {
+          distributionType: item?.distributionType || null,
+          amount: item?.amount ?? null,
+          participantCount: item?.participantCount ?? null,
+          unit: item?.unit || null,
+          isEssayContest: true,
+        },
+        columns: buildWinnerColumnsFromRows(winnerRows),
+      };
+    }
+
+    allLeaderboards[id] = [];
     return {
       id,
       type: "leaderboard",
@@ -99,6 +302,7 @@ function buildCustomLeaderboardTracks(campaign) {
         amount: item?.amount ?? null,
         participantCount: item?.participantCount ?? null,
         unit: item?.unit || null,
+        isEssayContest: false,
       },
       columns: [
         { key: "rank", label: "Rank", type: "rank" },
@@ -110,8 +314,9 @@ function buildCustomLeaderboardTracks(campaign) {
   return {
     tracks,
     leaderboards: {
-      all: Object.fromEntries(tracks.map((track) => [track.sourceKey, []])),
+      all: allLeaderboards,
     },
+    winners,
   };
 }
 
@@ -225,11 +430,41 @@ function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
   if (config.leaderboardMode !== "custom" || !customLeaderboards.length) return baseBundle;
 
   const leaderboards = {};
+  const winners = {};
+  const isUserActivity = rawResponse?.__isUserActivity === true;
   const tracks = customLeaderboards.map((item, index) => {
     const id = getCustomTrackId(item, index);
     const title = pickLocalizedText(item?.name, id, lang);
     const shortTitle = pickLocalizedText(item?.short_name, title, lang);
     const emptyText = pickLocalizedText(item?.empty_text || item?.emptyText, "", lang);
+    if (item?.isEssayContest === true) {
+      const configuredWinners = !isUserActivity && Array.isArray(item?.winners) && item.winners.length
+        ? item.winners
+        : getRowsForCustomConfig(rawMap, item, index);
+      const winnerRows = normalizeManualWinnerRows(configuredWinners, item?.unit);
+      winners[id] = winnerRows;
+      return {
+        id,
+        type: "winners",
+        title,
+        shortTitle,
+        sourceKey: null,
+        winnerKey: id,
+        reward: formatCustomReward(item),
+        emptyText: emptyText || undefined,
+        empty_text: emptyText || undefined,
+        counts: { winners: winnerRows.length },
+        customConfig: {
+          distributionType: item?.distributionType || null,
+          amount: item?.amount ?? null,
+          participantCount: item?.participantCount ?? null,
+          unit: item?.unit || null,
+          isEssayContest: true,
+        },
+        columns: buildWinnerColumnsFromRows(winnerRows),
+      };
+    }
+
     const rows = getRowsForCustomConfig(rawMap, item, index).map((row, rowIndex) => normalizeCustomLeaderboardRow(row, rowIndex, id));
     leaderboards[id] = rows;
     return {
@@ -248,6 +483,7 @@ function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
         amount: item?.amount ?? null,
         participantCount: item?.participantCount ?? null,
         unit: item?.unit || null,
+        isEssayContest: false,
       },
       columns: buildColumnsFromRows(rows),
     };
@@ -270,6 +506,7 @@ function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
     summary,
     tracks,
     leaderboards: { all: leaderboards },
+    winners,
   };
 }
 
@@ -343,7 +580,7 @@ function emptyLeaderboardBundle(campaign = {}) {
         mindshare: [],
       },
     },
-    winners: {},
+    winners: custom?.winners || {},
   };
 }
 

@@ -426,10 +426,255 @@ function buildMockRows(item) {
   }));
 }
 
+function defaultMedalByRank(rank) {
+  if (rank === 1) return "🥇";
+  if (rank === 2) return "🥈";
+  if (rank === 3) return "🥉";
+  return "";
+}
+
+function defaultPrizeByRank(rank) {
+  if (rank === 1) return "1st Prize";
+  if (rank === 2) return "2nd Prize";
+  if (rank === 3) return "3rd Prize";
+  return `#${rank}`;
+}
+
+function defaultAwardByRank(rank) {
+  const medal = defaultMedalByRank(rank);
+  const prize = defaultPrizeByRank(rank);
+  return medal ? `${medal} ${prize}` : prize;
+}
+
+function formatManualWinnerReward(reward, unit) {
+  const raw = String(reward ?? "").trim();
+  if (!raw) return null;
+  const cleanUnit = String(unit || "").trim();
+  if (!cleanUnit) return raw;
+  if (/^\d[\d,]*(\.\d+)?$/.test(raw)) {
+    return `${raw} ${cleanUnit}`;
+  }
+  return raw;
+}
+
+function parseRewardNumericValue(reward) {
+  if (reward === null || reward === undefined) return null;
+  const cleaned = String(reward).replace(/,/g, "").trim();
+  const match = cleaned.match(/-?\d+(\.\d+)?/);
+  if (!match) return null;
+  const val = Number(match[0]);
+  return Number.isFinite(val) && val > 0 ? val : null;
+}
+
+function getDistinctRewardTiers(rewardNums = []) {
+  return [...new Set(rewardNums.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0))].sort(
+    (a, b) => b - a
+  );
+}
+
+function resolveManualWinnerAwardInfo(row = {}, index = 0, distinctRewards = [], currentRewardNum = null) {
+  const rawAward = String(row?.award || row?.prize || "").trim();
+  const explicitMedal = String(row?.medal || "").trim();
+  const explicitRank = Number(row?.rank);
+  const fallbackOrder = Number.isFinite(explicitRank) && explicitRank > 0 ? explicitRank : index + 1;
+
+  if (rawAward) {
+    if (/(?:🥇|🏅|🏆|\b1st\b|first|一等奖|第一名|冠军)/i.test(rawAward)) {
+      const medal = explicitMedal || (rawAward.includes("🏅") ? "🏅" : rawAward.includes("🏆") ? "🏆" : "🥇");
+      const prize = String(row?.prize || "").trim() || rawAward.replace(/^(?:🥇|🏅|🏆)\s*/, "").trim() || "1st Prize";
+      const award = /^(?:🥇|🏅|🏆)/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      return { rank: 1, order: index + 1, award, medal, prize };
+    }
+    if (/(?:🥈|\b2nd\b|second|二等奖|第二名|亚军)/i.test(rawAward)) {
+      const medal = explicitMedal || "🥈";
+      const prize = String(row?.prize || "").trim() || rawAward.replace(/^🥈\s*/, "").trim() || "2nd Prize";
+      const award = /^🥈/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      return { rank: 2, order: index + 1, award, medal, prize };
+    }
+    if (/(?:🥉|\b3rd\b|third|三等奖|第三名|季军)/i.test(rawAward)) {
+      const medal = explicitMedal || "🥉";
+      const prize = String(row?.prize || "").trim() || rawAward.replace(/^🥉\s*/, "").trim() || "3rd Prize";
+      const award = /^🥉/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      return { rank: 3, order: index + 1, award, medal, prize };
+    }
+    const numMatch = rawAward.match(/^#?(\d+)$/);
+    const parsedRank = numMatch ? Number(numMatch[1]) : fallbackOrder;
+    return {
+      rank: parsedRank,
+      order: index + 1,
+      award: numMatch ? `#${parsedRank}` : rawAward,
+      medal: explicitMedal || "",
+      prize: String(row?.prize || rawAward).trim(),
+    };
+  }
+
+  if (distinctRewards.length >= 2 && currentRewardNum !== null) {
+    const tierIdx = distinctRewards.indexOf(currentRewardNum);
+    if (tierIdx >= 0 && tierIdx <= 2) {
+      const tierRank = tierIdx + 1;
+      return {
+        rank: tierRank,
+        order: index + 1,
+        award: defaultAwardByRank(tierRank),
+        medal: defaultMedalByRank(tierRank),
+        prize: defaultPrizeByRank(tierRank),
+      };
+    }
+    return {
+      rank: fallbackOrder,
+      order: index + 1,
+      award: `#${fallbackOrder}`,
+      medal: "",
+      prize: `#${fallbackOrder}`,
+    };
+  }
+
+  return {
+    rank: fallbackOrder,
+    order: index + 1,
+    award: defaultAwardByRank(fallbackOrder),
+    medal: explicitMedal || defaultMedalByRank(fallbackOrder),
+    prize: defaultPrizeByRank(fallbackOrder),
+  };
+}
+
+function buildManualEssayLeaderboardRows(item = {}) {
+  const winners = (Array.isArray(item?.winners) ? item.winners : []).filter(
+    (row) => row && typeof row === "object"
+  );
+  const unit = item?.unit;
+  const rewardNums = winners.map((row) => parseRewardNumericValue(row.reward));
+  const distinctRewards = getDistinctRewardTiers(rewardNums);
+  const sumRewards = rewardNums.reduce((sum, val) => sum + (val || 0), 0);
+  const configuredAmount = Number(item?.amount);
+  const totalPool =
+    Number.isFinite(configuredAmount) && configuredAmount > 0
+      ? configuredAmount
+      : sumRewards > 0
+        ? sumRewards
+        : 0;
+
+  return winners.map((row, index) => {
+    const rewardNum = rewardNums[index];
+    const { rank, order, award, medal, prize } = resolveManualWinnerAwardInfo(
+      row,
+      index,
+      distinctRewards,
+      rewardNum
+    );
+    const username = normalizeHandle(row.handler || row.username || row.handle || row.author);
+    const handle = username ? `@${username}` : "";
+    const rawName = String(row.name || "").trim();
+    const author = rawName || handle || `Winner #${order}`;
+    const displayName = rawName || username || author;
+    const reward = formatManualWinnerReward(row.reward, unit);
+    const post = String(row.post || row.title || "").trim();
+    const url = row.url && String(row.url).trim() ? String(row.url).trim() : null;
+    const share =
+      rewardNum !== null && totalPool > 0
+        ? Number((rewardNum / totalPool).toFixed(6))
+        : winners.length > 0
+          ? Number((1 / winners.length).toFixed(6))
+          : 0;
+    return {
+      rank,
+      order,
+      award,
+      medal,
+      prize,
+      author,
+      username,
+      handler: username,
+      handle,
+      twitterId: row.twitterId || null,
+      name: displayName,
+      displayName,
+      avatar: row.avatar && String(row.avatar).trim() ? String(row.avatar).trim() : null,
+      post,
+      title: post,
+      url,
+      reward,
+      score: null,
+      share,
+      shareText: `${(share * 100).toFixed(2)}%`,
+    };
+  });
+}
+
+function applyManualEssayLeaderboards(payload, config = {}) {
+  const customLeaderboards = getCustomLeaderboards(config);
+  const hasEssay = customLeaderboards.some((item) => item?.isEssayContest === true);
+  if (!hasEssay) return payload;
+
+  const nextLeaderboards = { ...(payload?.leaderboards || {}) };
+  customLeaderboards.forEach((item, index) => {
+    if (item?.isEssayContest !== true) return;
+    const id = getCustomLeaderboardId(item, index);
+    const nameKey = getCustomLeaderboardKey(item);
+    const rows = buildManualEssayLeaderboardRows(item);
+    nextLeaderboards[id] = rows;
+    [nameKey, `custom-${index}`, String(index)].forEach((fallbackKey) => {
+      if (fallbackKey && !nextLeaderboards[fallbackKey]) {
+        nextLeaderboards[fallbackKey] = rows;
+      }
+    });
+  });
+
+  return {
+    ...payload,
+    leaderboards: nextLeaderboards,
+  };
+}
+
+function matchesManualEssayWinner(row, user = {}) {
+  if (!row || !user) return false;
+  const twitterId = String(user.twitterId || "").trim();
+  if (twitterId && row.twitterId && String(row.twitterId).trim() === twitterId) {
+    return true;
+  }
+  const candidates = [user.username, user.userId]
+    .map(normalizeHandle)
+    .filter(Boolean);
+  if (!candidates.length) return false;
+  const rowHandles = [row.username, row.handler, row.handle, row.author]
+    .map(normalizeHandle)
+    .filter(Boolean);
+  return candidates.some((candidate) => rowHandles.includes(candidate));
+}
+
+function applyManualEssayUserActivity(payload, config = {}, user = {}) {
+  const customLeaderboards = getCustomLeaderboards(config);
+  const hasEssay = customLeaderboards.some((item) => item?.isEssayContest === true);
+  if (!hasEssay) return payload;
+
+  const nextLeaderboards = { ...(payload?.leaderboards || {}) };
+  customLeaderboards.forEach((item, index) => {
+    if (item?.isEssayContest !== true) return;
+    const id = getCustomLeaderboardId(item, index);
+    const nameKey = getCustomLeaderboardKey(item);
+    const rows = buildManualEssayLeaderboardRows(item);
+    const found = rows.find((row) => matchesManualEssayWinner(row, user));
+    if (found) {
+      nextLeaderboards[id] = found;
+      [nameKey, `custom-${index}`, String(index)].forEach((fallbackKey) => {
+        if (fallbackKey && !nextLeaderboards[fallbackKey]) {
+          nextLeaderboards[fallbackKey] = found;
+        }
+      });
+    }
+  });
+
+  return {
+    ...payload,
+    leaderboards: nextLeaderboards,
+  };
+}
+
 function buildMockCustomLeaderboardPayload(config = {}, campaignKey) {
   const leaderboards = {};
   getCustomLeaderboards(config).forEach((item, index) => {
-    leaderboards[getCustomLeaderboardId(item, index)] = buildMockRows(item);
+    const id = getCustomLeaderboardId(item, index);
+    leaderboards[id] = item?.isEssayContest === true ? buildManualEssayLeaderboardRows(item) : buildMockRows(item);
   });
   return {
     campaign: campaignKey || null,
@@ -444,29 +689,43 @@ async function getCustomLeaderboardData(campaign = {}, options = {}) {
   const campaignKey = getCampaignKey(campaign, options.campaign);
   if (config.leaderboardMode !== "custom") return emptyLeaderboardPayload(campaignKey);
 
-  const externalAdapterPayload = await getPublishedLeaderboard(campaignKey, getCustomLeaderboards(config));
-  if (externalAdapterPayload) return externalAdapterPayload;
+  const customLeaderboards = getCustomLeaderboards(config);
+  const hasEssay = customLeaderboards.some((item) => item?.isEssayContest === true);
+  const adapterLeaderboards = customLeaderboards.filter((item) => item?.isEssayContest !== true);
+  if (customLeaderboards.length > 0 && adapterLeaderboards.length === 0) {
+    return applyManualEssayLeaderboards(emptyLeaderboardPayload(campaignKey), config);
+  }
+
+  const externalAdapterPayload = adapterLeaderboards.length
+    ? await getPublishedLeaderboard(campaignKey, adapterLeaderboards)
+    : null;
+  if (externalAdapterPayload) {
+    return applyManualEssayLeaderboards(externalAdapterPayload, config);
+  }
 
   if (isYziLabsCampaign(campaignKey)) {
-    // 已放开给所有用户；不再按 YZILABS_PREVIEW_TWITTER_IDS 过滤。
-    // if (!canPreviewYziLabsLeaderboard(options)) {
-    //   return emptyLeaderboardPayload(campaignKey);
-    // }
     const rawPayload = await fetchYziLabsRawLeaderboard();
-    return buildYziLabsLeaderboardPayload(config, campaignKey, rawPayload);
+    return applyManualEssayLeaderboards(buildYziLabsLeaderboardPayload(config, campaignKey, rawPayload), config);
   }
 
   const url = resolveConfiguredApiUrl(config.leaderboardApiUrl, campaignKey);
-  // 默认配置指向当前插件占位接口，为避免后端自调用递归，真实数据接入前统一返回空榜单。
-  // 后续有真实数据时，优先改这里，把数据源查询和字段映射集中在一个 service 内。
   if (!url || isSelfCustomApiUrl(url, SELF_CUSTOM_LEADERBOARD_PATH)) {
-    return shouldUseMockLeaderboardData(config)
+    const fallbackPayload = shouldUseMockLeaderboardData(config)
       ? buildMockCustomLeaderboardPayload(config, campaignKey)
       : emptyLeaderboardPayload(campaignKey);
+    return applyManualEssayLeaderboards(fallbackPayload, config);
   }
 
-  const response = await axios.get(url, { timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS });
-  return normalizeLeaderboardPayload(response?.data || {}, campaignKey);
+  try {
+    const response = await axios.get(url, { timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS });
+    return applyManualEssayLeaderboards(normalizeLeaderboardPayload(response?.data || {}, campaignKey), config);
+  } catch (err) {
+    if (hasEssay) {
+      console.warn("[CustomLeaderboard] upstream fetch failed, returning manual essay leaderboards:", err.message || err);
+      return applyManualEssayLeaderboards(emptyLeaderboardPayload(campaignKey), config);
+    }
+    throw err;
+  }
 }
 
 async function getCustomUserActivityData(campaign = {}, userId, options = {}) {
@@ -477,7 +736,25 @@ async function getCustomUserActivityData(campaign = {}, userId, options = {}) {
     return { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId };
   }
 
-  const externalAdapterPayload = await getPublishedLeaderboard(campaignKey, getCustomLeaderboards(config));
+  const userContext = {
+    userId: normalizedUserId,
+    twitterId: options.twitterId,
+    username: options.username,
+  };
+  const customLeaderboards = getCustomLeaderboards(config);
+  const hasEssay = customLeaderboards.some((item) => item?.isEssayContest === true);
+  const adapterLeaderboards = customLeaderboards.filter((item) => item?.isEssayContest !== true);
+  if (customLeaderboards.length > 0 && adapterLeaderboards.length === 0) {
+    return applyManualEssayUserActivity(
+      { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId },
+      config,
+      userContext
+    );
+  }
+
+  const externalAdapterPayload = adapterLeaderboards.length
+    ? await getPublishedLeaderboard(campaignKey, adapterLeaderboards)
+    : null;
   if (externalAdapterPayload) {
     const twitterId = String(options.twitterId || "").trim();
     const leaderboards = {};
@@ -485,38 +762,54 @@ async function getCustomUserActivityData(campaign = {}, userId, options = {}) {
       const found = (Array.isArray(rows) ? rows : []).find((row) => twitterId && String(row.twitterId || "") === twitterId);
       if (found) leaderboards[key] = found;
     });
-    return { ...externalAdapterPayload, userid: normalizedUserId, twitterId, leaderboards };
+    return applyManualEssayUserActivity(
+      { ...externalAdapterPayload, userid: normalizedUserId, twitterId, leaderboards },
+      config,
+      userContext
+    );
   }
 
   if (isYziLabsCampaign(campaignKey)) {
-    // 已放开给所有用户；不再按 YZILABS_PREVIEW_TWITTER_IDS 过滤。
-    // if (!canPreviewYziLabsLeaderboard(options)) {
-    //   return { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId };
-    // }
     const rawPayload = await fetchYziLabsRawLeaderboard();
-    return buildYziLabsUserActivityPayload(config, campaignKey, rawPayload, {
-      userId: normalizedUserId,
-      twitterId: options.twitterId,
-      username: options.username,
-    });
+    return applyManualEssayUserActivity(
+      buildYziLabsUserActivityPayload(config, campaignKey, rawPayload, userContext),
+      config,
+      userContext
+    );
   }
 
   const url = resolveConfiguredApiUrl(config.userActivityApiUrl, campaignKey, {
     userid: normalizedUserId,
   });
-  // 默认配置指向当前插件占位接口，为避免后端自调用递归，真实数据接入前统一返回空个人榜单。
   if (!url || isSelfCustomApiUrl(url, SELF_CUSTOM_USER_ACTIVITY_PATH)) {
-    return shouldUseMockLeaderboardData(config)
+    const fallbackPayload = shouldUseMockLeaderboardData(config)
       ? { ...buildMockCustomLeaderboardPayload(config, campaignKey), userid: normalizedUserId }
       : { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId };
+    return applyManualEssayUserActivity(fallbackPayload, config, userContext);
   }
 
-  const response = await axios.get(url, { timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS });
-  const raw = response?.data || {};
-  return {
-    ...normalizeLeaderboardPayload(raw, campaignKey),
-    userid: raw?.userid || raw?.userId || raw?.data?.userid || raw?.data?.userId || normalizedUserId,
-  };
+  try {
+    const response = await axios.get(url, { timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS });
+    const raw = response?.data || {};
+    return applyManualEssayUserActivity(
+      {
+        ...normalizeLeaderboardPayload(raw, campaignKey),
+        userid: raw?.userid || raw?.userId || raw?.data?.userid || raw?.data?.userId || normalizedUserId,
+      },
+      config,
+      userContext
+    );
+  } catch (err) {
+    if (hasEssay) {
+      console.warn("[CustomUserActivity] upstream fetch failed, returning manual essay user activity:", err.message || err);
+      return applyManualEssayUserActivity(
+        { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId },
+        config,
+        userContext
+      );
+    }
+    throw err;
+  }
 }
 
 module.exports = {
