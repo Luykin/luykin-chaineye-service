@@ -88,7 +88,7 @@ export function ExternalLeaderboardAdapterCard({
   const [loading, setLoading] = useState<string>("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const canOperate = !!nacosCampaignId && !!leaderboardKey && isSuperAdmin && !disabled;
   const status = statusMeta(adapter, preview);
@@ -215,7 +215,7 @@ export function ExternalLeaderboardAdapterCard({
       style={{ marginBottom: 12 }}
       extra={<Space size={8}><Tooltip title="接口样本、AI 映射、转换预览和发布均仅允许超级管理员操作。"><span style={{ color: "#64748b", fontSize: 12 }}>仅超级管理员</span></Tooltip><Button type="text" size="small" icon={collapsed ? <DownOutlined /> : <UpOutlined />} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "展开" : "收起"}</Button></Space>}
     >
-      {disabled ? <Alert type="warning" showIcon message={disabledReason || "请先发布活动基础信息，再配置外部榜单适配器。"} /> : null}
+      {!collapsed && disabled ? <Alert type="warning" showIcon message={disabledReason || "请先发布活动基础信息，再配置外部榜单适配器。"} style={{ marginBottom: 12 }} /> : null}
       {collapsed ? null : (
         <>
       <Steps size="small" current={preview?.passed ? 3 : adapter?.lastSample && Object.keys(adapter.lastSample).length ? 1 : 0} items={[{ title: "接口样本" }, { title: "AI 转换规则" }, { title: "转换预览" }, { title: "发布" }]} style={{ margin: "8px 0 18px" }} />

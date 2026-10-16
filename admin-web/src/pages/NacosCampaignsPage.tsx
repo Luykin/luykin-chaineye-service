@@ -3667,6 +3667,7 @@ function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number
   const title = getCustomLeaderboardDisplayTitle(item, index);
   const fullTitle = getCustomLeaderboardFullTitle(item);
   const channels = normalizeCustomLeaderboardDisplayChannels(item.displayChannels);
+  const hiddenColumns = normalizeCustomLeaderboardHiddenColumns(item.hiddenColumns);
   return (
     <Space size={10} wrap style={{ minWidth: 0 }}>
       <span style={{ fontWeight: 700, color: "#1f2937" }}>{title}</span>
@@ -3680,6 +3681,7 @@ function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number
       <AntTag color="green">{item.participantCount || "-"} 人</AntTag>
       <AntTag>{getDistributionLabel(item.distributionType)}</AntTag>
       {item.tweetSubmission?.enabled ? <AntTag color="magenta">主动投稿</AntTag> : null}
+      {hiddenColumns.length ? <AntTag color="volcano">隐藏 {hiddenColumns.length} 列</AntTag> : null}
       {item.empty_text?.zh || item.empty_text?.en ? <AntTag color="purple">占位: {item.empty_text?.zh || item.empty_text?.en}</AntTag> : null}
       {channels.map((channel) => (
         <AntTag key={channel} color={channel === "echohunt" ? "purple" : "cyan"}>
@@ -3729,11 +3731,20 @@ function CustomLeaderboards({
       </div>
     ),
     children: (
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <Space direction="vertical" size={14} style={{ width: "100%" }}>
       <Row gutter={[12, 12]}>
         <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，支持中英文、数字、空格、下划线和连字符；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} onBlur={(e) => update("customLeaderboards", i, "id", normalizeCustomLeaderboardKey(e.target.value))} placeholder="内容榜单" /></Field></Col>
         <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
         <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
+
+        <Col xs={24} md={12}><Field label={<InfoLabel info="列表折叠态会优先展示短名；不填则展示完整名称。">中文短名</InfoLabel>}><Input value={it.short_name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "short_name.zh", e.target.value)} placeholder="例如：生态联合榜" /></Field></Col>
+        <Col xs={24} md={12}><Field label={<InfoLabel info="Optional short name for compact leaderboard display. If empty, frontend can fallback to full English name.">English Short Name</InfoLabel>}><Input value={it.short_name?.en || ""} onChange={(e) => update("customLeaderboards", i, "short_name.en", e.target.value)} placeholder="Optional" /></Field></Col>
+
+        <Col xs={12} md={6}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>
+        <Col xs={12} md={6}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
+        <Col xs={12} md={6}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
+        <Col xs={12} md={6}><Field label="单位"><Input value={it.unit || ""} onChange={(e) => update("customLeaderboards", i, "unit", e.target.value)} placeholder="USDT" /></Field></Col>
+
         <Col xs={24} md={8}>
           <Field label={<InfoLabel info="控制该自定义榜单在哪个客户端接口返回；未选择时默认插件和 EchoHunt 都展示。">展示渠道</InfoLabel>}>
             <Select
@@ -3753,7 +3764,7 @@ function CustomLeaderboards({
             />
           </Field>
         </Col>
-        <Col xs={24} md={8}>
+        <Col xs={24} md={16}>
           <Field label={<InfoLabel info="该榜单在 EchoHunt 前端要隐藏的表格列，按列 key 配置；留空则不隐藏。">隐藏列</InfoLabel>}>
             <Select
               mode="multiple"
@@ -3773,24 +3784,7 @@ function CustomLeaderboards({
             />
           </Field>
         </Col>
-        <Col xs={24} md={8}><Field label={<InfoLabel info="列表折叠态会优先展示短名；不填则展示完整名称。">中文短名</InfoLabel>}><Input value={it.short_name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "short_name.zh", e.target.value)} placeholder="例如：生态联合榜" /></Field></Col>
-        <Col xs={24} md={8}><Field label={<InfoLabel info="Optional short name for compact leaderboard display. If empty, frontend can fallback to full English name.">English Short Name</InfoLabel>}><Input value={it.short_name?.en || ""} onChange={(e) => update("customLeaderboards", i, "short_name.en", e.target.value)} placeholder="Optional" /></Field></Col>
-        <Col xs={12} md={4}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>
-        <Col xs={12} md={4}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
-        <Col xs={12} md={4}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
-        <Col xs={12} md={4}><Field label="单位"><Input value={it.unit || ""} onChange={(e) => update("customLeaderboards", i, "unit", e.target.value)} placeholder="USDT" /></Field></Col>
-        <Col xs={24} md={8}>
-          <Field label={<InfoLabel info="开启后，已报名的 EchoHunt 用户可向当前榜单主动投稿 X/Twitter 推文；活动结束后自动禁止投稿。">主动投稿</InfoLabel>} inline>
-            <Switch checked={it.tweetSubmission?.enabled === true} onChange={(enabled) => update("customLeaderboards", i, "tweetSubmission.enabled", enabled)} />
-          </Field>
-        </Col>
-        {it.tweetSubmission?.enabled ? (
-          <>
-            <Col xs={24} md={8}><Field label="限额周期"><Select value={it.tweetSubmission?.period || "day"} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.period", value)} options={[{ value: "day", label: "每天" }, { value: "week", label: "每周" }]} /></Field></Col>
-            <Col xs={12} md={8}><Field label="周期内最多提交"><InputNumber min={tweetSubmissionContract.periodLimit.min} max={tweetSubmissionContract.periodLimit.max} value={it.tweetSubmission?.periodLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.periodLimit", value)} addonAfter="篇" /></Field></Col>
-            <Col xs={12} md={8}><Field label="累计最多提交"><InputNumber min={tweetSubmissionContract.totalLimit.min} max={tweetSubmissionContract.totalLimit.max} value={it.tweetSubmission?.totalLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.totalLimit", value)} addonAfter="篇" /></Field></Col>
-          </>
-        ) : null}
+
         <Col xs={24} md={12}>
           <Field label={<InfoLabel info="该自定义榜单无数据时的占位提示文案，默认展示“暂无数据。”。">空数据占位文案（中文）</InfoLabel>}>
             <Input value={it.empty_text?.zh || ""} onChange={(e) => update("customLeaderboards", i, "empty_text.zh", e.target.value)} placeholder="暂无数据。" />
@@ -3802,6 +3796,50 @@ function CustomLeaderboards({
           </Field>
         </Col>
       </Row>
+
+      <div
+        style={{
+          padding: "10px 12px",
+          borderRadius: 8,
+          border: "1px solid var(--admin-border-soft, #e5e7eb)",
+          background: "var(--admin-surface-subtle, rgba(148, 163, 184, 0.06))",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <Space size={8}>
+            <strong style={{ fontSize: 12 }}>主动投稿</strong>
+            <Tooltip title="开启后，已报名的 EchoHunt 用户可向当前榜单主动投稿 X/Twitter 推文；活动结束后自动禁止投稿。">
+              <QuestionCircleOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
+            </Tooltip>
+            <span style={{ color: "#8c8c8c", fontSize: 12 }}>
+              {it.tweetSubmission?.enabled ? "已开启用户主动提交推文" : "关闭时不展示投稿入口"}
+            </span>
+          </Space>
+          <Switch
+            checked={it.tweetSubmission?.enabled === true}
+            onChange={(enabled) => update("customLeaderboards", i, "tweetSubmission.enabled", enabled)}
+          />
+        </div>
+        {it.tweetSubmission?.enabled ? (
+          <Row gutter={[12, 12]} style={{ marginTop: 10 }}>
+            <Col xs={24} md={8}>
+              <Field label="限额周期">
+                <Select value={it.tweetSubmission?.period || "day"} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.period", value)} options={[{ value: "day", label: "每天" }, { value: "week", label: "每周" }]} />
+              </Field>
+            </Col>
+            <Col xs={12} md={8}>
+              <Field label="周期内最多提交">
+                <InputNumber min={tweetSubmissionContract.periodLimit.min} max={tweetSubmissionContract.periodLimit.max} value={it.tweetSubmission?.periodLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.periodLimit", value)} addonAfter="篇" />
+              </Field>
+            </Col>
+            <Col xs={12} md={8}>
+              <Field label="累计最多提交">
+                <InputNumber min={tweetSubmissionContract.totalLimit.min} max={tweetSubmissionContract.totalLimit.max} value={it.tweetSubmission?.totalLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.totalLimit", value)} addonAfter="篇" />
+              </Field>
+            </Col>
+          </Row>
+        ) : null}
+      </div>
       <ExternalLeaderboardAdapterCard
         nacosCampaignId={nacosCampaignId}
         leaderboardKey={leaderboardKey}
