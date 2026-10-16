@@ -41,11 +41,11 @@ class PostgresBackupService {
 
     // 数据库配置（从环境变量或默认配置读取）
     this.dbConfig = {
-      host: process.env.PG_HOST || "150.5.158.179",
+      host: process.env.PG_HOST || "127.0.0.1",
       port: process.env.PG_PORT || "5432",
-      database: process.env.PG_DATABASE || "luykindatabase",
-      username: process.env.PG_USERNAME || "luykin",
-      password: process.env.PG_PASSWORD || "wtf.0813",
+      database: process.env.PG_DATABASE || "",
+      username: process.env.PG_USERNAME || "",
+      password: process.env.PG_PASSWORD || "",
     };
     // 运行 pg_dump 时优先走本机环回地址，避免本地 socket 认证与外网连通差异
     this.dumpHost = process.env.PG_DUMP_HOST || "127.0.0.1";

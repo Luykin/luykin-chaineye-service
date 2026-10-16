@@ -1,16 +1,8 @@
 const { Sequelize } = require("sequelize");
+const { buildPgConfig } = require("../utils/load-env");
 
 // 与 test-pg-query.js 一致的连接方式（支持环境变量 + 默认值）
-const pgInstance = new Sequelize({
-  dialect: "postgres",
-  host: process.env.PG_HOST || "150.5.158.179",
-  port: parseInt(process.env.PG_PORT || "5432", 10),
-  database: process.env.PG_DATABASE || "luykindatabase",
-  username: process.env.PG_USERNAME || "luykin",
-  password: process.env.PG_PASSWORD || "wtf.0813",
-  logging: process.env.PG_LOGGING === "true" ? console.log : false,
-  timezone: "+00:00",
-});
+const pgInstance = new Sequelize(buildPgConfig({ logging: process.env.PG_LOGGING === "true" ? console.log : false }));
 
 async function getTopActiveUsers(days = 30, limit = 500) {
   await pgInstance.authenticate();

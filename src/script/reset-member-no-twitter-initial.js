@@ -5,18 +5,10 @@
 */
 
 const { Sequelize } = require("sequelize");
+const { buildPgConfig } = require("../utils/load-env");
 
 // 在脚本内直接初始化 PostgreSQL 连接（与其它脚本保持一致）
-const pgInstance = new Sequelize({
-  dialect: "postgres",
-  host: process.env.PG_HOST || "150.5.158.179",
-  port: parseInt(process.env.PG_PORT || "5432", 10),
-  database: process.env.PG_DATABASE || "luykindatabase",
-  username: process.env.PG_USERNAME || "luykin",
-  password: process.env.PG_PASSWORD || "wtf.0813",
-  logging: false,
-  timezone: "+00:00",
-});
+const pgInstance = new Sequelize(buildPgConfig());
 
 async function main() {
   try {

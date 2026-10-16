@@ -49,7 +49,8 @@ router.get('/user', async (req, res) => {
 	} catch (error) {
 		console.error('查询用户时发生错误:', error);
 		return res.status(500).json({
-			error: error,
+			error: 'INTERNAL_SERVER_ERROR',
+			message: 'Failed to query user information',
 		});
 	}
 });

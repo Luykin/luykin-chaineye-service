@@ -2,12 +2,117 @@ const express = require("express");
 const router = express.Router();
 const http = require("http");
 const https = require("https");
+const dns = require("dns").promises;
+const net = require("net");
 const { URL } = require("url");
 const crypto = require("crypto");
 
 // 缓存配置（根据实际需求调整）
 const CACHE_TTL = 60 * 60; // 缓存时间（秒）
 const CACHE_MAX_SIZE = 1024 * 1024; // 单条缓存最大体积（1MB）
+
+function isPrivateOrReservedIp(ip) {
+  if (!ip || typeof ip !== "string") return true;
+  const normalized = ip.trim().toLowerCase();
+
+  // 处理 IPv4-mapped IPv6 (如 ::ffff:127.0.0.1)
+  if (normalized.startsWith("::ffff:")) {
+    const v4Part = normalized.slice(7);
+    if (net.isIPv4(v4Part)) {
+      return isPrivateOrReservedIp(v4Part);
+    }
+  }
+
+  if (net.isIPv4(normalized)) {
+    const parts = normalized.split(".").map((n) => parseInt(n, 10));
+    const [a, b] = parts;
+    if (
+      a === 0 || // 0.0.0.0/8
+      a === 10 || // 10.0.0.0/8
+      a === 127 || // 127.0.0.0/8 (Loopback)
+      (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 (CGNAT)
+      (a === 169 && b === 254) || // 169.254.0.0/16 (Link-local / Cloud Metadata)
+      (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
+      (a === 192 && b === 168) || // 192.168.0.0/16
+      a >= 224 // Multicast & Reserved
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  if (net.isIPv6(normalized)) {
+    if (
+      normalized === "::" ||
+      normalized === "::1" ||
+      normalized.startsWith("fe80:") || // Link-local
+      normalized.startsWith("fc") || // Unique local (fc00::/7)
+      normalized.startsWith("fd") ||
+      normalized.startsWith("ff") // Multicast
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  return true;
+}
+
+async function validateSafeProxyTarget(targetUrl) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(targetUrl);
+  } catch (_) {
+    const err = new Error("Invalid URL");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    const err = new Error("Unsupported protocol");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const hostname = (parsedUrl.hostname || "").replace(/^\[|\]$/g, "").toLowerCase();
+  if (
+    !hostname ||
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal")
+  ) {
+    const err = new Error("Forbidden target host");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (net.isIP(hostname)) {
+    if (isPrivateOrReservedIp(hostname)) {
+      const err = new Error("Forbidden private IP address");
+      err.statusCode = 403;
+      throw err;
+    }
+    return parsedUrl;
+  }
+
+  const records = await dns.lookup(hostname, { all: true });
+  if (!Array.isArray(records) || records.length === 0) {
+    const err = new Error("Unable to resolve target host");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  for (const record of records) {
+    if (isPrivateOrReservedIp(record.address)) {
+      const err = new Error("Forbidden private network target");
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+
+  return parsedUrl;
+}
 
 // 仅在未设置时补充 CORS 头，避免覆盖上游自带配置
 const ensureCorsHeaders = (req, res, allowMethods) => {
@@ -18,7 +123,7 @@ const ensureCorsHeaders = (req, res, allowMethods) => {
   if (!res.hasHeader("Access-Control-Allow-Credentials")) {
     res.setHeader("Access-Control-Allow-Credentials", "false");
   }
-  
+
   if (!res.hasHeader("Access-Control-Allow-Methods")) {
     res.setHeader("Access-Control-Allow-Methods", allowMethods);
   }
@@ -37,6 +142,7 @@ router.get("/", async (req, res) => {
 
   try {
     const targetUrl = decodeURIComponent(encodedUrl);
+    const parsedUrl = await validateSafeProxyTarget(targetUrl);
     const cacheKey = getCacheKey(targetUrl);
     let cachedData;
 
@@ -66,7 +172,6 @@ router.get("/", async (req, res) => {
     }
 
     // 缓存未命中，执行代理请求
-    const parsedUrl = new URL(targetUrl);
     const client = parsedUrl.protocol === "https:" ? https : http;
 
     const proxyRes = await new Promise((resolve, reject) => {
@@ -109,6 +214,9 @@ router.get("/", async (req, res) => {
 
     res.send(responseBody);
   } catch (err) {
+    if (err?.statusCode === 400 || err?.statusCode === 403) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error("Proxy error:", err);
     res.status(502).json({ error: "Bad Gateway" });
   }
@@ -124,7 +232,7 @@ router.post("/", async (req, res) => {
 
   try {
     const targetUrl = decodeURIComponent(encodedUrl);
-    const parsedUrl = new URL(targetUrl);
+    const parsedUrl = await validateSafeProxyTarget(targetUrl);
     const client = parsedUrl.protocol === "https:" ? https : http;
 
     // 准备请求选项
@@ -170,6 +278,9 @@ router.post("/", async (req, res) => {
 
     res.send(responseBody);
   } catch (err) {
+    if (err?.statusCode === 400 || err?.statusCode === 403) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error("POST Proxy error:", err);
     res.status(502).json({ error: "Bad Gateway" });
   }
