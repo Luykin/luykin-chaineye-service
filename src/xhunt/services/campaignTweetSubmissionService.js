@@ -8,16 +8,29 @@ const {
 const tweetSubmissionContract = require("../../../shared/xhunt/tweet-submission-contract.json");
 const { normalizeCustomLeaderboardKey } = require("../utils/custom-leaderboard-key");
 const { buildTweetDisplayTitle } = require("../utils/tweet-display-title");
-const { getEchohuntTweetText } = require("./twitter-echohunt");
+const { getEchohuntTweetDetail } = require("./twitter-echohunt");
 
 const PERIODS = new Set(tweetSubmissionContract.periods);
+const TWEET_NOT_FOUND_MESSAGES = {
+  "zh-CN": "推文不存在或已被删除，请检查链接",
+  en: "This post does not exist or has been deleted. Please check the link",
+};
+const TWEET_AUTHOR_MISMATCH_MESSAGES = {
+  "zh-CN": "该推文不属于当前登录的 X 账号，请提交本人发布的推文",
+  en: "This post was not published by your connected X account. Please submit your own post",
+};
 const CURSOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_8601_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2}))?$/;
 
 function submissionError(code, status = 400, publicMessage, details) {
   const error = new Error(code);
   error.status = status;
-  if (publicMessage) error.publicMessage = publicMessage;
+  if (publicMessage && typeof publicMessage === "object") {
+    error.publicMessages = publicMessage;
+    error.publicMessage = publicMessage["zh-CN"] || publicMessage.en || code;
+  } else if (publicMessage) {
+    error.publicMessage = publicMessage;
+  }
   if (details !== undefined) error.details = details;
   return error;
 }
@@ -169,6 +182,15 @@ async function createTweetSubmission({
   if (!twitterIdentity?.twitterId) throw submissionError("TWITTER_ID_REQUIRED", 400, "Please connect your X account first");
   const parsedTweet = parseTweetUrl(tweetUrl);
 
+  const tweetDetail = await getEchohuntTweetDetail(twitterIdentityRecord, parsedTweet.tweetId);
+  if (!tweetDetail) {
+    throw submissionError("TWEET_NOT_FOUND", 404, TWEET_NOT_FOUND_MESSAGES);
+  }
+  if (!tweetDetail.authorId || tweetDetail.authorId !== String(twitterIdentity.twitterId)) {
+    throw submissionError("TWEET_AUTHOR_MISMATCH", 403, TWEET_AUTHOR_MISMATCH_MESSAGES);
+  }
+  const tweetTitle = buildTweetDisplayTitle(tweetDetail.text);
+
   const result = await pgInstance.transaction(async (transaction) => {
     const registration = await CampaignRegistration.findOne({
       where: { campaign: campaignKey, twitterId: twitterIdentity.twitterId },
@@ -211,6 +233,7 @@ async function createTweetSubmission({
       authCenterUserId: authCenterUserId || registration.authCenterUserId || null,
       twitterId: registration.twitterId,
       twitterUsername: registration.username || twitterIdentity.username || null,
+      tweetTitle: tweetTitle || null,
       ...parsedTweet,
       submittedAt: new Date(),
     }, { transaction });
@@ -224,22 +247,6 @@ async function createTweetSubmission({
     });
     return { submission, usage: nextUsage };
   });
-
-  if (twitterIdentityRecord) {
-    try {
-      const tweetText = await getEchohuntTweetText(twitterIdentityRecord, parsedTweet.tweetId);
-      const tweetTitle = buildTweetDisplayTitle(tweetText);
-      if (tweetTitle) {
-        const [updatedCount] = await XhuntCampaignTweetSubmission.update(
-          { tweetTitle },
-          { where: { id: result.submission.id } }
-        );
-        if (updatedCount) result.submission.setDataValue("tweetTitle", tweetTitle);
-      }
-    } catch (_) {
-      // Tweet metadata is optional and must never prevent a valid submission.
-    }
-  }
 
   return { submission: serializeSubmission(result.submission), usage: result.usage };
 }

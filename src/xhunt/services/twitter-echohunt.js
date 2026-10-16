@@ -198,18 +198,26 @@ async function requestXApiWithIdentity(identity, request) {
   }
 }
 
-async function getEchohuntTweetText(identity, tweetId) {
+async function getEchohuntTweetDetail(identity, tweetId) {
   const normalizedTweetId = normalizeTwitterId(tweetId);
   if (!normalizedTweetId) return null;
 
   const response = await requestXApiWithIdentity(identity, (accessToken) =>
     axios.get(`${X_API_BASE_URL}/tweets/${encodeURIComponent(normalizedTweetId)}`, {
       timeout: 3000,
+      params: { "tweet.fields": "author_id" },
       headers: { Authorization: `Bearer ${accessToken}` },
     })
   );
-  const text = response?.data?.data?.text;
-  return typeof text === "string" && text.trim() ? text : null;
+  const data = response?.data?.data;
+  if (!data || !normalizeTwitterId(data.id)) return null;
+  const text = typeof data.text === "string" && data.text.trim() ? data.text : null;
+  return { text, authorId: normalizeTwitterId(data.author_id) };
+}
+
+async function getEchohuntTweetText(identity, tweetId) {
+  const detail = await getEchohuntTweetDetail(identity, tweetId);
+  return detail?.text || null;
 }
 
 async function resolveTwitterFollowTargetId(target, identity, redisClient) {
@@ -269,6 +277,7 @@ module.exports = {
   getEchohuntTwitterTokens,
   getEchohuntTwitterUserInfo,
   getEchohuntTweetText,
+  getEchohuntTweetDetail,
   getTwitterFollowTaskTarget,
   verifyEchohuntTwitterFollowTask,
 };
