@@ -3748,6 +3748,31 @@ function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number
   );
 }
 
+function parseWinnerRewardNumber(reward: unknown): number | null {
+  if (reward === null || reward === undefined) return null;
+  const match = String(reward).replace(/,/g, "").match(/-?\d+(\.\d+)?/);
+  return match && Number(match[0]) > 0 ? Number(match[0]) : null;
+}
+
+function getDistinctWinnerRewards(winners: AnyObj[]): number[] {
+  const nums = (Array.isArray(winners) ? winners : [])
+    .map((w) => parseWinnerRewardNumber(w?.reward))
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  return Array.from(new Set(nums)).sort((a, b) => b - a);
+}
+
+function resolveEssayWinnerPreviewAward(winner: AnyObj, index: number, distinctRewards: number[]) {
+  const raw = String(winner?.award || "").trim();
+  if (raw) return { text: raw, auto: false };
+  const curNum = parseWinnerRewardNumber(winner?.reward);
+  const tierRank =
+    distinctRewards.length >= 2 && curNum !== null ? distinctRewards.indexOf(curNum) + 1 : index + 1;
+  if (tierRank === 1) return { text: "🥇 1st Prize", auto: true };
+  if (tierRank === 2) return { text: "🥈 2nd Prize", auto: true };
+  if (tierRank === 3) return { text: "🥉 3rd Prize", auto: true };
+  return { text: `#${index + 1}`, auto: true };
+}
+
 function CustomLeaderboards({
   apiUrl,
   userActivityApiUrl,
@@ -3774,6 +3799,7 @@ function CustomLeaderboards({
     const leaderboardKey = getCustomLeaderboardAdapterKey(it, i);
     const hasDuplicateAdapterKey = !!leaderboardKey && adapterKeyCounts[leaderboardKey] > 1;
     const hasInvalidAdapterKey = !!leaderboardKey && !isValidCustomLeaderboardKey(leaderboardKey);
+    const essayDistinctRewards = it.isEssayContest ? getDistinctWinnerRewards(it.winners || []) : [];
     return ({
     key: String(i),
     label: <CustomLeaderboardSummary item={it} index={i} />,
@@ -3946,56 +3972,79 @@ function CustomLeaderboards({
             ) : (
               <Space direction="vertical" size={8} style={{ width: "100%" }}>
                 {it.winners.map((winner: AnyObj, wIdx: number) => {
-                  const updateWinnerField = (field: string, val: string) => {
-                    const nextWinners = (Array.isArray(it.winners) ? it.winners : []).map((w: AnyObj, idx: number) =>
-                      idx === wIdx ? { ...w, [field]: val } : w,
-                    );
-                    update("customLeaderboards", i, "winners", nextWinners);
-                  };
-                  const moveWinner = (delta: number) => {
-                    const nextWinners = Array.isArray(it.winners) ? [...it.winners] : [];
-                    const to = wIdx + delta;
-                    if (wIdx < 0 || to < 0 || wIdx >= nextWinners.length || to >= nextWinners.length) return;
-                    [nextWinners[wIdx], nextWinners[to]] = [nextWinners[to], nextWinners[wIdx]];
-                    update("customLeaderboards", i, "winners", nextWinners);
-                  };
-                  const removeWinner = () => {
-                    const nextWinners = (Array.isArray(it.winners) ? it.winners : []).filter((_: AnyObj, idx: number) => idx !== wIdx);
-                    update("customLeaderboards", i, "winners", nextWinners);
-                  };
-                  return (
-                    <Card
-                      size="small"
-                      key={wIdx}
-                      title={`获奖者 #${wIdx + 1}`}
-                      extra={<RepActions onUp={() => moveWinner(-1)} onDown={() => moveWinner(1)} onRemove={removeWinner} />}
-                    >
-                      <Row gutter={[12, 12]}>
-                        <Col xs={24} md={6}>
-                          <Field label="姓名">
-                            <Input value={winner.name || ""} onChange={(e) => updateWinnerField("name", e.target.value)} placeholder="例如：Captain Kent" />
-                          </Field>
-                        </Col>
-                        <Col xs={24} md={6}>
-                          <Field label="推特账号">
-                            <Input value={winner.handler || ""} onChange={(e) => updateWinnerField("handler", e.target.value)} placeholder="例如：captain_kent" />
-                          </Field>
-                        </Col>
-                        <Col xs={24} md={8}>
-                          <Field label="头像 URL">
-                            <Input value={winner.avatar || ""} onChange={(e) => updateWinnerField("avatar", e.target.value)} placeholder="https://pbs.twimg.com/..." />
-                          </Field>
-                        </Col>
-                        <Col xs={24} md={4}>
-                          <Field label="奖励">
-                            <Input value={winner.reward || ""} onChange={(e) => updateWinnerField("reward", e.target.value)} placeholder="1,000 USDC" />
-                          </Field>
-                        </Col>
-                        <Col xs={24} md={6}>
-                          <Field label="奖项（可选，留空按名次生成）">
-                            <Input value={winner.award || ""} onChange={(e) => updateWinnerField("award", e.target.value)} placeholder="🥇 1st Prize" />
-                          </Field>
-                        </Col>
+                  const resolvedPreview = resolveEssayWinnerPreviewAward(winner, wIdx, essayDistinctRewards);
+                    const updateWinnerField = (field: string, val: string) => {
+                      const nextWinners = (Array.isArray(it.winners) ? it.winners : []).map((w: AnyObj, idx: number) =>
+                        idx === wIdx ? { ...w, [field]: val } : w,
+                      );
+                      update("customLeaderboards", i, "winners", nextWinners);
+                    };
+                    const moveWinner = (delta: number) => {
+                      const nextWinners = Array.isArray(it.winners) ? [...it.winners] : [];
+                      const to = wIdx + delta;
+                      if (wIdx < 0 || to < 0 || wIdx >= nextWinners.length || to >= nextWinners.length) return;
+                      [nextWinners[wIdx], nextWinners[to]] = [nextWinners[to], nextWinners[wIdx]];
+                      update("customLeaderboards", i, "winners", nextWinners);
+                    };
+                    const removeWinner = () => {
+                      const nextWinners = (Array.isArray(it.winners) ? it.winners : []).filter((_: AnyObj, idx: number) => idx !== wIdx);
+                      update("customLeaderboards", i, "winners", nextWinners);
+                    };
+                    return (
+                      <Card
+                        size="small"
+                        key={wIdx}
+                        title={
+                          <Space size={8}>
+                            <span>{`获奖者 #${wIdx + 1}`}</span>
+                            <Tag color={resolvedPreview.text.includes("1st") ? "gold" : resolvedPreview.text.includes("2nd") ? "geekblue" : resolvedPreview.text.includes("3rd") ? "orange" : "default"}>
+                              {resolvedPreview.text}
+                              {resolvedPreview.auto ? "（自动）" : ""}
+                            </Tag>
+                          </Space>
+                        }
+                        extra={<RepActions onUp={() => moveWinner(-1)} onDown={() => moveWinner(1)} onRemove={removeWinner} />}
+                      >
+                        <Row gutter={[12, 12]}>
+                          <Col xs={24} md={6}>
+                            <Field label="姓名">
+                              <Input value={winner.name || ""} onChange={(e) => updateWinnerField("name", e.target.value)} placeholder="例如：Captain Kent" />
+                            </Field>
+                          </Col>
+                          <Col xs={24} md={6}>
+                            <Field label="推特账号">
+                              <Input value={winner.handler || ""} onChange={(e) => updateWinnerField("handler", e.target.value)} placeholder="例如：captain_kent" />
+                            </Field>
+                          </Col>
+                          <Col xs={24} md={8}>
+                            <Field label="头像 URL">
+                              <Input value={winner.avatar || ""} onChange={(e) => updateWinnerField("avatar", e.target.value)} placeholder="https://pbs.twimg.com/..." />
+                            </Field>
+                          </Col>
+                          <Col xs={24} md={4}>
+                            <Field label="奖励">
+                              <Input value={winner.reward || ""} onChange={(e) => updateWinnerField("reward", e.target.value)} placeholder="1,000 USDC" />
+                            </Field>
+                          </Col>
+                          <Col xs={24} md={6}>
+                            <Field label="奖项（可选，留空按奖励自动分档）">
+                              <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                                <Input value={winner.award || ""} onChange={(e) => updateWinnerField("award", e.target.value)} placeholder={resolvedPreview.text} allowClear />
+                                <Space size={4} wrap>
+                                  {["🥇 1st Prize", "🏅 1st Prize", "🥈 2nd Prize", "🥉 3rd Prize"].map((preset) => (
+                                    <Tag
+                                      key={preset}
+                                      style={{ cursor: "pointer", marginRight: 0 }}
+                                      color={winner.award === preset ? "blue" : undefined}
+                                      onClick={() => updateWinnerField("award", preset)}
+                                    >
+                                      {preset}
+                                    </Tag>
+                                  ))}
+                                </Space>
+                              </Space>
+                            </Field>
+                          </Col>
                         <Col xs={24} md={9}>
                           <Field label="获奖作品标题（可选）">
                             <Input value={winner.post || ""} onChange={(e) => updateWinnerField("post", e.target.value)} placeholder="填写后展示 Winning Post 列" />

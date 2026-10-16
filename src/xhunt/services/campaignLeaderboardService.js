@@ -472,6 +472,16 @@ function getDistinctRewardTiers(rewardNums = []) {
   );
 }
 
+function stripLeadingMedalEmoji(text = "") {
+  let out = String(text || "").trim();
+  for (const emoji of ["🥇", "🏅", "🏆", "🥈", "🥉"]) {
+    if (out.startsWith(emoji)) {
+      out = out.slice(emoji.length).trim();
+    }
+  }
+  return out;
+}
+
 function resolveManualWinnerAwardInfo(row = {}, index = 0, distinctRewards = [], currentRewardNum = null) {
   const rawAward = String(row?.award || row?.prize || "").trim();
   const explicitMedal = String(row?.medal || "").trim();
@@ -479,23 +489,29 @@ function resolveManualWinnerAwardInfo(row = {}, index = 0, distinctRewards = [],
   const fallbackOrder = Number.isFinite(explicitRank) && explicitRank > 0 ? explicitRank : index + 1;
 
   if (rawAward) {
-    if (/(?:🥇|🏅|🏆|\b1st\b|first|一等奖|第一名|冠军)/i.test(rawAward)) {
-      const medal = explicitMedal || (rawAward.includes("🏅") ? "🏅" : rawAward.includes("🏆") ? "🏆" : "🥇");
-      const prize = String(row?.prize || "").trim() || rawAward.replace(/^(?:🥇|🏅|🏆)\s*/, "").trim() || "1st Prize";
-      const award = /^(?:🥇|🏅|🏆)/.test(rawAward) ? rawAward : `${medal} ${prize}`;
-      return { rank: 1, order: index + 1, award, medal, prize };
-    }
-    if (/(?:🥈|\b2nd\b|second|二等奖|第二名|亚军)/i.test(rawAward)) {
+    if (rawAward.includes("🥈") || /\b2nd\b|second|二等奖|第二名|亚军/i.test(rawAward)) {
       const medal = explicitMedal || "🥈";
-      const prize = String(row?.prize || "").trim() || rawAward.replace(/^🥈\s*/, "").trim() || "2nd Prize";
-      const award = /^🥈/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      const prize = String(row?.prize || "").trim() || stripLeadingMedalEmoji(rawAward) || "2nd Prize";
+      const award = rawAward.startsWith("🥈") ? rawAward : `${medal} ${prize}`;
       return { rank: 2, order: index + 1, award, medal, prize };
     }
-    if (/(?:🥉|\b3rd\b|third|三等奖|第三名|季军)/i.test(rawAward)) {
+    if (rawAward.includes("🥉") || /\b3rd\b|third|三等奖|第三名|季军/i.test(rawAward)) {
       const medal = explicitMedal || "🥉";
-      const prize = String(row?.prize || "").trim() || rawAward.replace(/^🥉\s*/, "").trim() || "3rd Prize";
-      const award = /^🥉/.test(rawAward) ? rawAward : `${medal} ${prize}`;
+      const prize = String(row?.prize || "").trim() || stripLeadingMedalEmoji(rawAward) || "3rd Prize";
+      const award = rawAward.startsWith("🥉") ? rawAward : `${medal} ${prize}`;
       return { rank: 3, order: index + 1, award, medal, prize };
+    }
+    if (
+      rawAward.includes("🥇") ||
+      rawAward.includes("🏅") ||
+      rawAward.includes("🏆") ||
+      /\b1st\b|first|一等奖|第一名|冠军/i.test(rawAward)
+    ) {
+      const medal = explicitMedal || (rawAward.includes("🏅") ? "🏅" : rawAward.includes("🏆") ? "🏆" : "🥇");
+      const prize = String(row?.prize || "").trim() || stripLeadingMedalEmoji(rawAward) || "1st Prize";
+      const hasLeading = rawAward.startsWith("🥇") || rawAward.startsWith("🏅") || rawAward.startsWith("🏆");
+      const award = hasLeading ? rawAward : `${medal} ${prize}`;
+      return { rank: 1, order: index + 1, award, medal, prize };
     }
     const numMatch = rawAward.match(/^#?(\d+)$/);
     const parsedRank = numMatch ? Number(numMatch[1]) : fallbackOrder;
@@ -610,14 +626,7 @@ function applyManualEssayLeaderboards(payload, config = {}) {
   customLeaderboards.forEach((item, index) => {
     if (item?.isEssayContest !== true) return;
     const id = getCustomLeaderboardId(item, index);
-    const nameKey = getCustomLeaderboardKey(item);
-    const rows = buildManualEssayLeaderboardRows(item);
-    nextLeaderboards[id] = rows;
-    [nameKey, `custom-${index}`, String(index)].forEach((fallbackKey) => {
-      if (fallbackKey && !nextLeaderboards[fallbackKey]) {
-        nextLeaderboards[fallbackKey] = rows;
-      }
-    });
+    nextLeaderboards[id] = buildManualEssayLeaderboardRows(item);
   });
 
   return {
@@ -651,16 +660,10 @@ function applyManualEssayUserActivity(payload, config = {}, user = {}) {
   customLeaderboards.forEach((item, index) => {
     if (item?.isEssayContest !== true) return;
     const id = getCustomLeaderboardId(item, index);
-    const nameKey = getCustomLeaderboardKey(item);
     const rows = buildManualEssayLeaderboardRows(item);
     const found = rows.find((row) => matchesManualEssayWinner(row, user));
     if (found) {
       nextLeaderboards[id] = found;
-      [nameKey, `custom-${index}`, String(index)].forEach((fallbackKey) => {
-        if (fallbackKey && !nextLeaderboards[fallbackKey]) {
-          nextLeaderboards[fallbackKey] = found;
-        }
-      });
     }
   });
 
