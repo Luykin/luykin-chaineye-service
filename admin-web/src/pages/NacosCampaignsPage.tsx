@@ -3997,10 +3997,10 @@ function CustomLeaderboards({
                         title={
                           <Space size={8}>
                             <span>{`获奖者 #${wIdx + 1}`}</span>
-                            <Tag color={resolvedPreview.text.includes("1st") ? "gold" : resolvedPreview.text.includes("2nd") ? "geekblue" : resolvedPreview.text.includes("3rd") ? "orange" : "default"}>
+                            <AntTag color={resolvedPreview.text.includes("1st") ? "gold" : resolvedPreview.text.includes("2nd") ? "geekblue" : resolvedPreview.text.includes("3rd") ? "orange" : "default"}>
                               {resolvedPreview.text}
                               {resolvedPreview.auto ? "（自动）" : ""}
-                            </Tag>
+                            </AntTag>
                           </Space>
                         }
                         extra={<RepActions onUp={() => moveWinner(-1)} onDown={() => moveWinner(1)} onRemove={removeWinner} />}
@@ -4032,14 +4032,14 @@ function CustomLeaderboards({
                                 <Input value={winner.award || ""} onChange={(e) => updateWinnerField("award", e.target.value)} placeholder={resolvedPreview.text} allowClear />
                                 <Space size={4} wrap>
                                   {["🥇 1st Prize", "🏅 1st Prize", "🥈 2nd Prize", "🥉 3rd Prize"].map((preset) => (
-                                    <Tag
+                                    <AntTag
                                       key={preset}
                                       style={{ cursor: "pointer", marginRight: 0 }}
                                       color={winner.award === preset ? "blue" : undefined}
                                       onClick={() => updateWinnerField("award", preset)}
                                     >
                                       {preset}
-                                    </Tag>
+                                    </AntTag>
                                   ))}
                                 </Space>
                               </Space>
