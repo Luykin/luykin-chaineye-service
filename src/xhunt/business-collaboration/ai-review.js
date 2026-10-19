@@ -52,17 +52,39 @@ function resolveAiReviewSystemPrompt(activity, snapshot) {
   return candidate ? candidate.trim().slice(0, AI_REVIEW_PROMPT_MAX_LENGTH) : DEFAULT_AI_REVIEW_SYSTEM_PROMPT;
 }
 
-function buildReviewMessage(snapshot, draftText) {
-  const requiredPoints = Array.isArray(snapshot.requiredPoints) && snapshot.requiredPoints.length
-    ? snapshot.requiredPoints.join("、")
-    : "（未配置）";
+function formatMultiValue(value) {
+  if (Array.isArray(value)) {
+    const items = value.map((item) => String(item || "").trim()).filter(Boolean);
+    return items.length ? items.join("、") : "";
+  }
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function resolveReviewRequirements(activity, snapshot = {}) {
+  const template = activity?.invitationTemplate && typeof activity.invitationTemplate === "object"
+    ? activity.invitationTemplate
+    : {};
+  const title = formatMultiValue(template.title) || formatMultiValue(snapshot.title) || formatMultiValue(activity?.name) || "（未配置）";
+  const brief = formatMultiValue(template.brief) || formatMultiValue(snapshot.brief) || "（未配置）";
+  const requiredPoints = formatMultiValue(template.requiredPoints) || formatMultiValue(snapshot.requiredPoints) || "（未配置）";
+  const contentFormat = formatMultiValue(template.contentFormat) || formatMultiValue(snapshot.contentFormat) || "（未配置）";
+  const language = formatMultiValue(template.language) || formatMultiValue(snapshot.language) || "（未配置）";
+  const rawCount = template.contentCount !== undefined && template.contentCount !== null && template.contentCount !== ""
+    ? template.contentCount
+    : snapshot.contentCount;
+  const contentCount = rawCount === null || rawCount === undefined || rawCount === "" ? "（未配置）" : rawCount;
+  return { title, brief, requiredPoints, contentFormat, contentCount, language };
+}
+
+function buildReviewMessage(snapshot, draftText, activity = null) {
+  const reqs = resolveReviewRequirements(activity, snapshot);
   return [
-    `邀约标题：${snapshot.title || "（未配置）"}`,
-    `合作 Brief：${snapshot.brief || "（未配置）"}`,
-    `必须表达事项：${requiredPoints}`,
-    `内容形式：${snapshot.contentFormat || "（未配置）"}`,
-    `内容数量：${snapshot.contentCount === null || snapshot.contentCount === undefined ? "（未配置）" : snapshot.contentCount}`,
-    `内容语言：${snapshot.language || "（未配置）"}`,
+    `邀约标题：${reqs.title}`,
+    `合作 Brief：${reqs.brief}`,
+    `必须表达事项：${reqs.requiredPoints}`,
+    `内容形式：${reqs.contentFormat}`,
+    `内容数量：${reqs.contentCount}`,
+    `内容语言：${reqs.language}`,
     "",
     "草稿正文：",
     draftText,
@@ -103,7 +125,7 @@ async function runAiReviewForRound(roundId) {
     const modelVersion = llmConfig.defaultModel;
     const systemPrompt = resolveAiReviewSystemPrompt(collaboration.activity, snapshot);
     const startedAt = Date.now();
-    const result = await structuredChat(buildReviewMessage(snapshot, draftText), REVIEW_JSON_SCHEMA, {
+    const result = await structuredChat(buildReviewMessage(snapshot, draftText, collaboration.activity), REVIEW_JSON_SCHEMA, {
       systemPrompt,
     });
     const durationMs = Date.now() - startedAt;
