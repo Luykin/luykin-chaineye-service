@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 const {
   pgInstance,
   BusinessCollaborationActivity,
@@ -14,6 +14,10 @@ const {
   XHuntKolCollaboration,
   XAccount,
 } = require("../../models/postgres-start");
+const {
+  getPostgresReadOnlyInstance,
+  isPostgresReadOnlyConfigured,
+} = require("../../infra/k8s/postgres-readonly");
 const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth");
 const { PROVIDERS } = require("../auth-center/services/auth");
 const { extractEvm40Address } = require("../auth-center/services/utils");
@@ -394,20 +398,112 @@ function normalizeInvitationSnapshot(template, invitation, activity) {
   };
 }
 
+function getSnapshotKolAvatarUrl(invitation) {
+  const item = invitation?.toJSON ? invitation.toJSON() : invitation;
+  const kol = item?.invitationSnapshot?.kol;
+  return text(kol?.avatarUrl || kol?.avatar, "KOL 头像 URL", 2048);
+}
+
+async function loadTwitterUserAvatarsByTwitterIds(twitterIds) {
+  const ids = [...new Set((twitterIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!ids.length || !isPostgresReadOnlyConfigured()) return new Map();
+  try {
+    const db = getPostgresReadOnlyInstance();
+    // 先通过 kol_marketing_profile 拿到原始类型的 twitter_user_id，再用 u.id = requested.twitter_user_id
+    // 走 dev.twitter_user 主键索引，避免在 u.id 上做 ::text 导致大表全表扫描。
+    const rows = await db.query(
+      `
+        WITH requested_profiles AS MATERIALIZED (
+          SELECT p.twitter_user_id
+          FROM dev.kol_marketing_profile p
+          WHERE p.twitter_user_id::text = ANY($twitterIds::text[])
+        )
+        SELECT
+          u.id::text AS "twitterId",
+          COALESCE(
+            NULLIF(u.profile ->> 'profile_image_url', ''),
+            NULLIF(u.profile ->> 'profile_image_url_https', ''),
+            NULLIF(u.profile ->> 'profileImageUrl', ''),
+            NULLIF(u.profile ->> 'avatar', '')
+          ) AS "avatarUrl"
+        FROM requested_profiles requested
+        JOIN dev.twitter_user u ON u.id = requested.twitter_user_id
+      `,
+      {
+        bind: { twitterIds: ids },
+        type: QueryTypes.SELECT,
+      }
+    );
+    return new Map(
+      rows
+        .filter((row) => row?.twitterId && row?.avatarUrl)
+        .map((row) => [String(row.twitterId), String(row.avatarUrl).trim()])
+    );
+  } catch (error) {
+    console.warn("[business-collaboration] loadTwitterUserAvatarsByTwitterIds failed:", error.message);
+    return new Map();
+  }
+}
+
 async function loadKolAvatarFallbacks(invitations) {
-  const twitterIds = [...new Set(invitations.map((item) => String(item.kolTwitterId || "").trim()).filter(Boolean))];
+  const missingInvitations = (invitations || []).filter((item) => !getSnapshotKolAvatarUrl(item));
+  const twitterIds = [...new Set(missingInvitations.map((item) => String(item.kolTwitterId || "").trim()).filter(Boolean))];
   if (!twitterIds.length) return new Map();
-  const accounts = await XAccount.findAll({
-    where: { xId: { [Op.in]: twitterIds } },
-    attributes: ["xId", "avatar"],
+  const avatarMap = await loadTwitterUserAvatarsByTwitterIds(twitterIds);
+  const remainingIds = twitterIds.filter((id) => !avatarMap.has(id));
+  if (remainingIds.length) {
+    const accounts = await XAccount.findAll({
+      where: { xId: { [Op.in]: remainingIds } },
+      attributes: ["xId", "avatar"],
+    });
+    accounts.forEach((account) => {
+      if (account.xId && account.avatar) {
+        avatarMap.set(String(account.xId), account.avatar);
+      }
+    });
+  }
+  const backfillInvitations = missingInvitations.filter((item) => {
+    const id = String(item.kolTwitterId || "").trim();
+    return id && avatarMap.has(id);
   });
-  return new Map(accounts.filter((account) => account.xId && account.avatar).map((account) => [String(account.xId), account.avatar]));
+  if (backfillInvitations.length) {
+    setImmediate(() => {
+      Promise.allSettled(
+        backfillInvitations.map((invitation) => {
+          const id = String(invitation.kolTwitterId || "").trim();
+          const avatarUrl = avatarMap.get(id);
+          if (!invitation.id || !avatarUrl) return Promise.resolve();
+          const currentSnapshot = invitation.invitationSnapshot && typeof invitation.invitationSnapshot === "object"
+            ? invitation.invitationSnapshot
+            : {};
+          const currentKol = currentSnapshot.kol && typeof currentSnapshot.kol === "object"
+            ? currentSnapshot.kol
+            : {};
+          if (currentKol.avatarUrl) return Promise.resolve();
+          return BusinessCollaborationInvitation.update(
+            {
+              invitationSnapshot: {
+                ...currentSnapshot,
+                kol: {
+                  ...currentKol,
+                  avatarUrl,
+                },
+              },
+            },
+            { where: { id: invitation.id } }
+          );
+        })
+      ).catch(() => {});
+    });
+  }
+  return avatarMap;
 }
 
 function serializeManagerInvitation(invitation, kolAvatarMap = null) {
   const item = invitation.toJSON ? invitation.toJSON() : invitation;
   const collaboration = item.collaboration || null;
   const delivery = collaboration?.delivery;
+  const snapshotAvatarUrl = getSnapshotKolAvatarUrl(item);
   return {
     id: item.id,
     activityId: item.activityId,
@@ -416,7 +512,7 @@ function serializeManagerInvitation(invitation, kolAvatarMap = null) {
       authCenterUserId: item.kolAuthCenterUserId || null,
       username: item.invitationSnapshot?.kol?.username || null,
       displayName: item.invitationSnapshot?.kol?.displayName || null,
-      avatarUrl: kolAvatarMap?.get(String(item.kolTwitterId)) || null,
+      avatarUrl: snapshotAvatarUrl || kolAvatarMap?.get(String(item.kolTwitterId)) || null,
     },
     invitationSnapshot: item.invitationSnapshot || {},
     offerAmount: String(item.offerAmount),
@@ -661,11 +757,17 @@ router.get("/activities/:activityId", async (req, res) => {
       }],
       order: [["updatedAt", "DESC"]],
     });
-    const kolAvatarMap = await loadKolAvatarFallbacks(invitations);
+    const [projectAvatarFallbacks, kolAvatarMap] = await Promise.all([
+      loadProjectAvatarFallbacks([activity]),
+      loadKolAvatarFallbacks(invitations),
+    ]);
     res.set("Cache-Control", "no-store");
     return res.json({
       success: true,
-      data: { ...serializeActivityForManager(activity, access), invitations: invitations.map((invitation) => serializeManagerInvitation(invitation, kolAvatarMap)) },
+      data: {
+        ...serializeActivityForManager(activity, access, null, projectAvatarFallbacks.get(String(activity.id)) || null),
+        invitations: invitations.map((invitation) => serializeManagerInvitation(invitation, kolAvatarMap)),
+      },
     });
   } catch (error) {
     return sendError(res, error, "ACTIVITY_DETAIL_FAILED");
@@ -866,12 +968,18 @@ router.post("/invitations", async (req, res) => {
       const normalized = invitations.map((item, index) => {
         const kolTwitterId = text(item?.kolTwitterId, `第 ${index + 1} 位 KOL 的 Twitter ID`, 64, { required: true });
         const offerAmount = formatCents(decimalToCents(item?.offerAmount, `第 ${index + 1} 位 KOL 的邀约金额`));
+        const avatarUrl = text(
+          item?.kolAvatarUrl ?? item?.avatarUrl ?? item?.kol?.avatarUrl ?? item?.kol?.avatar,
+          "KOL 头像 URL",
+          2048
+        );
         return {
           kolTwitterId,
           kol: {
             twitterId: kolTwitterId,
             username: text(item?.kolUsername, "KOL X 用户名", 128),
             displayName: text(item?.kolDisplayName, "KOL 显示名", 256),
+            avatarUrl: avatarUrl || null,
           },
           offerAmount,
           snapshot: normalizeInvitationSnapshot(activity.invitationTemplate, item, activity),
@@ -917,11 +1025,21 @@ router.post("/invitations", async (req, res) => {
           twitterIds: paused.map((item) => item.kolTwitterId),
         });
       }
+      const missingAvatarTwitterIds = normalized
+        .filter((item) => !item.kol.avatarUrl)
+        .map((item) => item.kolTwitterId);
+      const fallbackAvatarsByTwitterId = missingAvatarTwitterIds.length
+        ? await loadTwitterUserAvatarsByTwitterIds(missingAvatarTwitterIds)
+        : new Map();
 
       const created = [];
       for (const item of normalized) {
         const profile = profileByTwitterId.get(item.kolTwitterId);
-        const invitationSnapshot = { ...item.snapshot, kol: item.kol };
+        const kolSnapshot = {
+          ...item.kol,
+          avatarUrl: item.kol.avatarUrl || fallbackAvatarsByTwitterId.get(item.kolTwitterId) || null,
+        };
+        const invitationSnapshot = { ...item.snapshot, kol: kolSnapshot };
         const invitation = await BusinessCollaborationInvitation.create({
           activityId,
           kolTwitterId: item.kolTwitterId,
