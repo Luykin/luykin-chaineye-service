@@ -14,6 +14,7 @@ const llmConfig = require("../../lib/llm/config");
 const { normalizeGoogleDocUrl, fetchGoogleDocText } = require("./google-doc");
 
 const DRAFT_TEXT_MAX_LENGTH = 20000;
+const AI_REVIEW_PROMPT_MAX_LENGTH = 10000;
 
 const REVIEW_JSON_SCHEMA = {
   type: "object",
@@ -35,13 +36,21 @@ const REVIEW_JSON_SCHEMA = {
   required: ["pass", "issues", "summary"],
 };
 
-const SYSTEM_PROMPT = [
+const DEFAULT_AI_REVIEW_SYSTEM_PROMPT = [
   "你是一名定向合作内容审核员，负责初审 KOL 为品牌合作提交的内容草稿。",
   "请根据邀约的 Brief、必须表达事项、内容形式、内容数量和语言要求，判断草稿是否满足合作要求。",
   "只有在草稿存在实质性不符（例如缺失必须表达的事项、内容形式或语言明显不符、内容与 Brief 完全无关）时才判定不通过；",
   "措辞、排版或细节风格问题不应成为不通过的理由。",
   "pass 表示草稿是否实质性满足邀约要求；issues 列出每个实质性问题及其说明；summary 用一两句话总结审核结论。",
 ].join("\n");
+
+function resolveAiReviewSystemPrompt(activity, snapshot) {
+  const candidate = [
+    activity?.invitationTemplate?.aiReviewSystemPrompt,
+    snapshot?.aiReviewSystemPrompt,
+  ].find((item) => typeof item === "string" && item.trim());
+  return candidate ? candidate.trim().slice(0, AI_REVIEW_PROMPT_MAX_LENGTH) : DEFAULT_AI_REVIEW_SYSTEM_PROMPT;
+}
 
 function buildReviewMessage(snapshot, draftText) {
   const requiredPoints = Array.isArray(snapshot.requiredPoints) && snapshot.requiredPoints.length
@@ -92,9 +101,10 @@ async function runAiReviewForRound(roundId) {
     const snapshot = collaboration.invitation?.invitationSnapshot || {};
     const draftText = String(fetched.text || "").slice(0, DRAFT_TEXT_MAX_LENGTH);
     const modelVersion = llmConfig.defaultModel;
+    const systemPrompt = resolveAiReviewSystemPrompt(collaboration.activity, snapshot);
     const startedAt = Date.now();
     const result = await structuredChat(buildReviewMessage(snapshot, draftText), REVIEW_JSON_SCHEMA, {
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt,
     });
     const durationMs = Date.now() - startedAt;
     const pass = result?.pass === true;
@@ -145,5 +155,8 @@ async function runAiReviewForRound(roundId) {
 }
 
 module.exports = {
+  AI_REVIEW_PROMPT_MAX_LENGTH,
+  DEFAULT_AI_REVIEW_SYSTEM_PROMPT,
+  resolveAiReviewSystemPrompt,
   runAiReviewForRound,
 };

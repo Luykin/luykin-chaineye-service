@@ -23,7 +23,11 @@ const { PROVIDERS } = require("../auth-center/services/auth");
 const { extractEvm40Address } = require("../auth-center/services/utils");
 const { decimalToCents, formatCents, sumMoney } = require("../business-collaboration/money");
 const { normalizeGoogleDocUrl, fetchGoogleDocText } = require("../business-collaboration/google-doc");
-const { runAiReviewForRound } = require("../business-collaboration/ai-review");
+const {
+  AI_REVIEW_PROMPT_MAX_LENGTH,
+  DEFAULT_AI_REVIEW_SYSTEM_PROMPT,
+  runAiReviewForRound,
+} = require("../business-collaboration/ai-review");
 const { STRATEGY_CACHE_PREFIX } = require("./echohunt-kol-match/constants");
 
 const router = express.Router();
@@ -376,6 +380,11 @@ function normalizeInvitationSnapshot(template, invitation, activity) {
     max: 720,
     fallback: DEFAULT_CONFIRMATION_DEADLINE_HOURS,
   });
+  const aiReviewSystemPrompt = snapshotField(
+    base.aiReviewSystemPrompt,
+    "AI 审稿提示词",
+    AI_REVIEW_PROMPT_MAX_LENGTH
+  ) || DEFAULT_AI_REVIEW_SYSTEM_PROMPT;
 
   return {
     title,
@@ -386,6 +395,7 @@ function normalizeInvitationSnapshot(template, invitation, activity) {
     language,
     requiredPoints,
     confirmationDeadlineHours,
+    aiReviewSystemPrompt,
     activity: {
       name: activity.name,
       projectTwitterId: activity.projectTwitterId,

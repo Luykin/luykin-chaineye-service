@@ -16,6 +16,7 @@ const {
 } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
 const { DATA_SERVICE_BASE_URL } = require("../../xhunt/constants/dataService");
+const { AI_REVIEW_PROMPT_MAX_LENGTH } = require("../../xhunt/business-collaboration/ai-review");
 
 const router = express.Router();
 const MANAGE_PERMISSION = "business_collaboration_manage";
@@ -77,6 +78,16 @@ function date(value, field) {
 function object(value, field) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw publicError(`${field} 必须是对象`);
   return value;
+}
+
+function normalizeInvitationTemplate(value) {
+  const template = { ...object(value || {}, "邀约默认模板") };
+  if (Object.prototype.hasOwnProperty.call(template, "aiReviewSystemPrompt")) {
+    const prompt = text(template.aiReviewSystemPrompt, AI_REVIEW_PROMPT_MAX_LENGTH);
+    if (prompt) template.aiReviewSystemPrompt = prompt;
+    else delete template.aiReviewSystemPrompt;
+  }
+  return template;
 }
 
 function normalizeTwitterHandle(value) {
@@ -149,7 +160,7 @@ function normalizeActivityPayload(payload, { partial = false } = {}) {
     if (!ACTIVITY_STATUSES.has(value)) throw publicError("活动状态不正确");
     next.status = value;
   }
-  if (has("invitationTemplate") || !partial) next.invitationTemplate = object(payload.invitationTemplate || {}, "邀约默认模板");
+  if (has("invitationTemplate") || !partial) next.invitationTemplate = normalizeInvitationTemplate(payload.invitationTemplate || {});
   return next;
 }
 
