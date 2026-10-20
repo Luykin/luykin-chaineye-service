@@ -8,8 +8,12 @@
   "mantleHunterProgramActiveURL": "https://xhunt.ai/leaderboard",
   "realTimeSubscriptionSSE": true,
   "flexibleTesting": {
-    "showXX1": ["LuykinAI"],
-    "_showAnnualReport": ["LuykinAI"]
+    "showXX1": [
+      "LuykinAI"
+    ],
+    "_showAnnualReport": [
+      "LuykinAI"
+    ]
   },
   "testConfig": {
     "features": [
@@ -134,5 +138,12 @@
       "TTMBbo",
       "shouyi16"
     ]
+  },
+  "unfollowVipCta": {
+    "url": "https://docs.google.com/document/d/example",
+    "label": {
+      "zh": "申请 VIP 权限",
+      "en": "Apply for VIP Access"
+    }
   }
 }

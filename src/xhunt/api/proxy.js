@@ -7,7 +7,10 @@ const {
 const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
 const { checkProStatus } = require("../middleware/pro-status");
 const { applyProDataFiltering } = require("../utils/pro-data-filtering");
-const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const {
+  shouldBlockLegacyUnfollowRelation,
+  applyUnfollowRelationMasking,
+} = require("../utils/unfollow-relation-masking");
 const { handleUserCreateGiftCredits } = require("../services/giftCreditsService");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
@@ -52,7 +55,7 @@ const ensureCorsHeaders = (req, res, allowMethods = "GET, POST, PUT, PATCH, DELE
 };
 
 // 代理请求处理函数
-async function proxyRequest(req, res, targetUrl) {
+async function proxyRequest(req, res, targetUrl, transformJson = null) {
   try {
     // 需要保留的 header 列表（忽略大小写，支持部分匹配）
     const HEADERS_TO_PRESERVE = [
@@ -242,6 +245,14 @@ async function proxyRequest(req, res, targetUrl) {
         console.warn("Pro data filtering warning:", filterErr);
       }
 
+      if (typeof transformJson === "function") {
+        try {
+          data = (await transformJson(data)) ?? data;
+        } catch (transformErr) {
+          console.warn("Proxy response transform warning:", transformErr);
+        }
+      }
+
       // 返回 JSON 响应
       return res.status(statusCode).json(data);
     } else {
@@ -289,7 +300,7 @@ const DEFAULT_CACHE_PATHS = [/.*/];
 const SHORT_CACHE_PATHS = ["twitter/trending_tweets"];
 
 // 完全不缓存分组：需要实时返回或不允许缓存的接口放这里
-const NO_CACHE_PATHS = [];
+const NO_CACHE_PATHS = ["twitter/unfollow_relation"];
 
 // 私有人信息分组：private 缓存 1 分钟，避免共享缓存复用用户态响应
 const PRIVATE_USER_CACHE_PATHS = [
@@ -630,24 +641,23 @@ router.all(
   }
 );
 
-// 代理路由 - 特殊接口访问控制（仅 XHunt VIP 允许返回真实数据）
+// 代理路由 - 特殊接口访问控制（逻辑位于 utils/unfollow-relation-masking.js）
 router.all(
   "/public/fetch/twitter/unfollow_relation",
   authenticateTokenOptional,
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
-    try {
-      const ret = isRequestXHuntVip(req);
-      if (!ret) {
-        // 非 VIP 返回空数据
-        ensureCorsHeaders(req, res);
-        return res.status(200).json({ data: [], isVip: false });
-      }
-    } catch (_) {}
+    if (shouldBlockLegacyUnfollowRelation(req)) {
+      ensureCorsHeaders(req, res);
+      setNoCacheHeaders(res);
+      return res.status(200).json({ data: [], isVip: false });
+    }
 
     const targetUrl = getTargetUrl(req);
-    await proxyRequest(req, res, targetUrl);
+    await proxyRequest(req, res, targetUrl, (data) =>
+      applyUnfollowRelationMasking(req, data)
+    );
   }
 );
 

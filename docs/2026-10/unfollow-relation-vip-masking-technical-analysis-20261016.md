@@ -11,8 +11,8 @@
 
 | 插件版本 | 普通用户（非 VIP） | VIP 用户 |
 |---|---|---|
-| ≤ 0.4.1（含） | 走老逻辑：返回空数据 | 走老逻辑：返回全部数据 |
-| > 0.4.1 | 只能看 **3 天之前** 的 unfollow / 被 unfollow 记录；3 天之内的遮挡，展示"仅对 VIP 用户开放"引导卡片，卡片上的跳转链接与按钮文案**由后端下发**（初始配置为 TG 群，后续可改任意链接，无需发版插件） | 看全部 |
+| ≤ 0.4.5（含） | 走老逻辑：返回空数据 | 走老逻辑：返回全部数据 |
+| > 0.4.5 | 只能看 **3 天之前** 的 unfollow / 被 unfollow 记录；3 天之内的遮挡，展示"仅对 VIP 用户开放"引导卡片，卡片上的跳转链接与按钮文案**由后端下发**（由后端从 Nacos `xhunt_config` 读取下发，常配置为 Google 文档申请链接，后续可改任意链接，无需发版插件） | 看全部 |
 
 "遮挡"必须由后端真实裁剪数据保证（近 3 天记录及其关联的用户信息不下发），前端只负责遮挡 UI 与引导。
 
@@ -88,13 +88,13 @@ router.all(
 ```javascript
 const { getVersionFromRequest, compareVersion } = require("../utils/version");
 
-// 新逻辑门槛：版本 > 0.4.1
+// 新逻辑门槛：版本 > 0.4.5
 const version = getVersionFromRequest(req);
-const isNewLogic = compareVersion(version, "0.4.1") > 0;
+const isNewLogic = compareVersion(version, "0.4.5") > 0;
 ```
 
 - `version` 为 `null`/非法时 `versionToNumber` 返回 0，`compareVersion` 返回 -1 → 自动走老逻辑（VIP-only）。这同时覆盖了 web 端、旧插件等不带版本头的请求，行为安全。
-- 阈值 `0.4.1` 建议提为模块级常量（如 `UNFOLLOW_RELATION_NEW_RULE_VERSION = "0.4.1"`），方便日后调整。
+- 阈值 `0.4.5` 建议提为模块级常量（如 `UNFOLLOW_RELATION_NEW_RULE_VERSION = "0.4.5"`），方便日后调整。
 
 ### 3.2 响应裁剪（核心）
 
@@ -120,11 +120,11 @@ async function proxyRequest(req, res, targetUrl, transformJson = null) {
 ```text
 isVip = isRequestXHuntVip(req)
 if (!isNewLogic):
-    # 老逻辑（版本 ≤ 0.4.1 或无版本头）
+    # 老逻辑（版本 ≤ 0.4.5 或无版本头）
     非 VIP → { data: [], isVip: false }   # 保持现状，老插件行为不变
     VIP   → 原样代理
 else:
-    # 新逻辑（版本 > 0.4.1）
+    # 新逻辑（版本 > 0.4.5）
     VIP   → 原样代理（可在响应内层标注 isVip: true）
     非 VIP → 代理 + transformJson 裁剪：
         cutoff = Date.now() - 3 * 24 * 3600 * 1000
@@ -149,31 +149,32 @@ else:
 
 保留的 id 集合 = 保留的 `unfollowed_action` 的 `follower_id` + `following_id` ∪ 保留的 `unfollowing_action` 的 `follower_id` + `following_id`（两侧 id 都保留，避免前端取 `twitter_users[targetId]` 时出现 undefined；当前页面用户自己的 profile 前端有其他数据源，保留无害）。遍历 `twitter_users` 按集合过滤即可。
 
-### 3.4 引导跳转（CTA）由后端下发
+### 3.4 引导跳转（CTA）由后端从 Nacos 下发
 
-遮挡卡片上的跳转链接**不写死在前端**（今天可能是 TG 群，明天可能换成其他页面），由后端在裁剪响应时注入：
+遮挡卡片上的跳转链接**不写死在前端**（例如配置为 Google 文档申请链接或其他说明页），由后端从 Nacos `xhunt_config`（`DEFAULT_GROUP`）读取并在裁剪响应时注入：
 
 ```jsonc
 "vip_cta": {
-  "url": "https://t.me/xhunt_ai",
-  "label": { "zh": "加入 TG 群申请 VIP", "en": "Join our Telegram to apply for VIP" }
+  "url": "https://docs.google.com/document/d/example",
+  "label": { "zh": "申请 VIP 权限", "en": "Apply for VIP Access" }
 }
 ```
 
-- 值来源于**服务端配置**（环境变量或 `config/config.json`，如 `UNFOLLOW_VIP_CTA_URL` / `UNFOLLOW_VIP_CTA_LABEL_ZH` / `UNFOLLOW_VIP_CTA_LABEL_EN`），改链接只需改配置发后端，不用发插件版本。
+- 值来源于 **Nacos `xhunt_config` 的 `unfollowVipCta` 字段**（同时兼容字符串简写 `"unfollowVipCta": "https://..."` 或顶层 `unfollowVipCtaUrl`，本地兜底模板在 `src/xhunt/constants/nacos_config.json`，并带 60s 内存 TTL 缓存），改链接只需在后台修改 Nacos 配置，无需重启或发插件版本。
 - 前端原则：**后端返回啥就展示啥**——`url` 缺失或为空时前端不渲染 CTA 按钮，只保留说明文案。
 - 仅非 VIP 的裁剪响应注入该字段；VIP 响应无需携带。
 
 ### 3.5 缓存修正
 
-`unfollow_relation` 响应现在依赖请求者身份（VIP / 非 VIP / 老版本），不能再走 `DEFAULT` 组（`public, max-age=180`）。将该路径加入 `NO_CACHE_PATHS`（`proxy.js:292`）或 `PRIVATE_USER_CACHE_PATHS`（`proxy.js:295`，`private, max-age=60` + `Vary`）。推荐 `NO_CACHE_PATHS`，VIP 状态变更可即时生效。
+`unfollow_relation` 响应现在依赖请求者身份（VIP / 非 VIP / 老版本），不能再走 `DEFAULT` 组（`public, max-age=180`）。将该路径加入 `NO_CACHE_PATHS`（`proxy.js`）。推荐 `NO_CACHE_PATHS`，VIP 状态变更可即时生效。
 
 ### 3.6 后端改动清单
 
 | 文件 | 改动 |
 |---|---|
-| `src/xhunt/api/proxy.js` | 1) `proxyRequest` 增加 `transformJson` 可选参数；2) `unfollow_relation` 路由按版本分流 + 非 VIP 裁剪 transform（含 `vip_cta` 注入）；3) 该路径加入 `NO_CACHE_PATHS` |
-| 服务端配置（env / `config/config.json`） | 新增 `vip_cta` 的 url 与中英文 label 配置项 |
+| `src/xhunt/utils/unfollow-relation-masking.js`（新增独立模块） | 封装版本阈值判断（`> 0.4.5`）、老版本非 VIP 拦截判断、近 3 天记录与 `twitter_users` 裁剪、Nacos `xhunt_config.unfollowVipCta` 读取与缓存 |
+| `src/xhunt/api/proxy.js` | 1) `proxyRequest` 增加异步 `transformJson` 可选钩子；2) `unfollow_relation` 路由委托给 `utils/unfollow-relation-masking.js`；3) 该路径加入 `NO_CACHE_PATHS` |
+| `src/xhunt/constants/nacos_config.json` | 补充 `unfollowVipCta` 默认配置模板 |
 
 不新增依赖、不动其他路由。`applyProDataFiltering` 与本裁剪正交（一个按 Pro 裁字段、一个按 VIP+时间裁条目），保持各自独立。
 
@@ -237,8 +238,8 @@ CTA 按钮文案**不进 i18n 文件**，由后端 `vip_cta.label` 下发（见 
 
 ## 5. 兼容性与发布顺序
 
-1. **先后端、再前端**。后端先上线：老插件（≤ 0.4.1）走老逻辑完全不受影响；新逻辑只对 `x-extension-version > 0.4.1` 的请求生效，而 > 0.4.1 的插件尚未发布，等于后端先就绪、零风险。
-2. 插件发布 0.4.2（或下一个版本）后，新版本自动命中新逻辑。
+1. **先后端、再前端**。后端先上线：老插件（≤ 0.4.5）走老逻辑完全不受影响；新逻辑只对 `x-extension-version > 0.4.5` 的请求生效，而 > 0.4.5 的插件尚未发布，等于后端先就绪、零风险。
+2. 插件发布 0.4.6（或下一个版本）后，新版本自动命中新逻辑。
 3. 后端以版本头为唯一分流依据，无需配置开关；如需紧急回退新逻辑，把阈值常量调成一个极大版本号即可。
 4. 非插件来源（web、脚本）不带版本头 → 永远走老逻辑（VIP-only），不会借新逻辑绕过 VIP 限制拿到 3 天前数据——如果产品上希望 web 端也享受"3 天前可见"，需要另行评估。
 
@@ -259,9 +260,9 @@ CTA 按钮文案**不进 i18n 文件**，由后端 `vip_cta.label` 下发（见 
 后端（本地 `yarn dev` 后）：
 
 1. 不带版本头 + 非 VIP → `{ data: [], isVip: false }`（老逻辑回归）。
-2. `x-extension-version: 0.4.1` + 非 VIP → 同上（边界值走老逻辑）。
-3. `x-extension-version: 0.4.2` + 非 VIP → 返回中无 3 天内记录，`twitter_users` 无被裁条目对应的 id，含 `is_vip: false` 与遮挡计数。
-4. `x-extension-version: 0.4.2` + VIP（`x-tw-id` 在 VIP 名单）→ 全量数据。
+2. `x-extension-version: 0.4.5` + 非 VIP → 同上（边界值走老逻辑）。
+3. `x-extension-version: 0.4.6` + 非 VIP → 返回中无 3 天内记录，`twitter_users` 无被裁条目对应的 id，含 `is_vip: false` 与遮挡计数。
+4. `x-extension-version: 0.4.6` + VIP（`x-tw-id` 在 VIP 名单）→ 全量数据。
 5. 响应头确认无 `Cache-Control: public`（no-cache 生效）。
 
 前端：
