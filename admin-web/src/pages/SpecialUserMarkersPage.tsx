@@ -194,6 +194,7 @@ export function SpecialUserMarkersPage() {
 
   // 监听编辑表单的动态值用于实时预览
   const formText = Form.useWatch("markerText", editForm) || editingItem?.markerText || "疑似诈骗";
+  const formTextEn = Form.useWatch("markerTextEn", editForm) ?? editingItem?.markerTextEn ?? "";
   const formColor = Form.useWatch("colorPreset", editForm) || editingItem?.colorPreset || "danger-red";
   const formVariant = Form.useWatch("variant", editForm) || editingItem?.variant || "subtle";
   const formIcon = Form.useWatch("icon", editForm) || editingItem?.icon || "none";
@@ -311,6 +312,7 @@ export function SpecialUserMarkersPage() {
     setEditingItem(null);
     editForm.resetFields();
     editForm.setFieldsValue({
+      markerTextEn: "",
       colorPreset: "danger-red",
       variant: "subtle",
       icon: "shield-alert",
@@ -330,6 +332,7 @@ export function SpecialUserMarkersPage() {
       username: item.username,
       twitterId: item.twitterId || "",
       markerText: item.markerText,
+      markerTextEn: item.markerTextEn || "",
       colorPreset: item.colorPreset,
       variant: item.variant,
       icon: item.icon,
@@ -401,6 +404,7 @@ export function SpecialUserMarkersPage() {
         username: values.username,
         twitterId: values.twitterId || null,
         markerText: values.markerText,
+        markerTextEn: values.markerTextEn ? String(values.markerTextEn).trim() : null,
         colorPreset: values.colorPreset,
         variant: values.variant,
         icon: values.icon,
@@ -423,6 +427,7 @@ export function SpecialUserMarkersPage() {
       batchMutation.mutate({
         usernames: values.usernames,
         markerText: values.markerText,
+        markerTextEn: values.markerTextEn ? String(values.markerTextEn).trim() : undefined,
         colorPreset: values.colorPreset,
         variant: values.variant,
         icon: values.icon,
@@ -457,16 +462,27 @@ export function SpecialUserMarkersPage() {
     {
       title: "微型徽章与皮肤预览",
       key: "markerPreview",
-      width: 200,
+      width: 240,
       render: (_, record) => (
         <Space direction="vertical" size={2}>
-          <MarkerPreviewBadge
-            text={record.markerText}
-            colorPreset={record.colorPreset}
-            variant={record.variant}
-            icon={record.icon}
-            effect={record.effect}
-          />
+          <Space size={4} wrap>
+            <MarkerPreviewBadge
+              text={record.markerText}
+              colorPreset={record.colorPreset}
+              variant={record.variant}
+              icon={record.icon}
+              effect={record.effect}
+            />
+            {record.markerTextEn && (
+              <MarkerPreviewBadge
+                text={record.markerTextEn}
+                colorPreset={record.colorPreset}
+                variant={record.variant}
+                icon={record.icon}
+                effect={record.effect}
+              />
+            )}
+          </Space>
           <div style={{ fontSize: "11px", color: "#8c8c8c" }}>
             {record.variant} · {record.icon !== "none" ? record.icon : "纯文字"}
             {record.effect === "pulse" ? " · 呼吸动效" : ""}
@@ -746,17 +762,26 @@ export function SpecialUserMarkersPage() {
             </Row>
 
             <Row gutter={16}>
-              <Col span={12}>
+              <Col span={8}>
                 <Form.Item
                   name="markerText"
-                  label="标记文本"
+                  label="标记文本 (中文/默认)"
                   rules={[{ required: true, message: "请输入标记文本" }]}
                   tooltip="显示在名字后的小标记文字，建议 2~6 个汉字"
                 >
-                  <Input placeholder="例如: 疑似诈骗 / 官方合作 / 搬运账号" maxLength={12} showCount />
+                  <Input placeholder="例如: 疑似诈骗 / 官方合作" maxLength={12} showCount />
                 </Form.Item>
               </Col>
-              <Col span={12}>
+              <Col span={8}>
+                <Form.Item
+                  name="markerTextEn"
+                  label="标记文本 (英文，选填)"
+                  tooltip="英文语言环境下优先展示的徽章文字，未填则回退显示默认标记文本"
+                >
+                  <Input placeholder="例如: Suspected Scam" maxLength={32} showCount />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
                 <Form.Item name="colorPreset" label="视觉色系预设" rules={[{ required: true }]}>
                   <Select
                     options={COLOR_PRESET_OPTIONS.map((c) => ({
@@ -823,6 +848,15 @@ export function SpecialUserMarkersPage() {
                       icon={formIcon}
                       effect={formEffect}
                     />
+                    {formTextEn ? (
+                      <MarkerPreviewBadge
+                        text={formTextEn}
+                        colorPreset={formColor}
+                        variant={formVariant}
+                        icon={formIcon}
+                        effect={formEffect}
+                      />
+                    ) : null}
                   </div>
                 </div>
                 <Tag color="cyan">见即所得</Tag>
@@ -910,12 +944,17 @@ export function SpecialUserMarkersPage() {
             </Form.Item>
 
             <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="markerText" label="标记文本" rules={[{ required: true, message: "请输入标记文本" }]}>
+              <Col span={8}>
+                <Form.Item name="markerText" label="标记文本 (中文/默认)" rules={[{ required: true, message: "请输入标记文本" }]}>
                   <Input placeholder="例如: 疑似诈骗" maxLength={12} />
                 </Form.Item>
               </Col>
-              <Col span={12}>
+              <Col span={8}>
+                <Form.Item name="markerTextEn" label="标记文本 (英文，选填)">
+                  <Input placeholder="例如: Suspected Scam" maxLength={32} />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
                 <Form.Item name="colorPreset" label="视觉色系">
                   <Select options={COLOR_PRESET_OPTIONS.map((c) => ({ label: c.label, value: c.value }))} />
                 </Form.Item>

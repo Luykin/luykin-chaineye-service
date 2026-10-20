@@ -18,6 +18,7 @@ async function loadRawPoolFromDb() {
     username: String(r.username || "").trim().toLowerCase(),
     twitterId: r.twitterId ? String(r.twitterId).trim() : null,
     markerText: r.markerText,
+    markerTextEn: r.markerTextEn ? String(r.markerTextEn).trim() : null,
     colorPreset: r.colorPreset || "danger-red",
     variant: r.variant || "subtle",
     icon: r.icon || "none",
@@ -99,6 +100,7 @@ async function getFilteredPayloadForUser(reqTwid) {
     if (isVisible) {
       markers[item.username] = {
         text: item.markerText,
+        textEn: item.markerTextEn || undefined,
         color: item.colorPreset,
         variant: item.variant !== "subtle" ? item.variant : undefined,
         icon: item.icon !== "none" ? item.icon : undefined,

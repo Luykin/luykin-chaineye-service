@@ -26,6 +26,12 @@ module.exports = (sequelize) => {
         field: "marker_text",
         comment: "标记文本，如：疑似诈骗",
       },
+      markerTextEn: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: "marker_text_en",
+        comment: "英文标记文本，如：Suspected Scam",
+      },
       colorPreset: {
         type: DataTypes.STRING(32),
         allowNull: false,

@@ -31,6 +31,7 @@ export interface SpecialMarkerItem {
   username: string;
   twitterId: string | null;
   markerText: string;
+  markerTextEn?: string | null;
   colorPreset: MarkerColorPreset;
   variant: MarkerVariant;
   icon: MarkerIcon;

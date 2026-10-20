@@ -36,6 +36,7 @@ export async function upsertSpecialMarker(payload: Partial<SpecialMarkerItem>) {
 export async function batchImportSpecialMarkers(payload: {
   usernames: string;
   markerText: string;
+  markerTextEn?: string;
   colorPreset?: string;
   variant?: string;
   icon?: string;

@@ -69,6 +69,7 @@ function serializeRow(row) {
     username: row.username,
     twitterId: row.twitterId || null,
     markerText: row.markerText,
+    markerTextEn: row.markerTextEn || null,
     colorPreset: row.colorPreset || "danger-red",
     variant: row.variant || "subtle",
     icon: row.icon || "none",
@@ -106,6 +107,7 @@ router.get(
         where[Op.or] = [
           { username: { [Op.iLike]: `%${escaped}%` } },
           { markerText: { [Op.iLike]: `%${escaped}%` } },
+          { markerTextEn: { [Op.iLike]: `%${escaped}%` } },
           { twitterId: { [Op.iLike]: `%${escaped}%` } },
           { description: { [Op.iLike]: `%${escaped}%` } },
         ];
@@ -178,6 +180,7 @@ router.post(
     try {
       const username = normalizeUsername(req.body.username);
       const markerText = String(req.body.markerText || "").trim();
+      const markerTextEn = req.body.markerTextEn ? String(req.body.markerTextEn).trim() : null;
 
       if (!username) {
         return res.status(400).json({ success: false, error: "目标 Twitter handle 不能为空" });
@@ -208,6 +211,7 @@ router.post(
 
       const fields = {
         markerText,
+        markerTextEn,
         colorPreset,
         variant,
         icon,
@@ -267,6 +271,7 @@ router.post(
     try {
       const rawUsernames = req.body.usernames;
       const markerText = String(req.body.markerText || "").trim();
+      const markerTextEn = req.body.markerTextEn ? String(req.body.markerTextEn).trim() : null;
 
       if (!markerText) {
         return res.status(400).json({ success: false, error: "标记文本不能为空" });
@@ -307,6 +312,7 @@ router.post(
         if (existing) {
           await existing.update({
             markerText,
+            ...(markerTextEn !== null ? { markerTextEn } : {}),
             colorPreset,
             variant,
             icon,
@@ -324,6 +330,7 @@ router.post(
             username,
             twitterId: null,
             markerText,
+            markerTextEn,
             colorPreset,
             variant,
             icon,
