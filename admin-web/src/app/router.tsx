@@ -48,6 +48,7 @@ import { SocialListeningPage } from "@/pages/SocialListeningPage";
 import { DbAdminPage } from "@/features/db-admin/DbAdminPage";
 import { BusinessCollaborationPage } from "@/pages/BusinessCollaborationPage";
 import { HotVotePage } from "@/pages/HotVotePage";
+import { E2eCampaignsPage } from "@/pages/E2eCampaignsPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { TwitterIdHandlerPage } from "@/pages/TwitterIdHandlerPage";
 import { ApiDebuggerPage } from "@/pages/ApiDebuggerPage";
@@ -99,6 +100,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "db-admin": <DbAdminPage />,
   "business-collaboration": <BusinessCollaborationPage />,
   "hot-vote": <HotVotePage />,
+  "e2e-campaigns": <E2eCampaignsPage />,
   "twitter-id-handler": <TwitterIdHandlerPage />,
   "api-debugger": <ApiDebuggerPage />,
 };

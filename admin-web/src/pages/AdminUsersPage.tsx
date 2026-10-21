@@ -60,6 +60,7 @@ const PERMISSION_OPTIONS = [
   { label: "KOL Match配置读取", value: "kol-match-config:read" },
   { label: "KOL Match配置写入", value: "kol-match-config:write" },
   { label: "定向合作活动管理", value: "business_collaboration_manage" },
+  { label: "E2E 活动管理", value: "e2e-campaigns" },
   { label: "Nacos配置中心", value: "nacos-admin" },
   { label: "管理员列表", value: "admin-users" },
   { label: "操作记录", value: "audit-logs:read" },

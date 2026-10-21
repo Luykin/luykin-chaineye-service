@@ -42,6 +42,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/nacos-campaigns", icon: <LegacySidebarIcon name="target" />, label: "活动配置", permission: "nacos_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/hot-vote", icon: <LegacySidebarIcon name="star" />, label: "热点投票", permission: "hot-vote", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/business-collaboration", icon: <LegacySidebarIcon name="users" />, label: "定向合作活动", permission: "business_collaboration_manage", group: "main", sidebarGroup: "echohunt", implemented: true, section: "primary" },
+  { key: "/e2e-campaigns", icon: <LegacySidebarIcon name="target" />, label: "E2E活动管理", permission: "e2e-campaigns", group: "main", sidebarGroup: "echohunt", implemented: true, section: "primary" },
   { key: "/nacos-tags", icon: <LegacySidebarIcon name="tag" />, label: "标签配置", permission: "nacos-tags", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/special-markers", icon: <LegacySidebarIcon name="shield" />, label: "特殊标记配置", permission: "special-markers", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-i18n", icon: <LegacySidebarIcon name="file-text" />, label: "翻译配置", permission: "nacos-i18n", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
