@@ -62,6 +62,10 @@ const EchohuntFeatureAccessModel = require("../../xhunt/models/EchohuntFeatureAc
 const XHuntHotVoteTopicModel = require("../../xhunt/models/XHuntHotVoteTopic");
 const XHuntHotVoteRecordModel = require("../../xhunt/models/XHuntHotVoteRecord");
 const XHuntHotVoteCommentModel = require("../../xhunt/models/XHuntHotVoteComment");
+const E2eListModel = require("../../echohunt/e2e/models/E2eList");
+const E2eRecordModel = require("../../echohunt/e2e/models/E2eRecord");
+const E2eLogModel = require("../../echohunt/e2e/models/E2eLog");
+const E2eTweetModel = require("../../echohunt/e2e/models/E2eTweet");
 
 function initModels(pgInstance) {
   return {
@@ -134,6 +138,12 @@ function initModels(pgInstance) {
     XHuntHotVoteTopic: XHuntHotVoteTopicModel(pgInstance),
     XHuntHotVoteRecord: XHuntHotVoteRecordModel(pgInstance),
     XHuntHotVoteComment: XHuntHotVoteCommentModel(pgInstance),
+
+    // EchoHunt E2E 数据表
+    E2eList: E2eListModel(pgInstance),
+    E2eRecord: E2eRecordModel(pgInstance),
+    E2eLog: E2eLogModel(pgInstance),
+    E2eTweet: E2eTweetModel(pgInstance),
   };
 }
 

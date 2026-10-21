@@ -35,6 +35,7 @@ const {
   createSocialListeningScheduler,
 } = require("./xhunt/social-listening/services/scheduler");
 const { createSocialListeningAiWorker } = require("./xhunt/social-listening/services/ai-backfill-scheduler");
+const { startE2eScheduler } = require("./echohunt/e2e/jobs/e2eScheduler");
 const { recordGenericStat } = require("./xhunt/services/generic-stats-service");
 const emailService = require("./services/emailService");
 const { cleanupPm2Logs } = require("./services/singleton/pm2-log-cleaner");
@@ -141,6 +142,7 @@ const redisClient = redis.createClient({
     const socialListeningSchedulerStatus = socialListeningScheduler.start();
     const socialListeningAiWorker = createSocialListeningAiWorker({ redisClient });
     const socialListeningAiWorkerStatus = socialListeningAiWorker.start();
+    const e2eSchedulerStatus = startE2eScheduler();
 
     // 启动备份服务
     await pgBackupService.start();
@@ -200,6 +202,11 @@ const redisClient = redis.createClient({
       socialListeningAiWorkerStatus.enabled
         ? "✅ Social Listening AI Worker 已加载（独立回填，可单独暂停/恢复）"
         : "⏸️ Social Listening AI Worker 已禁用"
+    );
+    console.log(
+      e2eSchedulerStatus.enabled
+        ? "✅ EchoHunt E2E 定时抓取与算分调度器已加载（每5分钟抓取互动 / 每10分钟算分流转）"
+        : "⏸️ EchoHunt E2E 定时调度器已禁用"
     );
 
   } catch (err) {

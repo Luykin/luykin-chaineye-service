@@ -83,6 +83,7 @@ const {
 const echohuntKolMatchRoutes = require("./echohunt-kol-match");
 const businessCollaborationRoutes = require("./business-collaboration");
 const socialListeningPublicRoutes = require("../social-listening/api/public");
+const echohuntE2eRoutes = require("../../echohunt/e2e/api/router");
 const leaderboardColumnContract = require("../../../shared/xhunt/leaderboard-column-contract.json");
 const router = express.Router();
 
@@ -102,6 +103,7 @@ function normalizeHiddenColumns(value) {
 router.use("/kol-match", echohuntKolMatchRoutes);
 router.use("/business-collaboration", businessCollaborationRoutes);
 router.use("/social-listening", socialListeningPublicRoutes);
+router.use("/e2e", echohuntE2eRoutes);
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
 const ECHOHUNT_OAUTH_STATE_TTL_SECONDS = 8 * 60;

@@ -16,6 +16,7 @@ const xHuntPrivateMessageRoutes = require("../../xhunt/api/private-messages");
 const xHuntCampaignRoutes = require("../../xhunt/api/campaign");
 const xHuntWebsiteCampaignRoutes = require("../../xhunt/api/website-campaigns");
 const xHuntEchohuntRoutes = require("../../xhunt/api/echohunt");
+const echohuntE2eRoutes = require("../../echohunt/e2e/api/router");
 const xHuntHotVoteRoutes = require("../../xhunt/api/hot-vote");
 const xHuntUserEntryRoutes = require("../../xhunt/api/user-entry");
 const xHuntSSERoutes = require("../../xhunt/api/sse");
@@ -86,6 +87,7 @@ function registerXhuntRoutes(app) {
   app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
   app.use("/api/xhunt/website/campaigns", xHuntWebsiteCampaignRoutes);
   app.use("/api/xhunt/echohunt", xHuntEchohuntRoutes);
+  app.use("/api/echohunt/e2e", echohuntE2eRoutes);
 
   // 热点投票接口
   app.use("/api/xhunt/hot-vote", securityMiddleware, xHuntHotVoteRoutes);

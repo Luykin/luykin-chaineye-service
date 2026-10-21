@@ -38,23 +38,69 @@
      - `POST /pro/api/e2e/activate`：校验 Base 链 USDC 到账情况并激活任务。
 
 ### 2. 本次迁移核心目标与变化（结合需求文档）
-- **端侧迁移**：插件后续下线 E2E 参与和投放功能，全部迁移至 EchoHunt 网站（`XHunt.website/apps/echohunt`），左侧导航新增 **「互动任务」** 一级入口。
-- **后端收拢**：将 E2E 后端能力搬迁至当前 Node.js 仓库（`luykin-chaineye-service`），不要求兼容旧插件接口格式，**底层继续复用原有数据库**。
-- **新增业务能力**：
-  1. **项目方投放权限控制 + 手填推文链接**：不再从浏览器当前 URL 自动取推文，改为表单输入推文链接并解析预览；仅获运营授权的项目方账号可发布任务。
-  2. **手动提交评论/引用链接**：参与者报名后，可在任务详情页手动提交自己对该推文的「评论链接」或「引用（Quote）链接」进行兜底补充核验（防爬虫漏抓）。
-  3. **关注发布者 5 倍加权**：当前版本中，已关注发布者的用户按 **5 倍权重** 计分；用户端突出说明关注对排名的重要性，不展示具体倍数。
-  4. **计分维度调整**：引用、评论、点赞参与评分，**普通转推（Retweet）不再计分**；互动时间、内容质量（AI/真人类识别）、互动深度与影响力加成沿用现有机制。
+本次迁移采取 **「两阶段演进 + 新旧并行过渡」** 策略：
+
+- **第一阶段（Phase 1，当前实施目标）：1:1 搬迁至当前仓库 & EchoHunt，支持与原脚本并行运行**
+  1. **端侧迁移**：将原插件端参与（`EngageToEarn.tsx`）和投放（`ArticleBoostPanel.tsx`）流程完整迁移至 EchoHunt 网站（`XHunt.website/apps/echohunt`），投放端仅增加“手动填写推文链接”一步，其余流程与算分逻辑 **1:1 沿用原有逻辑**。
+  2. **后端目录结构**：在当前 Node.js 仓库新建与 `src/xhunt/` 同级的 **`src/echohunt/e2e/`** 目录，将 E2E 模型、API 路由、互动抓取、算分服务与历史数据导入脚本统一收敛在该目录下。
+  3. **数据库完全隔离（在 `luykindatabase` 新建表）**：
+     - **不在 `luykindatabase2` 新建表，也不改动 `luykindatabase2` 原有表**；
+     - 在当前主库 **`luykindatabase`** 中新建 `EchohuntE2eLists`、`EchohuntE2eRecords`、`EchohuntE2eLogs`、`EchohuntE2eTweets` 四张表；
+     - 初始化时将 `luykindatabase2` 中的原有历史数据一次性/幂等导入到 `luykindatabase`；
+     - 后续完全在 `luykindatabase` 上运行独立的一套逻辑，与旧库/旧脚本 **100% 物理隔离、互不干扰**。
+  4. **外部支付订单与激活接口（待接入）**：
+     - 当前仓库不生成或保管充值钱包私钥，也不直接查询链上余额；`address` 由后续外部支付接口返回，继续作为活动与报名关联的唯一标识；
+     - `create` / `activate` 仅保留外部支付订单与到账校验的 TODO 边界，未接入前返回 HTTP 501 和 `E2E_PAYMENT_INTEGRATION_PENDING`；
+     - 外部支付接口确认到账后，后端仅允许 `pending -> active`，并更新 `start_time` / `end_time`；到期发奖与 `complete_tx` 回填由后续专人对接。
+
+- **第二阶段（Phase 2，后续迭代）：增量业务规则升级**
+  1. **项目方投放权限白名单控制**。
+  2. **参与者手动提交评论/引用链接兜底核验**。
+  3. **关注发布者 5 倍加权 & 去掉普通转推（Retweet）计分**。
+
+---
+
+## 一（补充）、新旧系统完全隔离与后端目录架构（已确定）
+
+### 1. 后端模块目录结构（`src/echohunt/e2e/`）
+在 `src/` 下新建与 `src/xhunt/` 同级的 `src/echohunt/` 目录，所有 E2E 逻辑收敛于 `src/echohunt/e2e/`：
+
+```text
+src/echohunt/
+└── e2e/
+    ├── models/                  # luykindatabase 下的 E2E Sequelize 模型
+    │   ├── E2eList.js           # 对应 public.EchohuntE2eLists
+    │   ├── E2eRecord.js         # 对应 public.EchohuntE2eRecords
+    │   ├── E2eLog.js            # 对应 public.EchohuntE2eLogs
+    │   └── E2eTweet.js          # 对应 public.EchohuntE2eTweets
+    ├── api/
+    │   └── router.js            # E2E 路由接口（列表、报名、推文审核、创建、激活等）
+    ├── services/
+    │   ├── e2eService.js        # 核心业务 CRUD 与排行榜组装
+    │   ├── e2eExamenService.js  # 推文拉取、合规审核与中英 AI 摘要生成
+    │   ├── e2eEngageService.js  # 活跃任务互动推文（评论/引用/转推）抓取
+    │   ├── e2eScoreService.js   # 1:1 算分与排行榜更新服务
+    │   └── e2ePaymentService.js # 费用计算与外部支付订单/到账校验 TODO 边界
+    ├── jobs/
+    │   └── e2eScheduler.js      # 定时互动抓取与定时算分任务
+    └── scripts/
+        └── importFromDb2.js     # 从 luykindatabase2 只读导入历史 E2E 数据至 luykindatabase
+```
+
+### 2. 数据库物理隔离与历史数据迁移方案
+- **不动 `luykindatabase2`**：`luykindatabase2` 仅作为首次历史数据迁移的**只读数据源**，不在其中建表或改表。
+- **在 `luykindatabase` 新建表**：通过 `migrations-pg/` 在主库 `luykindatabase` 创建 `EchohuntE2eLists`、`EchohuntE2eRecords`、`EchohuntE2eLogs`、`EchohuntE2eTweets` 四张表（并补充用于存抓取互动数据的字段或辅助表）。
+- **彻底并行无冲突**：旧脚本即使一直运行，操作的也是 `luykindatabase2`；我们新系统操作的是 `luykindatabase`，两边天然物理隔离。
 
 ---
 
 ## 二、 后端改造分析（`luykin-chaineye-service` & 数据库交互）
 
-### 1. 数据库层对接与表结构扩展
-当前仓库默认主库为 `luykindatabase`（`PG_DATABASE=luykindatabase`），而原 E2E 业务表位于同一 PostgreSQL 实例下的 **`luykindatabase2`** 数据库。后端需新增指向 `luykindatabase2` 的 Sequelize 连接实例（如 `pgDb2Instance`），直接对接原表并按需扩展字段：
+### 1. 在 `luykindatabase` 新建的 4 张 E2E 核心表结构（1:1 对齐原表）
+在主库 `luykindatabase`（`public` schema）中通过 Sequelize 迁移创建以下 4 张表，字段 1:1 保持与 `luykindatabase2` 原表一致，便于无缝导入历史数据：
 
-- **`luykindatabase2` 中已定位的 4 张原 E2E 核心表（`public` schema）**：
-  1. **`public.e2e_list`（E2E 活动主表）**：
+- **4 张核心表结构定义**：
+  1. **`public.EchohuntE2eLists`（E2E 活动主表）**：
      - `tweet_id` (`varchar`, NOT NULL)：目标推文 ID
      - `user_id` (`varchar`, NOT NULL)：发起人用户 ID
      - `rewards` (`numeric`, NULL)：奖池金额（USDC）
@@ -71,20 +117,20 @@
      - `fees` (`numeric`, NULL)：平台服务费金额
      - `lang` (`varchar`, NULL)：互动语言要求（`all` / `zh` / `en`）
      - `retro` (`boolean`, NULL)：是否支持报名前历史互动计分
-  2. **`public.e2e`（E2E 用户报名与排行榜结算表）**：
+  2. **`public.EchohuntE2eRecords`（E2E 用户报名与排行榜结算表）**：
      - `tweet_id` (`varchar`, NOT NULL)：目标推文 ID
      - `user_id` (`varchar`, NOT NULL)：参与用户 Twitter ID
      - `fan_rank` (`bigint`, NULL)：用户 XHunt 粉丝/影响力排名（对应前端 `kol_rank`）
      - `username` / `name` / `profile_image_url` (`varchar`, NULL)：参与用户 Twitter 账号展示信息
      - `point` (`numeric`, NULL)：当前互动综合得分
      - `rewards` (`numeric`, NULL)：结算分配的奖励金额
-     - `address` (`varchar`, NOT NULL)：关联的活动钱包地址（`e2e_list.address`）
+     - `address` (`varchar`, NOT NULL)：关联的活动钱包地址（`EchohuntE2eLists.address`）
      - `user_address` (`varchar`, NULL)：用户报名绑定的领奖 EVM 钱包地址
      - `create_time` / `update_time` (`timestamptz`, NOT NULL, default `now()`)：报名与更新时间
      - `explaination` (`text`, NULL)：AI 评分说明（注：原表字段拼写为 `explaination`）
-  3. **`public.e2e_log`（E2E 算分历史日志表）**：
+  3. **`public.EchohuntE2eLogs`（E2E 算分历史日志表）**：
      - `tweet_id` (`varchar`, NOT NULL)、`user_id` (`varchar`, NOT NULL)、`calc_time` (`timestamptz`, NOT NULL, default `now()`)、`username` (`varchar`)、`point` (`numeric`)、`explanation` (`text`)
-  4. **`public.e2e_tweet`（E2E 推文/长文 AI 审核与摘要缓存表，对应 `/pro/api/e2e_tweet_examine`）**：
+  4. **`public.EchohuntE2eTweets`（E2E 推文/长文 AI 审核与摘要缓存表，对应 `/pro/api/e2e_tweet_examine`）**：
      - `tweet_id` (`varchar`, NOT NULL)：推文 ID
      - `text` / `html` (`text`, NULL)：推文纯文本与 Article HTML 内容
      - `summary_cn` / `summary_en` (`text`, NULL)：中英文摘要
@@ -98,7 +144,7 @@
   - `dev.twitter_user_follow` / `dev.project_follow`（配合实时 X API 校验）：用于判断参与者是否关注了推文发布者。
 
 - **需新增/扩展的字段与表**：
-  1. **`public.e2e` 报名/互动记录表扩展**：
+  1. **`public.EchohuntE2eRecords` 报名/互动记录表扩展**：
      - `is_following_author` (`BOOLEAN`, 默认 `false`) + `follow_verified_at` (`TIMESTAMPTZ`)：记录用户是否已关注目标推文作者（触发 5x 权重）。
      - `submitted_reply_tweet_id` / `submitted_reply_url` / `reply_verify_status`：用户手动提交的评论推文 ID、链接及核验状态（如 `verified` / `pending` / `invalid`）。
      - `submitted_quote_tweet_id` / `submitted_quote_url` / `quote_verify_status`：用户手动提交的引用推文 ID、链接及核验状态。
@@ -122,8 +168,8 @@
 | **5. 关注发布者校验（新增）** | `POST /api/xhunt/echohunt/e2e/tasks/:tweetId/verify-follow` | 复用 `twitter-echohunt.js` 的 `verifyEchohuntTwitterFollowTask`（通过 X OAuth2 `users/:id?user.fields=connection_status` 实时查询 `following`，或查 `dev.twitter_user_follow`），核验通过后标记 `is_following_author = true`，触发算分 5x 加成。 |
 | **6. 手动提交互动链接（新增）** | `POST /api/xhunt/echohunt/e2e/tasks/:tweetId/submissions` | 接收 `{ type: 'reply' \| 'quote', tweetUrl }`：<br>1. 复用 `campaignTweetSubmissionService.js` 的 `parseTweetUrl` 提取互动 `subTweetId`；<br>2. 通过爬虫/X API 拉取该推文详情，校验：① 作者必须为当前登录用户的 `twitterId`；② 若为 `reply`，其 `conversation_id`（或 `in_reply_to_status_id`）必须指向目标任务 `tweetId`；③ 若为 `quote`，其 `quote_id` 必须指向目标任务 `tweetId`；<br>3. 将该互动推文写入 `dev.tweet`，并将 `subTweetId` 合并追加进目标推文 `dev.tweet.engage_ids` 的 `replied_ids` 或 `quoted_ids` 中，同时更新用户提交状态。 |
 | **7. 投放：推文解析与校验** | `POST /api/xhunt/echohunt/e2e/publish/examine` | 接收 `{ tweetUrl }`（替代原插件只传 `tweet_id`）：<br>1. 解析出 `tweetId`；<br>2. 校验当前用户是否有 `e2e-publish` 权限；<br>3. 查询/抓取推文详情（作者名称、`@handle`、头像、正文、发布时间），校验推文是否有效、是否已有进行中的同名任务，返回推文预览信息供前端核对。 |
-| **8. 投放：创建订单** | `POST /api/xhunt/echohunt/e2e/publish/create` | 接收 `{ tweetId, rewards, days, target, winners, type, lang, retro }`：<br>生成订单与专属收款地址 `address`、计算 `depositRewards`（奖池 + 服务费），状态置为 `pending`。 |
-| **9. 投放：支付校验与激活** | `POST /api/xhunt/echohunt/e2e/publish/activate` | 接收 `{ address }`：使用 `ethers.js`（当前仓库已内置 v5）查询 Base 链（ChainId `8453`）USDC 合约在该 `address` 的余额是否 `>= depositRewards`，达标则将状态置为 `active` 并计算 `start_time` / `end_time`。 |
+| **8. 投放：创建订单** | `POST /api/xhunt/echohunt/e2e/publish/create` | 接收 `{ tweetId, rewards, days, target, winners, type, lang, retro }`：<br>计算 `depositRewards`（奖池 + 服务费）并请求外部支付接口创建订单、获取收款地址 `address`，随后以 `pending` 写入活动；接口未接入前返回 501。 |
+| **9. 投放：支付校验与激活** | `POST /api/xhunt/echohunt/e2e/publish/activate` | 接收 `{ address }`：请求外部支付接口确认到账；确认后仅允许 `pending -> active` 并计算 `start_time` / `end_time`，接口未接入前返回 501。 |
 | **10. 内部活跃任务接口** | `GET /pro/api/e2e_active`（或内部路由） | 返回所有 `status = 'active'` 任务的 `tweet_id[]`，供互动抓取任务消费。 |
 
 ### 4. 爬虫任务与算分引擎迁移分析
@@ -247,11 +293,12 @@
 
 ---
 
-## 四、 待确认事项（实施前需对齐的细节）
+## 四、 实施边界小结
 
-1. **充值钱包地址与私钥生成机制确认**：
-   - 已确认原 E2E 的 4 张核心表（`public.e2e`、`public.e2e_list`、`public.e2e_log`、`public.e2e_tweet`）位于服务器 `luykindatabase2` 数据库中；需进一步确认 `/pro/api/e2e/create` 生成 `e2e_list.address` 收款地址时，私钥是保存在其他表（如 wallet 相关表）中，还是通过固定助记词/HD 派生生成？
-2. **「关注发布者」的核验方式**：
-   - 采用用户点击「关注 ↗」后调用 X OAuth2 API 实时验证（复用 `verifyEchohuntTwitterFollowTask`），还是结合数据库 `dev.twitter_user_follow` 自动判断 + 手动触发 X API 校验？
-3. **「点赞（Like）」的计分方式**：
-   - 由于 X 早已隐藏推文点赞列表，`twitter_task_tweet_engage.rs` 仅抓取了 `replies` 和 `quotes`。这里的“点赞参与评分”是指用户的评论/引用推文自身获得的点赞数（likes）参与内容互动深度评分，还是有其他方式统计对主推文的点赞？
+1. **数据库与隔离策略（已敲定）**：在 `luykindatabase` 新建 `EchohuntE2eLists`、`EchohuntE2eRecords`、`EchohuntE2eLogs`、`EchohuntE2eTweets` 四张表，不动 `luykindatabase2`；提供脚本将 `luykindatabase2` 的历史数据导入到 `luykindatabase`，实现新旧两套 100% 物理隔离。
+2. **后端代码位置（已敲定）**：统一实现在 `src/echohunt/e2e/`（`src/echohunt` 与 `src/xhunt` 同级）。
+3. **外部支付、激活与发奖分工（已敲定）**：
+   - **第一步（推文审核 `examine`）**：根据推文链接/ID 拉取真实推文，必须完成 AI 合规审核并明确通过后才允许继续创建；抓取或 AI 故障均失败关闭。
+   - **第二步（外部支付订单 `create`）**：计算 `fees` 与 `deposit_rewards`，通过外部支付接口获取收款地址 `address` 后以 `status = 'pending'` 写入 `EchohuntE2eLists`；当前仓库不生成钱包或保管私钥。
+   - **第三步（外部到账校验 `activate`）**：通过外部支付接口确认到账后，仅允许 `pending -> active` 并刷新起止时间；外部接口未接入前，创建和激活均返回 501。
+   - **第四步（到期发奖结算）**：后续由专人对接外部批量打款并回填 `complete_tx`，当前仓库不实现本地私钥签名发奖。
