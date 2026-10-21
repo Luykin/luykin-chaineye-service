@@ -1,21 +1,51 @@
 import { apiRequest } from "@/services/apiClient";
-import type { ApiSuccess, DbAdminRowsData, DbAdminTableMeta, DbAdminWebAuthnOptionsResponse, DbAdminWebAuthnStatus } from "./types";
+import type {
+  ApiSuccess,
+  DbAdminDatabasesData,
+  DbAdminRowsData,
+  DbAdminTableMeta,
+  DbAdminWebAuthnOptionsResponse,
+  DbAdminWebAuthnStatus,
+} from "./types";
 
 const BASE_PATH = "/admin/db-admin";
 
-export function fetchDbAdminTables() {
-  return apiRequest<ApiSuccess<DbAdminTableMeta[]>>(`${BASE_PATH}/tables`);
+export function fetchDbAdminDatabases() {
+  return apiRequest<ApiSuccess<DbAdminDatabasesData>>(`${BASE_PATH}/databases`);
 }
 
-export function fetchDbAdminSchema(tableKey: string) {
-  return apiRequest<ApiSuccess<DbAdminTableMeta>>(`${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/schema`);
+export function saveDbAdminCredentials(dbKey: string, payload: { username: string; password: string }) {
+  return apiRequest<ApiSuccess<{ database: string; username: string; connected: boolean }>>(
+    `${BASE_PATH}/databases/${encodeURIComponent(dbKey)}/credentials`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+}
+
+export function fetchDbAdminTables(db?: string) {
+  const searchParams = new URLSearchParams();
+  if (db) searchParams.set("db", db);
+  const query = searchParams.toString();
+  return apiRequest<ApiSuccess<DbAdminTableMeta[]>>(`${BASE_PATH}/tables${query ? `?${query}` : ""}`);
+}
+
+export function fetchDbAdminSchema(tableKey: string, db?: string) {
+  const searchParams = new URLSearchParams();
+  if (db) searchParams.set("db", db);
+  const query = searchParams.toString();
+  return apiRequest<ApiSuccess<DbAdminTableMeta>>(
+    `${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/schema${query ? `?${query}` : ""}`
+  );
 }
 
 export function fetchDbAdminRows(
   tableKey: string,
-  params: { page: number; pageSize: number; q?: string; sortBy?: string; sortOrder?: "ASC" | "DESC" }
+  params: { db?: string; page: number; pageSize: number; q?: string; sortBy?: string; sortOrder?: "ASC" | "DESC" }
 ) {
   const searchParams = new URLSearchParams();
+  if (params.db) searchParams.set("db", params.db);
   searchParams.set("page", String(params.page));
   searchParams.set("pageSize", String(params.pageSize));
   if (params.q) searchParams.set("q", params.q);
@@ -26,16 +56,25 @@ export function fetchDbAdminRows(
   );
 }
 
-export function createDbAdminRow(tableKey: string, values: Record<string, unknown>) {
-  return apiRequest<ApiSuccess<DbAdminRowsData>>(`${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/rows`, {
-    method: "POST",
-    body: values,
-  });
+export function createDbAdminRow(tableKey: string, values: Record<string, unknown>, db?: string) {
+  const searchParams = new URLSearchParams();
+  if (db) searchParams.set("db", db);
+  const query = searchParams.toString();
+  return apiRequest<ApiSuccess<DbAdminRowsData>>(
+    `${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/rows${query ? `?${query}` : ""}`,
+    {
+      method: "POST",
+      body: values,
+    }
+  );
 }
 
-export function updateDbAdminRow(tableKey: string, id: string | number, values: Record<string, unknown>) {
+export function updateDbAdminRow(tableKey: string, id: string | number, values: Record<string, unknown>, db?: string) {
+  const searchParams = new URLSearchParams();
+  if (db) searchParams.set("db", db);
+  const query = searchParams.toString();
   return apiRequest<ApiSuccess<DbAdminRowsData>>(
-    `${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/rows/${encodeURIComponent(String(id))}`,
+    `${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/rows/${encodeURIComponent(String(id))}${query ? `?${query}` : ""}`,
     {
       method: "PATCH",
       body: values,
@@ -43,9 +82,12 @@ export function updateDbAdminRow(tableKey: string, id: string | number, values: 
   );
 }
 
-export function deleteDbAdminRow(tableKey: string, id: string | number) {
+export function deleteDbAdminRow(tableKey: string, id: string | number, db?: string) {
+  const searchParams = new URLSearchParams();
+  if (db) searchParams.set("db", db);
+  const query = searchParams.toString();
   return apiRequest<ApiSuccess<DbAdminRowsData>>(
-    `${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/rows/${encodeURIComponent(String(id))}`,
+    `${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/rows/${encodeURIComponent(String(id))}${query ? `?${query}` : ""}`,
     {
       method: "DELETE",
     }

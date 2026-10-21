@@ -78,9 +78,38 @@ router.post("/webauthn/verify", entryGuard, express.json(), async (req, res) => 
 router.get("/tables", readGuard, async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
-    const data = await service.listTables();
+    const data = await service.listTables(req.query?.db);
     return res.json({ success: true, data });
   } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.get("/databases", readGuard, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await service.listDatabases();
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.post("/databases/:dbKey/credentials", readGuard, express.json(), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await service.saveDatabaseCredentials(req.params.dbKey, req.body || {});
+    await createDbAdminAudit(req, "db-admin-save-credentials", true, {
+      database: req.params.dbKey,
+      username: data.username,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await createDbAdminAudit(req, "db-admin-save-credentials", false, {
+      database: req.params.dbKey,
+      username: req.body?.username,
+      error: error.message,
+    });
     return sendError(res, error);
   }
 });
@@ -88,7 +117,7 @@ router.get("/tables", readGuard, async (req, res) => {
 router.get("/tables/:key/schema", readGuard, async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
-    const data = await service.getTableSchema(req.params.key);
+    const data = await service.getTableSchema(req.params.key, req.query?.db);
     return res.json({ success: true, data });
   } catch (error) {
     return sendError(res, error);
@@ -98,7 +127,7 @@ router.get("/tables/:key/schema", readGuard, async (req, res) => {
 router.get("/tables/:key/rows", readGuard, async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
-    const data = await service.listRows(req.params.key, req.query || {});
+    const data = await service.listRows(req.params.key, req.query || {}, req.query?.db);
     return res.json({ success: true, data });
   } catch (error) {
     return sendError(res, error);
@@ -107,8 +136,10 @@ router.get("/tables/:key/rows", readGuard, async (req, res) => {
 
 router.post("/tables/:key/rows", writeGuard, express.json({ limit: "1mb" }), async (req, res) => {
   try {
-    const data = await service.createRow(req.params.key, req.body || {});
+    const dbKey = req.query?.db;
+    const data = await service.createRow(req.params.key, req.body || {}, dbKey);
     await createDbAdminAudit(req, "db-admin-create", true, {
+      database: service.resolveDbKey(dbKey),
       tableKey: req.params.key,
       primaryKey: data.row?.[data.table.primaryKey],
       changedColumns: data.changedColumns,
@@ -117,6 +148,7 @@ router.post("/tables/:key/rows", writeGuard, express.json({ limit: "1mb" }), asy
     return res.json({ success: true, data });
   } catch (error) {
     await createDbAdminAudit(req, "db-admin-create", false, {
+      database: req.query?.db || "luykindatabase",
       tableKey: req.params.key,
       error: error.message,
       inputColumns: Object.keys(req.body || {}),
@@ -127,8 +159,10 @@ router.post("/tables/:key/rows", writeGuard, express.json({ limit: "1mb" }), asy
 
 router.patch("/tables/:key/rows/:id", writeGuard, express.json({ limit: "1mb" }), async (req, res) => {
   try {
-    const data = await service.updateRow(req.params.key, req.params.id, req.body || {});
+    const dbKey = req.query?.db;
+    const data = await service.updateRow(req.params.key, req.params.id, req.body || {}, dbKey);
     await createDbAdminAudit(req, "db-admin-update", true, {
+      database: service.resolveDbKey(dbKey),
       tableKey: req.params.key,
       primaryKey: req.params.id,
       changedColumns: data.changedColumns,
@@ -138,6 +172,7 @@ router.patch("/tables/:key/rows/:id", writeGuard, express.json({ limit: "1mb" })
     return res.json({ success: true, data });
   } catch (error) {
     await createDbAdminAudit(req, "db-admin-update", false, {
+      database: req.query?.db || "luykindatabase",
       tableKey: req.params.key,
       primaryKey: req.params.id,
       error: error.message,
@@ -149,8 +184,10 @@ router.patch("/tables/:key/rows/:id", writeGuard, express.json({ limit: "1mb" })
 
 router.delete("/tables/:key/rows/:id", writeGuard, async (req, res) => {
   try {
-    const data = await service.deleteRow(req.params.key, req.params.id);
+    const dbKey = req.query?.db;
+    const data = await service.deleteRow(req.params.key, req.params.id, dbKey);
     await createDbAdminAudit(req, "db-admin-delete", true, {
+      database: service.resolveDbKey(dbKey),
       tableKey: req.params.key,
       primaryKey: req.params.id,
       before: data.row,
@@ -158,6 +195,7 @@ router.delete("/tables/:key/rows/:id", writeGuard, async (req, res) => {
     return res.json({ success: true, data });
   } catch (error) {
     await createDbAdminAudit(req, "db-admin-delete", false, {
+      database: req.query?.db || "luykindatabase",
       tableKey: req.params.key,
       primaryKey: req.params.id,
       error: error.message,

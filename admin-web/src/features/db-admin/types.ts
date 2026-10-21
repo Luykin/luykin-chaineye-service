@@ -29,6 +29,21 @@ export interface DbAdminTableMeta {
   columns?: DbAdminColumn[];
 }
 
+export interface DbAdminDatabaseOption {
+  key: string;
+  name: string;
+  label: string;
+  description?: string;
+  configurableCredentials?: boolean;
+  username?: string;
+  hasPasswordConfigured?: boolean;
+}
+
+export interface DbAdminDatabasesData {
+  defaultDatabase: string;
+  databases: DbAdminDatabaseOption[];
+}
+
 export type DbAdminRow = Record<string, unknown>;
 
 export interface DbAdminPagination {

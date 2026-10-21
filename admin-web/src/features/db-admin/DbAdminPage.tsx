@@ -9,6 +9,7 @@ import {
   Input,
   InputNumber,
   List,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -20,22 +21,24 @@ import {
   message,
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { NoPermissionPage } from "@/pages/NoPermissionPage";
 import { useAuth } from "@/app/auth";
 import {
   createDbAdminRow,
   deleteDbAdminRow,
+  fetchDbAdminDatabases,
   fetchDbAdminRows,
   fetchDbAdminSchema,
   fetchDbAdminTables,
   fetchDbAdminWebAuthnOptions,
   fetchDbAdminWebAuthnStatus,
+  saveDbAdminCredentials,
   updateDbAdminRow,
   verifyDbAdminWebAuthn,
 } from "./api";
-import type { DbAdminColumn, DbAdminRow, DbAdminTableMeta } from "./types";
+import type { DbAdminColumn, DbAdminDatabaseOption, DbAdminRow, DbAdminTableMeta } from "./types";
 import "./db-admin.css";
 
 const { Text, Title } = Typography;
@@ -225,6 +228,8 @@ function DbAdminEditorDrawer({ open, mode, table, row, saving, onClose, onSubmit
 }
 
 const TABLE_GROUPS = [
+  { key: "e2e", label: "E2E 互动任务", patterns: [/^e2e/i] },
+  { key: "twitter-dev", label: "Twitter 底层库 (dev)", patterns: [/^dev\./i] },
   { key: "xhunt-core", label: "XHunt 核心", patterns: [/xhunt.*user/i, /^xaccounts?$/i, /review/i, /note/i, /message/i, /point/i] },
   { key: "campaign", label: "活动 / 运营", patterns: [/campaign/i, /registration/i, /mantle/i, /vip/i, /tag/i, /banner/i] },
   { key: "auth", label: "认证中心", patterns: [/authcenter/i, /auth_center/i, /credential/i, /identity/i, /session/i, /client/i] },
@@ -270,6 +275,7 @@ async function browserSupportsWebAuthn() {
 export function DbAdminPage() {
   const { user, hasPermission } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
+  const [selectedDb, setSelectedDb] = useState<string>("luykindatabase");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -284,6 +290,8 @@ export function DbAdminPage() {
   const [reauthVerified, setReauthVerified] = useState(false);
   const [reauthing, setReauthing] = useState(false);
   const [reauthError, setReauthError] = useState<string | null>(null);
+  const [credModalOpen, setCredModalOpen] = useState(false);
+  const [credForm] = Form.useForm<{ username: string; password: string }>();
 
   const canRead = user?.role === "super" && hasPermission("db-admin:read");
   const canWrite = user?.role === "super" && hasPermission("db-admin:write");
@@ -365,9 +373,42 @@ export function DbAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canRead]);
 
+  const databasesQuery = useQuery({
+    queryKey: ["db-admin", "databases"],
+    queryFn: fetchDbAdminDatabases,
+    enabled: canRead && reauthVerified,
+  });
+  const databaseOptions: DbAdminDatabaseOption[] = databasesQuery.data?.data?.databases || [
+    { key: "luykindatabase", name: "luykindatabase", label: "luykindatabase（主业务库）" },
+    { key: "luykindatabase2", name: "luykindatabase2", label: "luykindatabase2（数据 / E2E 库）", configurableCredentials: true, username: "luykin2" },
+  ];
+  const currentDbOption = databaseOptions.find((item) => item.key === selectedDb) || databaseOptions[0];
+
+  const saveCredsMutation = useMutation({
+    mutationFn: (values: { username: string; password: string }) => saveDbAdminCredentials(selectedDb, values),
+    onSuccess: () => {
+      messageApi.success("数据库账号密码验证通过并已保存");
+      setCredModalOpen(false);
+      credForm.resetFields(["password"]);
+      void databasesQuery.refetch();
+      void tablesQuery.refetch();
+    },
+    onError: (error: Error) => {
+      messageApi.error(error.message || "保存数据库账号配置失败");
+    },
+  });
+
+  function openCredModal() {
+    credForm.setFieldsValue({
+      username: currentDbOption?.username || "luykin2",
+      password: "",
+    });
+    setCredModalOpen(true);
+  }
+
   const tablesQuery = useQuery({
-    queryKey: ["db-admin", "tables"],
-    queryFn: fetchDbAdminTables,
+    queryKey: ["db-admin", "tables", selectedDb],
+    queryFn: () => fetchDbAdminTables(selectedDb),
     enabled: canRead && reauthVerified,
   });
   const tables = tablesQuery.data?.data || [];
@@ -375,19 +416,25 @@ export function DbAdminPage() {
   const sortedTables = useMemo(() => groupedTables.flatMap((group) => group.items), [groupedTables]);
 
   useEffect(() => {
-    if (!selectedKey && sortedTables.length) setSelectedKey(sortedTables[0].key);
+    if (!sortedTables.length) {
+      if (selectedKey !== null) setSelectedKey(null);
+      return;
+    }
+    if (!selectedKey || !sortedTables.some((item) => item.key === selectedKey)) {
+      setSelectedKey(sortedTables[0].key);
+    }
   }, [selectedKey, sortedTables]);
 
   const schemaQuery = useQuery({
-    queryKey: ["db-admin", "schema", selectedKey],
-    queryFn: () => fetchDbAdminSchema(selectedKey!),
+    queryKey: ["db-admin", "schema", selectedDb, selectedKey],
+    queryFn: () => fetchDbAdminSchema(selectedKey!, selectedDb),
     enabled: canRead && reauthVerified && !!selectedKey,
   });
   const currentTable = schemaQuery.data?.data || tables.find((item) => item.key === selectedKey) || null;
 
   const rowsQuery = useQuery({
-    queryKey: ["db-admin", "rows", selectedKey, page, pageSize, appliedSearch, sortBy, sortOrder],
-    queryFn: () => fetchDbAdminRows(selectedKey!, { page, pageSize, q: appliedSearch, sortBy, sortOrder }),
+    queryKey: ["db-admin", "rows", selectedDb, selectedKey, page, pageSize, appliedSearch, sortBy, sortOrder],
+    queryFn: () => fetchDbAdminRows(selectedKey!, { db: selectedDb, page, pageSize, q: appliedSearch, sortBy, sortOrder }),
     enabled: canRead && reauthVerified && !!selectedKey,
   });
 
@@ -397,7 +444,7 @@ export function DbAdminPage() {
   const primaryKey = currentTable?.primaryKey || rowsData?.table.primaryKey || "id";
 
   const createMutation = useMutation({
-    mutationFn: (values: Record<string, unknown>) => createDbAdminRow(selectedKey!, values),
+    mutationFn: (values: Record<string, unknown>) => createDbAdminRow(selectedKey!, values, selectedDb),
     onSuccess: () => {
       messageApi.success("记录已新增");
       setEditorOpen(false);
@@ -407,7 +454,8 @@ export function DbAdminPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, values }: { id: string | number; values: Record<string, unknown> }) => updateDbAdminRow(selectedKey!, id, values),
+    mutationFn: ({ id, values }: { id: string | number; values: Record<string, unknown> }) =>
+      updateDbAdminRow(selectedKey!, id, values, selectedDb),
     onSuccess: () => {
       messageApi.success("记录已更新");
       setEditorOpen(false);
@@ -418,7 +466,7 @@ export function DbAdminPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string | number) => deleteDbAdminRow(selectedKey!, id),
+    mutationFn: (id: string | number) => deleteDbAdminRow(selectedKey!, id, selectedDb),
     onSuccess: () => {
       messageApi.success("记录已删除");
       void rowsQuery.refetch();
@@ -569,13 +617,53 @@ export function DbAdminPage() {
           <Text className="db-admin-eyebrow">PostgreSQL</Text>
           <Title level={2}>数据表管理</Title>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => { void tablesQuery.refetch(); void schemaQuery.refetch(); void rowsQuery.refetch(); }}>
-          刷新
-        </Button>
+        <Space wrap size={12}>
+          <Select
+            value={selectedDb}
+            style={{ minWidth: 260 }}
+            options={databaseOptions.map((item) => ({
+              value: item.key,
+              label: item.label || item.name,
+            }))}
+            onChange={(nextDb) => {
+              setSelectedDb(nextDb);
+              setSelectedKey(null);
+              setPage(1);
+              setAppliedSearch("");
+              setSearchText("");
+              setSortBy(undefined);
+              setSortOrder("DESC");
+            }}
+          />
+          {selectedDb !== "luykindatabase" ? (
+            <Button icon={<KeyOutlined />} onClick={openCredModal}>
+              连接账号配置
+            </Button>
+          ) : null}
+          <Button icon={<ReloadOutlined />} onClick={() => { void tablesQuery.refetch(); void schemaQuery.refetch(); void rowsQuery.refetch(); }}>
+            刷新
+          </Button>
+        </Space>
       </section>
 
+      {tablesQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message={`加载数据库 ${selectedDb} 的数据表失败`}
+          description={tablesQuery.error instanceof Error ? tablesQuery.error.message : "请检查数据库账号密码配置"}
+          action={
+            selectedDb !== "luykindatabase" ? (
+              <Button size="small" type="primary" icon={<KeyOutlined />} onClick={openCredModal}>
+                配置账号密码
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
+
       <div className="db-admin-workbench">
-        <Card className="db-admin-sidebar" title="数据表" loading={tablesQuery.isLoading}>
+        <Card className="db-admin-sidebar" title={`数据表（${selectedDb}）`} loading={tablesQuery.isLoading}>
           {groupedTables.length ? (
             <div className="db-admin-table-groups">
               {groupedTables.map((group) => (
@@ -644,7 +732,11 @@ export function DbAdminPage() {
         >
           {currentTable?.description ? <Text className="db-admin-table-desc" type="secondary">{currentTable.description}</Text> : null}
           <Table<DbAdminRow>
-            rowKey={(row) => String(row[primaryKey])}
+            rowKey={(row, index) =>
+              currentTable?.hasSinglePrimaryKey && row[primaryKey] !== undefined
+                ? String(row[primaryKey])
+                : `${String(row[primaryKey] ?? "")}-${index}`
+            }
             columns={tableColumns}
             dataSource={rows}
             loading={rowsQuery.isLoading || schemaQuery.isLoading}
@@ -671,6 +763,43 @@ export function DbAdminPage() {
         onClose={() => setEditorOpen(false)}
         onSubmit={handleEditorSubmit}
       />
+
+      <Modal
+        open={credModalOpen}
+        title={`配置数据库连接账号（${selectedDb}）`}
+        okText="保存并测试连接"
+        cancelText="取消"
+        confirmLoading={saveCredsMutation.isPending}
+        onCancel={() => setCredModalOpen(false)}
+        onOk={() => {
+          void credForm.validateFields().then((values) => {
+            saveCredsMutation.mutate(values);
+          });
+        }}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={`默认也可在服务器 .env-pro 中配置 PG2_USERNAME / PG2_PASSWORD；在此保存后会测试连接并加密持久化到 Redis。`}
+        />
+        <Form form={credForm} layout="vertical" initialValues={{ username: currentDbOption?.username || "luykin2" }}>
+          <Form.Item
+            name="username"
+            label="数据库用户名 (PG User)"
+            rules={[{ required: true, message: "请输入数据库用户名，如 luykin2" }]}
+          >
+            <Input placeholder="例如：luykin2" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="数据库密码 (PG Password)"
+            rules={[{ required: true, message: "请输入数据库密码" }]}
+          >
+            <Input.Password placeholder={`请输入 ${selectedDb} 的数据库密码`} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

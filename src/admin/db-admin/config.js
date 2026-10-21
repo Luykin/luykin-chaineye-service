@@ -104,6 +104,11 @@ const tableMetadata = {
   EchohuntSocialListeningPosts: { label: "社媒监听帖子", description: "采集并分析的社媒帖子及其 AI 结果。" },
   EchohuntSocialListeningSnapshots: { label: "社媒监听快照", description: "Social Listening 看板在指定时间范围内的汇总快照。" },
   EchohuntSocialListeningTextCondensations: { label: "社媒监听文本精简", description: "社媒长文本的 AI 精简结果与模型信息。" },
+
+  e2e: { label: "E2E 报名与排行结算", description: "用户报名参与 E2E 互动任务的记录、得分（point）、排名与奖励结算数据。" },
+  e2e_list: { label: "E2E 互动任务列表", description: "E2E 互动任务主配置表，包含目标推文、奖池金额、收款钱包地址、时间与门槛设置。" },
+  e2e_log: { label: "E2E 算分日志", description: "E2E 互动任务每次算分的得分明细与 AI 评分说明日志。" },
+  e2e_tweet: { label: "E2E 推文审核与摘要", description: "投放推文/长文的合规审核结果、正文与中英文 AI 摘要缓存。" },
 };
 
 // 如需对某张表单独禁用新增/删除、隐藏字段、枚举字段，在这里按真实表名覆盖。
