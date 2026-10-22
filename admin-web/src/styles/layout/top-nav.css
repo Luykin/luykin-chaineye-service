@@ -365,6 +365,7 @@
 
   .admin-top-nav-menu.ant-menu-horizontal {
     justify-self: stretch;
+    justify-content: center;
     width: 100%;
     max-width: 100%;
   }
