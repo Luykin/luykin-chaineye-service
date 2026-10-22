@@ -44,16 +44,25 @@ async function handleGetActive(req, res) {
 router.get("/active", handleGetActive);
 router.get("/e2e_active", handleGetActive);
 
-// 2. 获取 E2E 任务分组列表（兼容 /list、/tasks 与 /e2es）
+// 2. 按状态分页获取 E2E 任务列表（兼容 /list、/tasks 与 /e2es）
 async function handleListActivities(req, res) {
   try {
     const authCtx = extractRequestAuthContext(req);
     const userId = String(req.query?.user_id || authCtx.twitterId || "").trim() || null;
-    const data = await listE2eActivities({ userId });
-    return res.json(data);
+    const data = await listE2eActivities({
+      userId,
+      status: req.query?.status || "all",
+      page: req.query?.page,
+      pageSize: req.query?.pageSize ?? req.query?.page_size,
+    });
+    return res.json({ status: true, data });
   } catch (error) {
     console.error("[echohunt/e2e] listE2eActivities failed:", error);
-    return res.status(500).json({ status: false, message: error.message || "Internal error" });
+    return res.status(error.status || 500).json({
+      status: false,
+      code: error.code || "E2E_LIST_FAILED",
+      message: error.message || "Internal error",
+    });
   }
 }
 router.get("/list", optionalAuth, handleListActivities);

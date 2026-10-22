@@ -1,4 +1,4 @@
-const { Op, QueryTypes } = require("sequelize");
+const { Op, QueryTypes, fn, col } = require("sequelize");
 const {
   E2eList,
   E2eRecord,
@@ -17,6 +17,10 @@ const {
   verifyExternalPayment,
 } = require("./e2ePaymentService");
 const { examineE2eTweet, parseTweetInput } = require("./e2eExamineService");
+
+const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
+const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
+const MAX_CAMPAIGN_PAGE_SIZE = 100;
 
 function toNumber(val, fallback = 0) {
   const num = Number(val);
@@ -123,24 +127,73 @@ async function getActiveTweetIds() {
   return Array.from(new Set(rows.map((r) => String(r.tweet_id || "").trim()).filter(Boolean)));
 }
 
+function normalizeCampaignListOptions({ status = "all", page = 1, pageSize = DEFAULT_CAMPAIGN_PAGE_SIZE } = {}) {
+  const normalizedStatus = String(status || "all").trim().toLowerCase();
+  if (normalizedStatus !== "all" && !PUBLIC_CAMPAIGN_STATUSES.includes(normalizedStatus)) {
+    const error = new Error("status 只能是 active、review、complete 或 all");
+    error.status = 400;
+    error.code = "E2E_INVALID_STATUS";
+    throw error;
+  }
+  const normalizedPage = Math.max(1, parseInt(String(page), 10) || 1);
+  const normalizedPageSize = Math.min(
+    MAX_CAMPAIGN_PAGE_SIZE,
+    Math.max(1, parseInt(String(pageSize), 10) || DEFAULT_CAMPAIGN_PAGE_SIZE)
+  );
+  return {
+    status: normalizedStatus,
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    offset: (normalizedPage - 1) * normalizedPageSize,
+  };
+}
+
 /**
- * 查询 E2E 活动列表（按 active / review / complete 分组返回，1:1 兼容原 /pro/api/e2es 格式）
+ * 按状态分页查询公开的 E2E 活动列表；all 包含 active / review / complete。
  */
-async function listE2eActivities({ userId = null } = {}) {
-  const campaigns = await E2eList.findAll({
-    where: {
-      status: {
-        [Op.in]: ["active", "review", "complete"],
-      },
-    },
-    order: [
-      ["start_time", "DESC"],
-      ["end_time", "DESC"],
-    ],
-  });
+async function listE2eActivities({ userId = null, status = "all", page = 1, pageSize = DEFAULT_CAMPAIGN_PAGE_SIZE } = {}) {
+  const options = normalizeCampaignListOptions({ status, page, pageSize });
+  const publicStatusWhere = { [Op.in]: PUBLIC_CAMPAIGN_STATUSES };
+  const where = {
+    status: options.status === "all" ? publicStatusWhere : options.status,
+  };
+  const [{ rows: campaigns, count }, statusRows] = await Promise.all([
+    E2eList.findAndCountAll({
+      where,
+      order: [
+        ["start_time", "DESC"],
+        ["end_time", "DESC"],
+      ],
+      limit: options.pageSize,
+      offset: options.offset,
+    }),
+    E2eList.findAll({
+      where: { status: publicStatusWhere },
+      attributes: ["status", [fn("COUNT", col("address")), "count"]],
+      group: ["status"],
+      raw: true,
+    }),
+  ]);
+
+  const statusCounts = { active: 0, review: 0, complete: 0, all: 0 };
+  for (const row of statusRows) {
+    const key = String(row.status || "").toLowerCase();
+    if (PUBLIC_CAMPAIGN_STATUSES.includes(key)) {
+      statusCounts[key] = Number(row.count) || 0;
+    }
+  }
+  statusCounts.all = PUBLIC_CAMPAIGN_STATUSES.reduce((sum, key) => sum + statusCounts[key], 0);
+
+  const pagination = {
+    page: options.page,
+    pageSize: options.pageSize,
+    total: Number(count) || 0,
+    totalPages: count ? Math.ceil(Number(count) / options.pageSize) : 0,
+    hasNextPage: options.page * options.pageSize < Number(count),
+  };
 
   if (!campaigns.length) {
-    return { active: [], review: [], complete: [] };
+    return { status: options.status, list: [], pagination, statusCounts };
   }
 
   const addresses = campaigns.map((c) => String(c.address)).filter(Boolean);
@@ -166,37 +219,27 @@ async function listE2eActivities({ userId = null } = {}) {
   ]);
 
   const signupsByAddress = new Map();
-  for (const s of signups) {
-    const addr = String(s.address);
-    if (!signupsByAddress.has(addr)) signupsByAddress.set(addr, []);
-    signupsByAddress.get(addr).push(s);
+  for (const signup of signups) {
+    const address = String(signup.address);
+    if (!signupsByAddress.has(address)) signupsByAddress.set(address, []);
+    signupsByAddress.get(address).push(signup);
   }
 
   const tweetMap = new Map();
-  for (const t of tweets) {
-    tweetMap.set(String(t.tweet_id), t.toJSON());
+  for (const tweet of tweets) {
+    tweetMap.set(String(tweet.tweet_id), tweet.toJSON());
   }
 
-  const grouped = {
-    active: [],
-    review: [],
-    complete: [],
-  };
-
-  for (const campaign of campaigns) {
-    const status = String(campaign.status || "").toLowerCase();
-    const item = formatCampaignItem(
+  const list = campaigns.map((campaign) =>
+    formatCampaignItem(
       campaign,
       signupsByAddress.get(String(campaign.address)) || [],
       tweetMap,
       userId
-    );
-    if (status === "active") grouped.active.push(item);
-    else if (status === "review") grouped.review.push(item);
-    else if (status === "complete") grouped.complete.push(item);
-  }
+    )
+  );
 
-  return grouped;
+  return { status: options.status, list, pagination, statusCounts };
 }
 
 /**
