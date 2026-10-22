@@ -2,6 +2,10 @@ const crypto = require("crypto");
 const { Sequelize, QueryTypes } = require("sequelize");
 const { pgInstance } = require("../../models/postgres-start");
 const { getRedisClient } = require("../../lib/redisClient");
+const {
+  getPostgresReadOnlyInstance,
+  isPostgresReadOnlyConfigured,
+} = require("../../infra/k8s/postgres-readonly");
 const { DEFAULT_READONLY_COLUMNS, SENSITIVE_COLUMN_PATTERN, tableMetadata, tableOverrides } = require("./config");
 
 const MAX_PAGE_SIZE = 100;
@@ -15,6 +19,17 @@ const DATABASE_DEFINITIONS = [
     label: "luykindatabase（主业务库）",
     description: "XHunt / EchoHunt / 认证中心 / 管理后台主业务数据库",
     configurableCredentials: false,
+    excludedSchemas: ["dev"],
+    readOnly: false,
+  },
+  {
+    key: "dev",
+    name: "dev",
+    label: "dev（Twitter 底层库 · 只读）",
+    description: "K8s PostgreSQL 只读数据源中的 dev schema，仅支持查看和搜索",
+    configurableCredentials: false,
+    schema: "dev",
+    readOnly: true,
   },
   {
     key: "luykindatabase2",
@@ -22,6 +37,7 @@ const DATABASE_DEFINITIONS = [
     label: "luykindatabase2（数据 / E2E 库）",
     description: "E2E 互动任务（e2e / e2e_list / e2e_log / e2e_tweet）及扩展分析数据库",
     configurableCredentials: true,
+    readOnly: false,
   },
 ];
 
@@ -118,6 +134,9 @@ async function getDbInstance(dbKey) {
   if (resolvedKey === "luykindatabase") {
     return pgInstance;
   }
+  if (resolvedKey === "dev") {
+    return getPostgresReadOnlyInstance();
+  }
   const savedCreds = await loadSavedCredentials(resolvedKey);
   const sig = JSON.stringify({
     u: savedCreds?.username || process.env.PG2_USERNAME || "luykin2",
@@ -139,24 +158,34 @@ async function listDatabases() {
   const savedDb2 = await loadSavedCredentials("luykindatabase2");
   return {
     defaultDatabase: "luykindatabase",
-    databases: DATABASE_DEFINITIONS.map((item) => ({
-      ...item,
-      username:
-        item.key === "luykindatabase"
-          ? process.env.PG_USERNAME || "luykin"
-          : savedDb2?.username || process.env.PG2_USERNAME || "luykin2",
-      hasPasswordConfigured:
-        item.key === "luykindatabase"
-          ? true
-          : Boolean(savedDb2?.password || process.env.PG2_PASSWORD),
-    })),
+    databases: DATABASE_DEFINITIONS.map((item) => {
+      if (item.key === "dev") {
+        return {
+          ...item,
+          hasPasswordConfigured: isPostgresReadOnlyConfigured(),
+        };
+      }
+      if (item.key === "luykindatabase2") {
+        return {
+          ...item,
+          username: savedDb2?.username || process.env.PG2_USERNAME || "luykin2",
+          hasPasswordConfigured: Boolean(savedDb2?.password || process.env.PG2_PASSWORD),
+        };
+      }
+      return {
+        ...item,
+        username: process.env.PG_USERNAME || "luykin",
+        hasPasswordConfigured: true,
+      };
+    }),
   };
 }
 
 async function saveDatabaseCredentials(dbKey, body = {}) {
   const resolvedKey = resolveDbKey(dbKey);
-  if (resolvedKey === "luykindatabase") {
-    throw createHttpError(400, "主业务库使用系统默认环境变量，不支持在此修改");
+  const definition = DATABASE_DEFINITIONS.find((item) => item.key === resolvedKey);
+  if (!definition?.configurableCredentials) {
+    throw createHttpError(400, "该数据源使用系统默认环境变量，不支持在此修改");
   }
   const username = String(body.username || "luykin2").trim();
   const password = String(body.password || "");
@@ -208,6 +237,40 @@ function quoteIdentifier(name) {
 
 function tableSql(config) {
   return `${quoteIdentifier(config.schema)}.${quoteIdentifier(config.table)}`;
+}
+
+function getDatabaseDefinition(dbKey) {
+  const resolvedKey = resolveDbKey(dbKey);
+  return DATABASE_DEFINITIONS.find((item) => item.key === resolvedKey);
+}
+
+function isSchemaAllowed(dbKey, schema) {
+  const definition = getDatabaseDefinition(dbKey);
+  if (definition?.schema) return schema === definition.schema;
+  return !(definition?.excludedSchemas || []).includes(schema);
+}
+
+function assertSchemaAllowed(dbKey, schema) {
+  if (!isSchemaAllowed(dbKey, schema)) {
+    throw createHttpError(403, `数据源 ${resolveDbKey(dbKey)} 不允许访问 ${schema} schema`);
+  }
+}
+
+function applyDatabaseAccess(config, dbKey) {
+  const definition = getDatabaseDefinition(dbKey);
+  if (definition?.readOnly) {
+    config.allowCreate = false;
+    config.allowUpdate = false;
+    config.allowDelete = false;
+  }
+  return config;
+}
+
+function assertDatabaseWritable(dbKey) {
+  const definition = getDatabaseDefinition(dbKey);
+  if (definition?.readOnly) {
+    throw createHttpError(403, `数据源 ${definition.key} 仅支持只读查看`);
+  }
 }
 
 function parseTableKey(key) {
@@ -273,7 +336,9 @@ async function loadPrimaryKeys(tableName, dbKey, schema = "public") {
 async function getTableConfig(key, dbKey) {
   const { schema, tableName } = parseTableKey(key);
   if (!tableName) throw createHttpError(404, "表不存在");
-  const db = await getDbInstance(dbKey);
+  const resolvedDbKey = resolveDbKey(dbKey);
+  assertSchemaAllowed(resolvedDbKey, schema);
+  const db = await getDbInstance(resolvedDbKey);
 
   const [tableRow] = await db.query(
     `
@@ -288,8 +353,11 @@ async function getTableConfig(key, dbKey) {
   );
   if (!tableRow) throw createHttpError(404, `表不存在：${schema}.${tableName}`);
 
-  const primaryKeys = await loadPrimaryKeys(tableName, dbKey, schema);
-  return getDefaultConfig(tableName, primaryKeys.length === 1 ? primaryKeys[0] : null, schema);
+  const primaryKeys = await loadPrimaryKeys(tableName, resolvedDbKey, schema);
+  return applyDatabaseAccess(
+    getDefaultConfig(tableName, primaryKeys.length === 1 ? primaryKeys[0] : null, schema),
+    resolvedDbKey
+  );
 }
 
 function inferSearchableColumns(columns) {
@@ -400,7 +468,8 @@ function publicTable(config, columns) {
 }
 
 async function listTables(dbKey) {
-  const db = await getDbInstance(dbKey);
+  const resolvedDbKey = resolveDbKey(dbKey);
+  const db = await getDbInstance(resolvedDbKey);
   const rows = await db.query(
     `
       SELECT t.table_schema, t.table_name, pk.primary_key
@@ -425,7 +494,12 @@ async function listTables(dbKey) {
     `,
     { type: QueryTypes.SELECT }
   );
-  return rows.map((row) => publicTable(getDefaultConfig(row.table_name, row.primary_key || null, row.table_schema || "public")));
+  return rows
+    .filter((row) => isSchemaAllowed(resolvedDbKey, row.table_schema || "public"))
+    .map((row) => publicTable(applyDatabaseAccess(
+      getDefaultConfig(row.table_name, row.primary_key || null, row.table_schema || "public"),
+      resolvedDbKey
+    )));
 }
 
 async function getTableSchema(key, dbKey) {
@@ -615,6 +689,7 @@ function buildWritePayload(config, columns, body = {}, mode) {
 
 async function createRow(key, body = {}, dbKey) {
   const resolvedDbKey = resolveDbKey(dbKey);
+  assertDatabaseWritable(resolvedDbKey);
   const db = await getDbInstance(resolvedDbKey);
   const config = await getTableConfig(key, resolvedDbKey);
   if (!config.allowCreate) throw createHttpError(403, "该表未开放新增能力");
@@ -635,6 +710,7 @@ async function createRow(key, body = {}, dbKey) {
 
 async function updateRow(key, id, body = {}, dbKey) {
   const resolvedDbKey = resolveDbKey(dbKey);
+  assertDatabaseWritable(resolvedDbKey);
   const db = await getDbInstance(resolvedDbKey);
   const config = await getTableConfig(key, resolvedDbKey);
   if (!config.hasSinglePrimaryKey) throw createHttpError(403, "该表没有单字段主键，暂不支持更新");
@@ -658,6 +734,7 @@ async function updateRow(key, id, body = {}, dbKey) {
 
 async function deleteRow(key, id, dbKey) {
   const resolvedDbKey = resolveDbKey(dbKey);
+  assertDatabaseWritable(resolvedDbKey);
   const db = await getDbInstance(resolvedDbKey);
   const config = await getTableConfig(key, resolvedDbKey);
   if (!config.hasSinglePrimaryKey) throw createHttpError(403, "该表没有单字段主键，暂不支持删除");

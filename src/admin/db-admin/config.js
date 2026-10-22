@@ -1,14 +1,14 @@
 /**
  * 管理后台轻量 DB CRUD 配置。
  *
- * 当前按数据库 public schema 动态枚举所有基础表；这里仅保留全局安全规则和少量表级覆盖。
+ * 当前按数据源允许的 schema 动态枚举基础表；这里仅保留全局安全规则和少量表级覆盖。
  * 注意：不提供任意 SQL，所有字段名/表名仍来自数据库元数据或这里的显式覆盖。
  */
 const SENSITIVE_COLUMN_PATTERN = /(password|passwordHash|token|secret|privateKey|credential|publicKey|signature|nonce|accessToken|refreshToken|authorizationCode|session)/i;
 
 const DEFAULT_READONLY_COLUMNS = ["id", "createdAt", "updatedAt", "deletedAt"];
 
-// DB Admin 会动态列出 public schema 中的全部表；这里提供给管理员阅读的业务名称和说明。
+// DB Admin 会动态列出当前数据源允许的表；这里提供给管理员阅读的业务名称和说明。
 // 新表即使暂未登记，也会由 service 层给出“未归类系统表”兜底说明。
 const tableMetadata = {
   AuthCenterXhuntAuditLogs: { label: "认证中心审计日志", description: "记录统一登录、身份绑定和会话等安全操作。" },

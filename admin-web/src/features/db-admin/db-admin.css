@@ -39,6 +39,12 @@
   background: #eff6ff;
 }
 
+.db-admin-readonly-alert.ant-alert {
+  border-radius: 16px;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
 .db-admin-workbench {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
@@ -104,6 +110,9 @@
 }
 
 .db-admin-current-table-title > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: #1e293b;
   font-size: 17px;
   font-weight: 800;

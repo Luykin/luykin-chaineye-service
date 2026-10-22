@@ -380,9 +380,11 @@ export function DbAdminPage() {
   });
   const databaseOptions: DbAdminDatabaseOption[] = databasesQuery.data?.data?.databases || [
     { key: "luykindatabase", name: "luykindatabase", label: "luykindatabase（主业务库）" },
+    { key: "dev", name: "dev", label: "dev（Twitter 底层库 · 只读）", readOnly: true, schema: "dev" },
     { key: "luykindatabase2", name: "luykindatabase2", label: "luykindatabase2（数据 / E2E 库）", configurableCredentials: true, username: "luykin2" },
   ];
   const currentDbOption = databaseOptions.find((item) => item.key === selectedDb) || databaseOptions[0];
+  const isReadOnlyDataSource = Boolean(currentDbOption?.readOnly);
 
   const saveCredsMutation = useMutation({
     mutationFn: (values: { username: string; password: string }) => saveDbAdminCredentials(selectedDb, values),
@@ -492,48 +494,51 @@ export function DbAdminPage() {
       render: (value: unknown) => formatValue(value),
     }));
 
-    baseColumns.push({
-      title: "操作",
-      key: "actions",
-      fixed: "right",
-      width: 150,
-      render: (_: unknown, row: DbAdminRow) => {
-        const id = row[primaryKey] as string | number | undefined;
-        return (
-          <Space size={6}>
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              disabled={!canWrite || !currentTable?.allowUpdate}
-              onClick={() => {
-                setEditorMode("edit");
-                setEditingRow(row);
-                setEditorOpen(true);
-              }}
-            >
-              编辑
-            </Button>
-            <Popconfirm
-              title="确认删除这条记录？"
-              description="删除会立即写入数据库，并记录操作日志。"
-              okText="删除"
-              okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
-              onConfirm={() => id !== undefined && deleteMutation.mutate(id)}
-            >
+    if (!isReadOnlyDataSource) {
+      baseColumns.push({
+        title: "操作",
+        key: "actions",
+        fixed: "right",
+        width: 150,
+        render: (_: unknown, row: DbAdminRow) => {
+          const id = row[primaryKey] as string | number | undefined;
+          return (
+            <Space size={6}>
               <Button
                 size="small"
-                danger
-                icon={<DeleteOutlined />}
-                disabled={!canWrite || !currentTable?.allowDelete || id === undefined}
-              />
-            </Popconfirm>
-          </Space>
-        );
-      },
-    });
+                icon={<EditOutlined />}
+                disabled={!canWrite || !currentTable?.allowUpdate}
+                onClick={() => {
+                  setEditorMode("edit");
+                  setEditingRow(row);
+                  setEditorOpen(true);
+                }}
+              >
+                编辑
+              </Button>
+              <Popconfirm
+                title="确认删除这条记录？"
+                description="删除会立即写入数据库，并记录操作日志。"
+                okText="删除"
+                okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
+                onConfirm={() => id !== undefined && deleteMutation.mutate(id)}
+              >
+                <Button
+                  size="small"
+                  danger
+                  aria-label="删除记录"
+                  icon={<DeleteOutlined />}
+                  disabled={!canWrite || !currentTable?.allowDelete || id === undefined}
+                />
+              </Popconfirm>
+            </Space>
+          );
+        },
+      });
+    }
 
     return baseColumns;
-  }, [canWrite, columns, currentTable?.allowDelete, currentTable?.allowUpdate, deleteMutation, primaryKey]);
+  }, [canWrite, columns, currentTable?.allowDelete, currentTable?.allowUpdate, deleteMutation, isReadOnlyDataSource, primaryKey]);
 
   if (!canRead) return <NoPermissionPage />;
 
@@ -635,7 +640,7 @@ export function DbAdminPage() {
               setSortOrder("DESC");
             }}
           />
-          {selectedDb !== "luykindatabase" ? (
+          {currentDbOption?.configurableCredentials ? (
             <Button icon={<KeyOutlined />} onClick={openCredModal}>
               连接账号配置
             </Button>
@@ -646,6 +651,16 @@ export function DbAdminPage() {
         </Space>
       </section>
 
+      {isReadOnlyDataSource ? (
+        <Alert
+          className="db-admin-readonly-alert"
+          type="info"
+          showIcon
+          message="dev 数据源为只读模式"
+          description="当前仅展示 K8s PostgreSQL 只读数据源 dev schema 中的数据表，支持分页、搜索和排序；新增、编辑和删除在界面与后端均已禁用。"
+        />
+      ) : null}
+
       {tablesQuery.isError ? (
         <Alert
           type="error"
@@ -653,7 +668,7 @@ export function DbAdminPage() {
           message={`加载数据库 ${selectedDb} 的数据表失败`}
           description={tablesQuery.error instanceof Error ? tablesQuery.error.message : "请检查数据库账号密码配置"}
           action={
-            selectedDb !== "luykindatabase" ? (
+            currentDbOption?.configurableCredentials ? (
               <Button size="small" type="primary" icon={<KeyOutlined />} onClick={openCredModal}>
                 配置账号密码
               </Button>
@@ -663,7 +678,7 @@ export function DbAdminPage() {
       ) : null}
 
       <div className="db-admin-workbench">
-        <Card className="db-admin-sidebar" title={`数据表（${selectedDb}）`} loading={tablesQuery.isLoading}>
+        <Card className="db-admin-sidebar" title={`数据表（${selectedDb}${isReadOnlyDataSource ? " · 只读" : ""}）`} loading={tablesQuery.isLoading}>
           {groupedTables.length ? (
             <div className="db-admin-table-groups">
               {groupedTables.map((group) => (
@@ -703,7 +718,10 @@ export function DbAdminPage() {
           className="db-admin-data-card"
           title={currentTable ? (
             <div className="db-admin-current-table-title">
-              <span>{currentTable.label}</span>
+              <span>
+                {currentTable.label}
+                {isReadOnlyDataSource ? <Tag color="blue">只读</Tag> : null}
+              </span>
               <Text type="secondary">{currentTable.table}</Text>
             </div>
           ) : "请选择表"}
@@ -719,14 +737,16 @@ export function DbAdminPage() {
                 className="db-admin-search"
               />
               <Button onClick={applySearch}>搜索</Button>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                disabled={!canWrite || !currentTable?.allowCreate}
-                onClick={openCreate}
-              >
-                新增
-              </Button>
+              {!isReadOnlyDataSource ? (
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  disabled={!canWrite || !currentTable?.allowCreate}
+                  onClick={openCreate}
+                >
+                  新增
+                </Button>
+              ) : null}
             </Space>
           }
         >

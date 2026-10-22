@@ -35,6 +35,8 @@ export interface DbAdminDatabaseOption {
   label: string;
   description?: string;
   configurableCredentials?: boolean;
+  readOnly?: boolean;
+  schema?: string;
   username?: string;
   hasPasswordConfigured?: boolean;
 }
