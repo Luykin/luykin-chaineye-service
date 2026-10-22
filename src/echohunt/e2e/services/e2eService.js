@@ -490,7 +490,7 @@ async function createE2eCampaign(payload = {}, options = {}) {
 /**
  * 通过外部支付接口校验到账并激活活动（对应 POST /pro/api/e2e/activate）
  */
-async function activateE2eCampaign(payload = {}) {
+async function activateE2eCampaignInternal(payload = {}, { skipPaymentVerification = false } = {}) {
   const address = String(payload.address || "").trim();
   if (!address) {
     return { status: false, message: "缺少收款地址参数 address" };
@@ -521,15 +521,17 @@ async function activateE2eCampaign(payload = {}) {
     return { status: false, message: "该推文已存在进行中的互动任务" };
   }
 
-  const requiredAmount = Number((toNumber(campaign.rewards) + toNumber(campaign.fees)).toFixed(6));
-  const check = await verifyExternalPayment({ address, requiredAmount });
-  if (!check.verified) {
-    return {
-      status: false,
-      message: check.message || "外部支付接口尚未确认足额到账，请稍后重试",
-      balance: check.balance,
-      required: check.required,
-    };
+  if (!skipPaymentVerification) {
+    const requiredAmount = Number((toNumber(campaign.rewards) + toNumber(campaign.fees)).toFixed(6));
+    const check = await verifyExternalPayment({ address, requiredAmount });
+    if (!check.verified) {
+      return {
+        status: false,
+        message: check.message || "外部支付接口尚未确认足额到账，请稍后重试",
+        balance: check.balance,
+        required: check.required,
+      };
+    }
   }
 
   // 根据原预设起止时间差重新计算激活后的正式 start_time / end_time
@@ -559,9 +561,17 @@ async function activateE2eCampaign(payload = {}) {
   const activatedCampaign = await E2eList.findByPk(address);
   return {
     status: true,
-    message: "任务已成功激活",
+    message: skipPaymentVerification ? "管理员已跳过支付校验并激活任务" : "任务已成功激活",
     data: activatedCampaign.toJSON(),
   };
+}
+
+async function activateE2eCampaign(payload = {}) {
+  return activateE2eCampaignInternal(payload);
+}
+
+async function forceActivateE2eCampaign(address) {
+  return activateE2eCampaignInternal({ address }, { skipPaymentVerification: true });
 }
 
 module.exports = {
@@ -571,4 +581,5 @@ module.exports = {
   registerE2eParticipant,
   createE2eCampaign,
   activateE2eCampaign,
+  forceActivateE2eCampaign,
 };

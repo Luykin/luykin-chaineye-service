@@ -145,6 +145,12 @@ export const updateCampaign = (address: string, body: E2eCampaignUpdatePayload) 
     { method: "PUT", body: { ...body } }
   );
 
+export const forceActivateCampaign = (address: string) =>
+  apiRequest<{ success: boolean; data: E2eCampaignDetail }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/force-activate`,
+    { method: "POST" }
+  );
+
 export const completeCampaign = (address: string, txHash: string) =>
   apiRequest<{ success: boolean; data: E2eCampaignDetail }>(
     `${base}/campaigns/${encodeURIComponent(address)}/complete`,

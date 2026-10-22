@@ -3,6 +3,7 @@ const { Op, fn, col } = require("sequelize");
 const { requirePermission } = require("../middleware/adminAuth");
 const { E2eList, E2eRecord, E2eTweet, pgInstance } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
+const { forceActivateE2eCampaign } = require("../../echohunt/e2e/services/e2eService");
 
 const router = express.Router();
 const MANAGE_PERMISSION = "e2e-campaigns";
@@ -358,6 +359,36 @@ router.put("/campaigns/:address", async (req, res) => {
     return res.json({ success: true, data: detail });
   } catch (error) {
     await logAdminAction(req, { action: "e2e_campaign_update", success: false, message: `address=${address};${error.message}` }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
+router.post("/campaigns/:address/force-activate", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    const campaign = await E2eList.findByPk(address, { attributes: ["address", "status"] });
+    if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
+    if (String(campaign.status || "").toLowerCase() !== "pending") {
+      throw publicError("仅待支付（pending）状态的活动可以强制确认支付", 409, "E2E_CAMPAIGN_NOT_PENDING");
+    }
+
+    const result = await forceActivateE2eCampaign(address);
+    if (!result.status) {
+      throw publicError(result.message || "强制激活活动失败", 409, "E2E_CAMPAIGN_FORCE_ACTIVATE_FAILED");
+    }
+    const detail = await loadCampaignDetail(address);
+    await logAdminAction(req, {
+      action: "e2e_campaign_force_activate",
+      success: true,
+      message: `address=${address};paymentVerification=skipped`,
+    });
+    return res.json({ success: true, data: detail });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "e2e_campaign_force_activate",
+      success: false,
+      message: `address=${address};${error.message}`,
+    }).catch(() => {});
     return sendError(res, error);
   }
 });

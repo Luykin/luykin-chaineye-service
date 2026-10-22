@@ -7,6 +7,7 @@ import { PageSection } from "@/components/ui/PageSection";
 import { ApiError } from "@/services/apiClient";
 import {
   completeCampaign,
+  forceActivateCampaign,
   getCampaign,
   listCampaignRecords,
   listCampaigns,
@@ -77,7 +78,7 @@ export function E2eCampaignsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [statusFilter, setStatusFilter] = useState<string>();
+  const [statusFilter, setStatusFilter] = useState<E2eCampaignStatus | undefined>("active");
   const [keyword, setKeyword] = useState("");
   const [keywordInput, setKeywordInput] = useState("");
 
@@ -87,6 +88,7 @@ export function E2eCampaignsPage() {
   const [recordPageSize, setRecordPageSize] = useState(10);
 
   const [editing, setEditing] = useState<E2eCampaign | null>(null);
+  const [activating, setActivating] = useState<E2eCampaign | null>(null);
   const [completing, setCompleting] = useState<E2eCampaign | null>(null);
   const [editForm] = Form.useForm();
   const [completeForm] = Form.useForm();
@@ -135,6 +137,17 @@ export function E2eCampaignsPage() {
       messageApi.success("已标记结算完成");
       setCompleting(null);
       if (res.data) applyDetail(variables.address, res.data);
+      else invalidateAll();
+    },
+    onError: (error: Error) => messageApi.error(errorMessage(error)),
+  });
+
+  const forceActivate = useMutation({
+    mutationFn: (address: string) => forceActivateCampaign(address),
+    onSuccess: (res, address) => {
+      messageApi.success("已跳过支付校验，活动已进入进行中");
+      setActivating(null);
+      if (res.data) applyDetail(address, res.data);
       else invalidateAll();
     },
     onError: (error: Error) => messageApi.error(errorMessage(error)),
@@ -259,7 +272,7 @@ export function E2eCampaignsPage() {
       ),
     },
     {
-      title: "操作", width: 190, fixed: "right" as const,
+      title: "操作", width: 270, fixed: "right" as const,
       render: (_: unknown, row: E2eCampaign) => (
         <Space size={8}>
           <Button size="small" type="link" style={{ padding: 0 }} onClick={() => openDetail(row)}>
@@ -268,6 +281,11 @@ export function E2eCampaignsPage() {
           <Button size="small" onClick={() => openEdit(row)}>
             编辑
           </Button>
+          {row.status === "pending" && (
+            <Button size="small" type="primary" ghost onClick={() => setActivating(row)}>
+              确认已支付
+            </Button>
+          )}
           {row.status === "review" && (
             <Button size="small" type="primary" ghost onClick={() => { setCompleting(row); completeForm.resetFields(); }}>
               标记结算完成
@@ -337,19 +355,27 @@ export function E2eCampaignsPage() {
     ? Object.entries(detailTweet.flags || {}).filter(([, value]) => value).map(([key]) => key)
     : [];
 
-  return <PermissionGuard permission="e2e-campaigns"><PageSection title="E2E 活动管理" description="管理 E2E 链上活动：查看活动配置与报名排行、编辑活动参数、在待发奖阶段标记结算完成。"><>{contextHolder}
-    {statusCounts && (
-      <Space size={8} wrap style={{ marginBottom: 12 }}>
-        {STATUS_OPTIONS.map((opt) => (
-          <Tag key={opt.value} color={STATUS_TAG[opt.value]?.color} style={{ marginRight: 0 }}>
-            {opt.label} {statusCounts[opt.value] ?? 0}
-          </Tag>
-        ))}
-        <Tag style={{ marginRight: 0 }}>总计 {statusCounts.total ?? 0}</Tag>
-      </Space>
-    )}
+  return <PermissionGuard permission="e2e-campaigns"><PageSection title="E2E 活动管理" description="管理 E2E 链上活动：查看活动配置与报名排行、编辑活动参数、确认支付并激活活动、在待发奖阶段标记结算完成。"><>{contextHolder}
+    <Space size={8} wrap style={{ marginBottom: 12 }} role="group" aria-label="活动状态筛选">
+      <Button
+        type={statusFilter === undefined ? "primary" : "default"}
+        aria-pressed={statusFilter === undefined}
+        onClick={() => { setStatusFilter(undefined); setPage(1); }}
+      >
+        全部 {statusCounts?.total ?? 0}
+      </Button>
+      {STATUS_OPTIONS.map((opt) => (
+        <Button
+          key={opt.value}
+          type={statusFilter === opt.value ? "primary" : "default"}
+          aria-pressed={statusFilter === opt.value}
+          onClick={() => { setStatusFilter(opt.value); setPage(1); }}
+        >
+          {opt.label} {statusCounts?.[opt.value] ?? 0}
+        </Button>
+      ))}
+    </Space>
     <Card title="活动列表" extra={<Space wrap>
-      <Select allowClear placeholder="状态" style={{ width: 110 }} options={STATUS_OPTIONS} value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} />
       <Input.Search
         allowClear
         placeholder="搜索地址 / 作者 / 推文内容"
@@ -360,7 +386,7 @@ export function E2eCampaignsPage() {
       />
       <Button icon={<ReloadOutlined />} onClick={refresh}>刷新</Button>
     </Space>}>
-      {query.isLoading ? <div style={{ padding: 48, textAlign: "center" }}><Spin /></div> : <Table rowKey="address" size="small" columns={columns} dataSource={campaigns} scroll={{ x: 1180 }} pagination={{
+      {query.isLoading ? <div style={{ padding: 48, textAlign: "center" }}><Spin /></div> : <Table rowKey="address" size="small" columns={columns} dataSource={campaigns} scroll={{ x: 1260 }} pagination={{
         current: page,
         pageSize,
         total: pagination?.total || 0,
@@ -595,6 +621,35 @@ export function E2eCampaignsPage() {
           </Form.Item>
         </Space.Compact>
       </Form>
+    </Modal>
+
+    <Modal
+      open={Boolean(activating)}
+      title="确认已支付并开始活动"
+      width={520}
+      onCancel={() => setActivating(null)}
+      onOk={() => activating && forceActivate.mutate(activating.address)}
+      confirmLoading={forceActivate.isPending}
+      okText="跳过校验并开始"
+      okButtonProps={{ danger: true }}
+      cancelText="取消"
+      destroyOnClose
+    >
+      <Typography.Paragraph>
+        此操作会跳过真实支付校验，直接将活动从「待支付」变为「进行中」，并从当前时间重新计算活动起止时间。
+      </Typography.Paragraph>
+      <Typography.Paragraph type="danger" strong>
+        请仅在已人工确认收款或明确需要免支付投放时执行。
+      </Typography.Paragraph>
+      {activating && (
+        <Descriptions bordered size="small" column={1}>
+          <Descriptions.Item label="活动">@{activating.ownerHandle || "-"}</Descriptions.Item>
+          <Descriptions.Item label="活动地址">
+            <Typography.Text copyable code style={{ fontSize: 12 }}>{activating.address}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="应付总额">{formatAmount(activating.depositRewards)}</Descriptions.Item>
+        </Descriptions>
+      )}
     </Modal>
 
     <Modal
