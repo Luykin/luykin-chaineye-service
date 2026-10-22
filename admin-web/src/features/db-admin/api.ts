@@ -1,5 +1,6 @@
-import { apiRequest } from "@/services/apiClient";
+import { ApiError, apiRequest, buildApiUrl } from "@/services/apiClient";
 import type {
+  DbAdminAccessManagementData,
   ApiSuccess,
   DbAdminDatabasesData,
   DbAdminRowsData,
@@ -92,6 +93,65 @@ export function deleteDbAdminRow(tableKey: string, id: string | number, db?: str
       method: "DELETE",
     }
   );
+}
+
+function parseDownloadFilename(contentDisposition: string | null, fallback: string) {
+  const encoded = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch (_) {}
+  }
+  const plain = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1];
+  return plain || fallback;
+}
+
+export async function exportDbAdminRows(
+  tableKey: string,
+  params: { db?: string; q?: string; sortBy?: string; sortOrder?: "ASC" | "DESC" }
+) {
+  const searchParams = new URLSearchParams();
+  if (params.db) searchParams.set("db", params.db);
+  if (params.q) searchParams.set("q", params.q);
+  if (params.sortBy) searchParams.set("sortBy", params.sortBy);
+  if (params.sortOrder) searchParams.set("sortOrder", params.sortOrder);
+  const response = await fetch(buildApiUrl(
+    `${BASE_PATH}/tables/${encodeURIComponent(tableKey)}/export?${searchParams.toString()}`
+  ), {
+    credentials: "include",
+    headers: { Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json" },
+  });
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    const data: unknown = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : await response.text().catch(() => null);
+    const message = typeof data === "object" && data && "error" in data
+      ? String((data as { error?: string }).error || "导出失败")
+      : `导出失败 (${response.status})`;
+    throw new ApiError(message, response.status, data);
+  }
+  return {
+    blob: await response.blob(),
+    filename: parseDownloadFilename(response.headers.get("content-disposition"), `${tableKey}.xlsx`),
+  };
+}
+
+export function fetchDbAdminAccessGrants() {
+  return apiRequest<ApiSuccess<DbAdminAccessManagementData>>(`${BASE_PATH}/access-grants`);
+}
+
+export function grantDbAdminTableAccess(payload: { adminId: number; databaseKey: string; tableKey: string }) {
+  return apiRequest<ApiSuccess<{ id: number; created: boolean }>>(`${BASE_PATH}/access-grants`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function revokeDbAdminTableAccess(grantId: number) {
+  return apiRequest<ApiSuccess<{ id: number }>>(`${BASE_PATH}/access-grants/${grantId}`, {
+    method: "DELETE",
+  });
 }
 
 

@@ -52,8 +52,6 @@ const PERMISSION_OPTIONS = [
   { label: "图片上传", value: "assets:upload" },
   { label: "VIP 管理", value: "vip-management" },
   { label: "Redis 管理", value: "redis-management" },
-  { label: "DB Admin 读取", value: "db-admin:read" },
-  { label: "DB Admin 写入", value: "db-admin:write" },
   { label: "发布上线", value: "deploy:release" },
   { label: "紧急回滚", value: "deploy:rollback" },
   { label: "LLM 测试", value: "llm-test" },
@@ -66,6 +64,16 @@ const PERMISSION_OPTIONS = [
   { label: "操作记录", value: "audit-logs:read" },
   { label: "权限管理", value: "admin:manage-permissions" },
 ];
+
+const DB_ADMIN_SEPARATE_PERMISSIONS = new Set([
+  "db-admin:read",
+  "db-admin:write",
+  "db-admin:delegated-read",
+]);
+
+function withoutDbAdminPermissions(permissions?: string[]) {
+  return (permissions || []).filter((permission) => !DB_ADMIN_SEPARATE_PERMISSIONS.has(permission));
+}
 
 export function AdminUsersPage() {
   const [messageApi, contextHolder] = message.useMessage();
@@ -160,13 +168,13 @@ export function AdminUsersPage() {
   function openPermissionEditor(row: AdminUserItem, shouldCopy = false) {
     setEditingUser(row);
     setCopyMode(shouldCopy);
-    permForm.setFieldsValue({ permissions: row.permissions || [], copyFromAdminId: undefined });
+    permForm.setFieldsValue({ permissions: withoutDbAdminPermissions(row.permissions), copyFromAdminId: undefined });
   }
 
   function copyPermissionsFrom(sourceId: number) {
     const source = rows.find((row) => Number(row.id) === Number(sourceId));
     if (!source) return;
-    permForm.setFieldsValue({ permissions: source.permissions || [] });
+    permForm.setFieldsValue({ permissions: withoutDbAdminPermissions(source.permissions) });
     messageApi.info(`已复制 ${source.email} 的权限，可继续修改后保存`);
   }
 

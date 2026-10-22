@@ -21,24 +21,28 @@ import {
   message,
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { DeleteOutlined, EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DownloadOutlined, EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined, SearchOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { NoPermissionPage } from "@/pages/NoPermissionPage";
 import { useAuth } from "@/app/auth";
 import {
   createDbAdminRow,
   deleteDbAdminRow,
+  exportDbAdminRows,
+  fetchDbAdminAccessGrants,
   fetchDbAdminDatabases,
   fetchDbAdminRows,
   fetchDbAdminSchema,
   fetchDbAdminTables,
   fetchDbAdminWebAuthnOptions,
   fetchDbAdminWebAuthnStatus,
+  grantDbAdminTableAccess,
+  revokeDbAdminTableAccess,
   saveDbAdminCredentials,
   updateDbAdminRow,
   verifyDbAdminWebAuthn,
 } from "./api";
-import type { DbAdminColumn, DbAdminDatabaseOption, DbAdminRow, DbAdminTableMeta } from "./types";
+import type { DbAdminColumn, DbAdminDatabaseOption, DbAdminRow, DbAdminTableGrant, DbAdminTableMeta } from "./types";
 import "./db-admin.css";
 
 const { Text, Title } = Typography;
@@ -274,8 +278,10 @@ async function browserSupportsWebAuthn() {
 
 export function DbAdminPage() {
   const { user, hasPermission } = useAuth();
+  const isSuper = user?.role === "super";
+  const isDelegatedReader = !isSuper && (user?.permissions || []).includes("db-admin:delegated-read");
   const [messageApi, contextHolder] = message.useMessage();
-  const [selectedDb, setSelectedDb] = useState<string>("luykindatabase");
+  const [selectedDb, setSelectedDb] = useState<string>(isDelegatedReader ? "" : "luykindatabase");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -291,10 +297,14 @@ export function DbAdminPage() {
   const [reauthing, setReauthing] = useState(false);
   const [reauthError, setReauthError] = useState<string | null>(null);
   const [credModalOpen, setCredModalOpen] = useState(false);
+  const [grantModalOpen, setGrantModalOpen] = useState(false);
+  const [exportingTableKey, setExportingTableKey] = useState<string | null>(null);
   const [credForm] = Form.useForm<{ username: string; password: string }>();
+  const [grantForm] = Form.useForm<{ adminId: number; databaseKey: string; tableKey: string }>();
+  const grantDatabaseKey = Form.useWatch("databaseKey", grantForm);
 
-  const canRead = user?.role === "super" && hasPermission("db-admin:read");
-  const canWrite = user?.role === "super" && hasPermission("db-admin:write");
+  const canRead = isSuper || isDelegatedReader;
+  const canWrite = isSuper && hasPermission("db-admin:write");
 
   const performDbAdminReauth = async () => {
     try {
@@ -378,13 +388,23 @@ export function DbAdminPage() {
     queryFn: fetchDbAdminDatabases,
     enabled: canRead && reauthVerified,
   });
-  const databaseOptions: DbAdminDatabaseOption[] = databasesQuery.data?.data?.databases || [
-    { key: "luykindatabase", name: "luykindatabase", label: "luykindatabase（主业务库）" },
-    { key: "dev", name: "dev", label: "dev（Twitter 底层库 · 只读）", readOnly: true, schema: "dev" },
-    { key: "luykindatabase2", name: "luykindatabase2", label: "luykindatabase2（数据 / E2E 库）", configurableCredentials: true, username: "luykin2" },
-  ];
+  const databaseOptions: DbAdminDatabaseOption[] = databasesQuery.data?.data?.databases || (
+    isDelegatedReader
+      ? []
+      : [
+          { key: "luykindatabase", name: "luykindatabase", label: "luykindatabase（主业务库）" },
+          { key: "dev", name: "dev", label: "dev（Twitter 底层库 · 只读）", readOnly: true, schema: "dev" },
+          { key: "luykindatabase2", name: "luykindatabase2", label: "luykindatabase2（数据 / E2E 库）", configurableCredentials: true, username: "luykin2" },
+        ]
+  );
   const currentDbOption = databaseOptions.find((item) => item.key === selectedDb) || databaseOptions[0];
-  const isReadOnlyDataSource = Boolean(currentDbOption?.readOnly);
+  const isReadOnlyMode = isDelegatedReader || Boolean(currentDbOption?.readOnly);
+
+  useEffect(() => {
+    if (!databaseOptions.length || databaseOptions.some((item) => item.key === selectedDb)) return;
+    setSelectedDb(databasesQuery.data?.data?.defaultDatabase || databaseOptions[0].key);
+    setSelectedKey(null);
+  }, [databaseOptions, databasesQuery.data?.data?.defaultDatabase, selectedDb]);
 
   const saveCredsMutation = useMutation({
     mutationFn: (values: { username: string; password: string }) => saveDbAdminCredentials(selectedDb, values),
@@ -408,10 +428,16 @@ export function DbAdminPage() {
     setCredModalOpen(true);
   }
 
+  function openGrantModal() {
+    const databaseKey = selectedDb || databasesQuery.data?.data?.defaultDatabase || databaseOptions[0]?.key;
+    if (databaseKey) grantForm.setFieldsValue({ databaseKey });
+    setGrantModalOpen(true);
+  }
+
   const tablesQuery = useQuery({
     queryKey: ["db-admin", "tables", selectedDb],
     queryFn: () => fetchDbAdminTables(selectedDb),
-    enabled: canRead && reauthVerified,
+    enabled: canRead && reauthVerified && databaseOptions.some((item) => item.key === selectedDb),
   });
   const tables = tablesQuery.data?.data || [];
   const groupedTables = useMemo(() => groupTablesForSidebar(tables), [tables]);
@@ -476,6 +502,37 @@ export function DbAdminPage() {
     onError: (error: Error) => messageApi.error(error.message || "删除失败"),
   });
 
+  const accessQuery = useQuery({
+    queryKey: ["db-admin", "access-grants"],
+    queryFn: fetchDbAdminAccessGrants,
+    enabled: isSuper && reauthVerified && grantModalOpen,
+  });
+
+  const grantableTablesQuery = useQuery({
+    queryKey: ["db-admin", "grantable-tables", grantDatabaseKey],
+    queryFn: () => fetchDbAdminTables(grantDatabaseKey!),
+    enabled: isSuper && reauthVerified && grantModalOpen && !!grantDatabaseKey,
+  });
+
+  const grantMutation = useMutation({
+    mutationFn: grantDbAdminTableAccess,
+    onSuccess: (response) => {
+      messageApi.success(response.data.created ? "表查看权限已授予" : "该用户已拥有此表的查看权限");
+      grantForm.resetFields(["tableKey"]);
+      void accessQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "授权失败"),
+  });
+
+  const revokeGrantMutation = useMutation({
+    mutationFn: revokeDbAdminTableAccess,
+    onSuccess: () => {
+      messageApi.success("表查看权限已撤销");
+      void accessQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "撤销失败"),
+  });
+
   const tableColumns = useMemo<ColumnsType<DbAdminRow>>(() => {
     const baseColumns: ColumnsType<DbAdminRow> = columns.map((column) => ({
       title: (
@@ -494,7 +551,7 @@ export function DbAdminPage() {
       render: (value: unknown) => formatValue(value),
     }));
 
-    if (!isReadOnlyDataSource) {
+    if (!isReadOnlyMode) {
       baseColumns.push({
         title: "操作",
         key: "actions",
@@ -538,7 +595,7 @@ export function DbAdminPage() {
     }
 
     return baseColumns;
-  }, [canWrite, columns, currentTable?.allowDelete, currentTable?.allowUpdate, deleteMutation, isReadOnlyDataSource, primaryKey]);
+  }, [canWrite, columns, currentTable?.allowDelete, currentTable?.allowUpdate, deleteMutation, isReadOnlyMode, primaryKey]);
 
   if (!canRead) return <NoPermissionPage />;
 
@@ -550,10 +607,14 @@ export function DbAdminPage() {
           <div>
             <Text className="db-admin-eyebrow">Protected PostgreSQL Console</Text>
             <Title level={2}>需要指纹认证后进入</Title>
-            <Text type="secondary">数据表管理是高危入口。除了 super + db-admin 权限，进入页面和调用接口都必须完成指纹 / Face ID / 通行密钥二次验证。</Text>
+            <Text type="secondary">
+              {isDelegatedReader
+                ? "你仅能查看超级管理员授权的数据库和数据表；进入页面和调用接口仍需完成指纹 / Face ID / 通行密钥二次验证。"
+                : "数据表管理是高危入口。进入页面和调用接口都必须完成指纹 / Face ID / 通行密钥二次验证。"}
+            </Text>
           </div>
           <Space wrap>
-            <Tag color="blue">super only</Tag>
+            <Tag color="blue">{isDelegatedReader ? "授权表只读" : "超级管理员"}</Tag>
             <Tag color="gold">WebAuthn required</Tag>
           </Space>
         </section>
@@ -578,6 +639,15 @@ export function DbAdminPage() {
   function applySearch() {
     setPage(1);
     setAppliedSearch(searchText.trim());
+  }
+
+  function selectTable(tableKey: string) {
+    setSelectedKey(tableKey);
+    setPage(1);
+    setAppliedSearch("");
+    setSearchText("");
+    setSortBy(undefined);
+    setSortOrder("DESC");
   }
 
   function handleTableChange(pagination: TablePaginationConfig, _: unknown, sorter: unknown) {
@@ -614,6 +684,32 @@ export function DbAdminPage() {
     }
   }
 
+  async function handleExport() {
+    if (!selectedKey) return;
+    try {
+      setExportingTableKey(selectedKey);
+      const result = await exportDbAdminRows(selectedKey, {
+        db: selectedDb,
+        q: appliedSearch,
+        sortBy,
+        sortOrder,
+      });
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      messageApi.success(`已导出 ${currentTable?.label || selectedKey}`);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "导出失败");
+    } finally {
+      setExportingTableKey(null);
+    }
+  }
+
   return (
     <div className="db-admin-page">
       {contextHolder}
@@ -624,7 +720,10 @@ export function DbAdminPage() {
         </div>
         <Space wrap size={12}>
           <Select
-            value={selectedDb}
+            value={selectedDb || undefined}
+            aria-label="选择数据库"
+            loading={databasesQuery.isLoading}
+            placeholder="选择数据库"
             style={{ minWidth: 260 }}
             options={databaseOptions.map((item) => ({
               value: item.key,
@@ -640,9 +739,14 @@ export function DbAdminPage() {
               setSortOrder("DESC");
             }}
           />
-          {currentDbOption?.configurableCredentials ? (
+          {isSuper && currentDbOption?.configurableCredentials ? (
             <Button icon={<KeyOutlined />} onClick={openCredModal}>
               连接账号配置
+            </Button>
+          ) : null}
+          {isSuper ? (
+            <Button icon={<SafetyCertificateOutlined />} onClick={openGrantModal}>
+              表查看授权
             </Button>
           ) : null}
           <Button icon={<ReloadOutlined />} onClick={() => { void tablesQuery.refetch(); void schemaQuery.refetch(); void rowsQuery.refetch(); }}>
@@ -651,13 +755,24 @@ export function DbAdminPage() {
         </Space>
       </section>
 
-      {isReadOnlyDataSource ? (
+      {isReadOnlyMode ? (
         <Alert
           className="db-admin-readonly-alert"
           type="info"
           showIcon
-          message="dev 数据源为只读模式"
-          description="当前仅展示 K8s PostgreSQL 只读数据源 dev schema 中的数据表，支持分页、搜索和排序；新增、编辑和删除在界面与后端均已禁用。"
+          message={isDelegatedReader ? "当前账号为授权表只读模式" : `${selectedDb} 数据源为只读模式`}
+          description={isDelegatedReader
+            ? "当前仅展示超级管理员授权给你的数据库和数据表，支持分页、搜索、排序和 Excel 导出，不具备任何写入权限。"
+            : `当前仅展示 ${selectedDb} 中允许查看的数据表，支持分页、搜索、排序和 Excel 导出；新增、编辑和删除在界面与后端均已禁用。`}
+        />
+      ) : null}
+
+      {databasesQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="加载数据库列表失败"
+          description={databasesQuery.error instanceof Error ? databasesQuery.error.message : "请刷新页面后重试"}
         />
       ) : null}
 
@@ -678,7 +793,7 @@ export function DbAdminPage() {
       ) : null}
 
       <div className="db-admin-workbench">
-        <Card className="db-admin-sidebar" title={`数据表（${selectedDb}${isReadOnlyDataSource ? " · 只读" : ""}）`} loading={tablesQuery.isLoading}>
+        <Card className="db-admin-sidebar" title={`数据表（${selectedDb}${isReadOnlyMode ? " · 只读" : ""}）`} loading={tablesQuery.isLoading}>
           {groupedTables.length ? (
             <div className="db-admin-table-groups">
               {groupedTables.map((group) => (
@@ -692,13 +807,15 @@ export function DbAdminPage() {
                     renderItem={(item) => (
                       <List.Item
                         className={item.key === selectedKey ? "db-admin-table-item db-admin-table-item--active" : "db-admin-table-item"}
-                        onClick={() => {
-                          setSelectedKey(item.key);
-                          setPage(1);
-                          setAppliedSearch("");
-                          setSearchText("");
-                          setSortBy(undefined);
-                          setSortOrder("DESC");
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={item.key === selectedKey}
+                        onClick={() => selectTable(item.key)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            selectTable(item.key);
+                          }
                         }}
                       >
                       <List.Item.Meta
@@ -720,7 +837,7 @@ export function DbAdminPage() {
             <div className="db-admin-current-table-title">
               <span>
                 {currentTable.label}
-                {isReadOnlyDataSource ? <Tag color="blue">只读</Tag> : null}
+                {isReadOnlyMode ? <Tag color="blue">只读</Tag> : null}
               </span>
               <Text type="secondary">{currentTable.table}</Text>
             </div>
@@ -737,7 +854,15 @@ export function DbAdminPage() {
                 className="db-admin-search"
               />
               <Button onClick={applySearch}>搜索</Button>
-              {!isReadOnlyDataSource ? (
+              <Button
+                icon={<DownloadOutlined />}
+                disabled={!selectedKey}
+                loading={exportingTableKey === selectedKey}
+                onClick={() => void handleExport()}
+              >
+                导出 Excel
+              </Button>
+              {!isReadOnlyMode ? (
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
@@ -783,6 +908,129 @@ export function DbAdminPage() {
         onClose={() => setEditorOpen(false)}
         onSubmit={handleEditorSubmit}
       />
+
+      <Modal
+        open={grantModalOpen}
+        title="数据库表查看授权"
+        width={1120}
+        footer={null}
+        destroyOnClose
+        onCancel={() => {
+          setGrantModalOpen(false);
+          grantForm.resetFields();
+        }}
+      >
+        <Alert
+          className="db-admin-grant-alert"
+          type="warning"
+          showIcon
+          message="授权仅包含单表只读和 Excel 导出"
+          description="被授权管理员只能看到授权清单中的数据库和数据表，不能新增、编辑或删除数据。撤销后，其后续 API 请求会立即被拒绝。"
+        />
+        {accessQuery.isError || grantableTablesQuery.isError ? (
+          <Alert
+            className="db-admin-grant-error"
+            type="error"
+            showIcon
+            message="授权数据加载失败"
+            description={(accessQuery.error || grantableTablesQuery.error) instanceof Error
+              ? (accessQuery.error || grantableTablesQuery.error as Error).message
+              : "请关闭弹窗后重试"}
+          />
+        ) : null}
+        <Form
+          form={grantForm}
+          layout="vertical"
+          className="db-admin-grant-form"
+          onFinish={(values) => grantMutation.mutate(values)}
+        >
+          <Form.Item name="adminId" label="授权管理员" rules={[{ required: true, message: "请选择管理员" }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择非 super 管理员"
+              loading={accessQuery.isLoading}
+              options={(accessQuery.data?.data?.admins || []).map((admin) => ({
+                value: admin.id,
+                label: `${admin.email}${admin.isActive && admin.canLogin ? "" : "（已停用）"}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item name="databaseKey" label="数据库" rules={[{ required: true, message: "请选择数据库" }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择数据库"
+              loading={databasesQuery.isLoading}
+              options={databaseOptions.map((database) => ({
+                value: database.key,
+                label: database.label || database.name,
+              }))}
+              onChange={() => grantForm.resetFields(["tableKey"])}
+            />
+          </Form.Item>
+          <Form.Item name="tableKey" label="数据表" rules={[{ required: true, message: "请选择数据表" }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              disabled={!grantDatabaseKey}
+              placeholder={grantDatabaseKey ? "选择仅可查看的表" : "请先选择数据库"}
+              loading={grantableTablesQuery.isLoading}
+              options={(grantableTablesQuery.data?.data || []).map((table) => ({
+                value: table.key,
+                label: `${table.label} · ${table.table}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item label=" ">
+            <Button type="primary" htmlType="submit" loading={grantMutation.isPending}>
+              新增只读授权
+            </Button>
+          </Form.Item>
+        </Form>
+
+        <Table<DbAdminTableGrant>
+          rowKey="id"
+          size="small"
+          loading={accessQuery.isLoading}
+          dataSource={accessQuery.data?.data?.grants || []}
+          pagination={{ pageSize: 8, showSizeChanger: false }}
+          scroll={{ x: 900 }}
+          locale={{ emptyText: <Empty description="暂无表查看授权" /> }}
+          columns={[
+            {
+              title: "管理员",
+              dataIndex: ["admin", "email"],
+              render: (_value, grant) => (
+                <Space size={6} wrap>
+                  <Text>{grant.admin?.email || `Admin #${grant.adminId}`}</Text>
+                  {grant.admin && (!grant.admin.isActive || !grant.admin.canLogin) ? <Tag>已停用</Tag> : null}
+                </Space>
+              ),
+            },
+            { title: "数据库", dataIndex: "databaseKey", width: 150, render: (value: string) => <Text code>{value}</Text> },
+            { title: "数据表", dataIndex: "tableKey", render: (value: string) => <Text code>{value}</Text> },
+            { title: "授权人", dataIndex: ["grantedByAdmin", "email"], render: (value?: string) => value || "-" },
+            { title: "授权时间", dataIndex: "createdAt", width: 180, render: (value: string) => value ? new Date(value).toLocaleString() : "-" },
+            {
+              title: "操作",
+              width: 100,
+              fixed: "right",
+              render: (_value, grant) => (
+                <Popconfirm
+                  title="撤销这条表查看权限？"
+                  description="撤销后该管理员将无法继续查看或导出此表。"
+                  okText="撤销"
+                  okButtonProps={{ danger: true, loading: revokeGrantMutation.isPending }}
+                  onConfirm={() => revokeGrantMutation.mutateAsync(grant.id)}
+                >
+                  <Button size="small" danger>撤销</Button>
+                </Popconfirm>
+              ),
+            },
+          ]}
+        />
+      </Modal>
 
       <Modal
         open={credModalOpen}

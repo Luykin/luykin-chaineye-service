@@ -21,6 +21,10 @@ const {
   getWebAuthnRequestConfig,
   filterWebAuthnCredentialsForRp,
 } = require("../utils/webauthnConfig");
+const {
+  DELEGATED_DB_ADMIN_PERMISSION,
+  hasAnyAdminTableGrant,
+} = require("../db-admin/access");
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -38,6 +42,11 @@ const ADMIN_LOGIN_EMAIL_OTP_RESEND_SECONDS = 60;
 const ADMIN_LOGIN_EMAIL_OTP_MAX_SENDS = 3;
 const ADMIN_LOGIN_EMAIL_OTP_MAX_VERIFY_ATTEMPTS = 5;
 const ADMIN_LOGIN_EMAIL_OTP_SECRET = process.env.ADMIN_EMAIL_OTP_SECRET || TEMP_JWT_SECRET;
+const DB_ADMIN_SEPARATE_PERMISSIONS = new Set([
+  "db-admin:read",
+  "db-admin:write",
+  DELEGATED_DB_ADMIN_PERMISSION,
+]);
 
 function getAdminLoginLockRemainingMinutes(admin) {
   if (!admin?.loginLockedUntil) return 0;
@@ -769,6 +778,13 @@ router.get("/session", adminAuth, async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
     const admin = req.adminUser;
+    const storedPermissions = Array.isArray(admin.permissions) ? admin.permissions : [];
+    const permissions = new Set(admin.role === "super"
+      ? storedPermissions
+      : storedPermissions.filter((permission) => !DB_ADMIN_SEPARATE_PERMISSIONS.has(permission)));
+    if (admin.role !== "super" && await hasAnyAdminTableGrant(admin.id)) {
+      permissions.add(DELEGATED_DB_ADMIN_PERMISSION);
+    }
     return res.json({
       success: true,
       loggedIn: true,
@@ -776,7 +792,7 @@ router.get("/session", adminAuth, async (req, res) => {
         id: admin.id,
         email: admin.email,
         role: admin.role,
-        permissions: Array.isArray(admin.permissions) ? admin.permissions : [],
+        permissions: Array.from(permissions),
         receivesDailyReport: !!admin.receivesDailyReport,
         isActive: !!admin.isActive,
         canLogin: !!admin.canLogin,
@@ -1607,8 +1623,12 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
       perms = permissions.filter((p) => typeof p === "string").map((p) => p.trim()).filter((p) => p.length > 0);
     }
 
+    if (perms.some((permission) => DB_ADMIN_SEPARATE_PERMISSIONS.has(permission))) {
+      return res.status(400).json({ success: false, error: "DB Admin 表查看权限请在数据表管理页单独配置" });
+    }
+
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["*", "admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
+    const RESTRICTED = new Set(["*", "admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = perms.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -1896,8 +1916,12 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
 
+    if (sanitized.some((permission) => DB_ADMIN_SEPARATE_PERMISSIONS.has(permission))) {
+      return res.status(400).json({ success: false, error: "DB Admin 表查看权限请在数据表管理页单独配置" });
+    }
+
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["*", "admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
+    const RESTRICTED = new Set(["*", "admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = sanitized.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {

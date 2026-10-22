@@ -7,9 +7,11 @@ const {
   isPostgresReadOnlyConfigured,
 } = require("../../infra/k8s/postgres-readonly");
 const { DEFAULT_READONLY_COLUMNS, SENSITIVE_COLUMN_PATTERN, tableMetadata, tableOverrides } = require("./config");
+const { createHttpError } = require("./errors");
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
+const MAX_EXPORT_ROWS = 20000;
 const DEFAULT_DB_KEY = process.env.PG_DATABASE || "luykindatabase";
 
 const DATABASE_DEFINITIONS = [
@@ -223,12 +225,6 @@ async function saveDatabaseCredentials(dbKey, body = {}) {
     username,
     connected: true,
   };
-}
-
-function createHttpError(statusCode, message) {
-  const error = new Error(message);
-  error.statusCode = statusCode;
-  return error;
 }
 
 function quoteIdentifier(name) {
@@ -572,6 +568,39 @@ async function listRows(key, query = {}, dbKey) {
   };
 }
 
+async function exportRows(key, query = {}, dbKey) {
+  const resolvedDbKey = resolveDbKey(dbKey || query.db);
+  const db = await getDbInstance(resolvedDbKey);
+  const config = await getTableConfig(key, resolvedDbKey);
+  const columns = await getColumns(config, resolvedDbKey);
+  const publicColumns = visibleColumns(columns);
+  const selectColumns = publicColumns.map((column) => quoteIdentifier(column.name)).join(", ");
+  const replacements = {};
+  const whereSql = buildSearchSql(config, columns, query.q, replacements);
+  const orderSql = buildOrderSql(config, columns, query);
+
+  const [countRow] = await db.query(
+    `SELECT COUNT(*)::int AS count FROM ${tableSql(config)} ${whereSql}`,
+    { type: QueryTypes.SELECT, replacements }
+  );
+  const total = Number(countRow?.count || 0);
+  if (total > MAX_EXPORT_ROWS) {
+    throw createHttpError(400, `当前结果共 ${total} 条，单次最多导出 ${MAX_EXPORT_ROWS} 条，请先搜索缩小范围`);
+  }
+
+  const rows = await db.query(
+    `SELECT ${selectColumns} FROM ${tableSql(config)} ${whereSql} ${orderSql}`,
+    { type: QueryTypes.SELECT, replacements }
+  );
+
+  return {
+    table: publicTable(config, columns),
+    columnNames: publicColumns.map((column) => column.name),
+    rows,
+    total,
+  };
+}
+
 function parseJsonValue(value, columnName) {
   if (value === null || value === undefined || value === "") return value === "" ? null : value;
   if (typeof value === "string") {
@@ -757,6 +786,7 @@ module.exports = {
   listTables,
   getTableSchema,
   listRows,
+  exportRows,
   createRow,
   updateRow,
   deleteRow,

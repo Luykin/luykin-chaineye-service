@@ -281,3 +281,64 @@
   display: block;
   max-width: 100%;
 }
+
+.db-admin-grant-alert.ant-alert,
+.db-admin-grant-error.ant-alert {
+  margin-bottom: 18px;
+  border-radius: 14px;
+}
+
+.db-admin-grant-form.ant-form {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) minmax(180px, 0.8fr) minmax(280px, 1.3fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+  margin-bottom: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.db-admin-grant-form .ant-form-item {
+  margin-bottom: 0;
+}
+
+.db-admin-grant-form .ant-select {
+  width: 100%;
+}
+
+.db-admin-grant-form .ant-btn {
+  min-height: 44px;
+}
+
+.db-admin-grant-form :focus-visible,
+.db-admin-table-item:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1050px) {
+  .db-admin-grant-form.ant-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .db-admin-grant-form .ant-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 800px) {
+  .db-admin-grant-form.ant-form {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .db-admin-grant-form .ant-form-item:last-child .ant-form-item-label {
+    display: none;
+  }
+
+  .db-admin-grant-form .ant-btn {
+    width: 100%;
+  }
+}

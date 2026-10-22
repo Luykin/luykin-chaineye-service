@@ -176,8 +176,14 @@ export function AdminLayout() {
   }, [user?.role]);
 
   const permittedNavItems = useMemo(
-    () => visibleMainNavItems.filter((item) => hasPermission(item.permission)),
-    [hasPermission, visibleMainNavItems]
+    () => visibleMainNavItems.filter((item) => {
+      if (!item.exactPermission || user?.role === "super") return hasPermission(item.permission);
+      const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
+      return Array.isArray(item.permission)
+        ? item.permission.some((permission) => permissions.includes(permission))
+        : !!item.permission && permissions.includes(item.permission);
+    }),
+    [hasPermission, user?.permissions, user?.role, visibleMainNavItems]
   );
 
   const navigationMenuItems = useMemo<MenuProps["items"]>(() => {

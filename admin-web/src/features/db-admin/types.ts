@@ -60,6 +60,30 @@ export interface DbAdminRowsData {
   pagination: DbAdminPagination;
 }
 
+export interface DbAdminGrantAdmin {
+  id: number;
+  email: string;
+  role?: "admin" | "super";
+  isActive: boolean;
+  canLogin: boolean;
+}
+
+export interface DbAdminTableGrant {
+  id: number;
+  adminId: number;
+  databaseKey: string;
+  tableKey: string;
+  grantedByAdminId?: number | null;
+  createdAt: string;
+  admin?: DbAdminGrantAdmin | null;
+  grantedByAdmin?: Pick<DbAdminGrantAdmin, "id" | "email"> | null;
+}
+
+export interface DbAdminAccessManagementData {
+  admins: DbAdminGrantAdmin[];
+  grants: DbAdminTableGrant[];
+}
+
 export interface ApiSuccess<T> {
   success: boolean;
   data: T;

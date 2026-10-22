@@ -20,6 +20,7 @@ const UnregisteredUserRegistrationModel = require("../../xhunt/models/Unregister
 const XhuntAdminManagerModel = require("../../xhunt/models/XhuntAdminManager");
 const XhuntAdminAuditLogModel = require("../../xhunt/models/XhuntAdminAuditLog");
 const XhuntAdminWebAuthnCredentialModel = require("../../xhunt/models/XhuntAdminWebAuthnCredential");
+const XhuntAdminDbTableGrantModel = require("../../xhunt/models/XhuntAdminDbTableGrant");
 const XhuntNacosConfigSnapshotModel = require("../../xhunt/models/XhuntNacosConfigSnapshot");
 const XhuntExternalLeaderboardAdapterModel = require("../../xhunt/models/XhuntExternalLeaderboardAdapter");
 const XhuntVipTestUserModel = require("../../xhunt/models/XhuntVipTestUser");
@@ -94,6 +95,7 @@ function initModels(pgInstance) {
     XhuntAdminManager: XhuntAdminManagerModel(pgInstance),
     XhuntAdminAuditLog: XhuntAdminAuditLogModel(pgInstance),
     XhuntAdminWebAuthnCredential: XhuntAdminWebAuthnCredentialModel(pgInstance),
+    XhuntAdminDbTableGrant: XhuntAdminDbTableGrantModel(pgInstance),
     XhuntNacosConfigSnapshot: XhuntNacosConfigSnapshotModel(pgInstance),
     XhuntExternalLeaderboardAdapter: XhuntExternalLeaderboardAdapterModel(pgInstance),
     XhuntVipTestUser: XhuntVipTestUserModel(pgInstance),

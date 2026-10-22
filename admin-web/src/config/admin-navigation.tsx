@@ -52,6 +52,7 @@ export interface AdminNavItem {
   icon: ReactNode;
   label: string;
   permission?: string | string[];
+  exactPermission?: boolean;
   group: "main";
   implemented?: boolean;
   superOnly?: boolean;
@@ -97,7 +98,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/feature-flags", icon: <ControlOutlined />, label: "功能开关", permission: "feature_flags_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/banner-config", icon: <PictureOutlined />, label: "Banner配置", permission: "banner-config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/redis-management", icon: <HddOutlined />, label: "Redis管理", permission: "redis-management", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
-  { key: "/db-admin", icon: <TableOutlined />, label: "数据表管理", permission: ["db-admin:read", "db-admin:write"], group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
+  { key: "/db-admin", icon: <TableOutlined />, label: "数据表管理", permission: "db-admin:delegated-read", exactPermission: true, group: "main", sidebarGroup: "system", implemented: true, section: "system" },
   { key: "/backup-restore", icon: <CloudSyncOutlined />, label: "备份恢复", permission: "backup:operate", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/release-deploy", icon: <RocketOutlined />, label: "发布上线", permission: "deploy:release", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/emergency-rollback", icon: <HistoryOutlined />, label: "紧急回滚", permission: "deploy:rollback", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
