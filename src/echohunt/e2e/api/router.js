@@ -4,6 +4,7 @@ const {
   getActiveTweetIds,
   listE2eActivities,
   getE2eActivityDetail,
+  verifyE2eAuthorFollow,
   registerE2eParticipant,
   createE2eCampaign,
   activateE2eCampaign,
@@ -18,8 +19,6 @@ function extractRequestAuthContext(req) {
   const identities = Array.isArray(req.authCenter?.identities) ? req.authCenter.identities : [];
   const twitterIdentity =
     identities.find((item) => item.provider === "twitter") || null;
-  const evmIdentity =
-    identities.find((item) => item.provider === "evm") || null;
 
   return {
     twitterIdentity,
@@ -27,7 +26,6 @@ function extractRequestAuthContext(req) {
     username: twitterIdentity?.username || null,
     displayName: twitterIdentity?.displayName || null,
     avatar: twitterIdentity?.avatar || null,
-    evmAddress: evmIdentity?.walletAddress || evmIdentity?.providerSubject || null,
   };
 }
 
@@ -48,7 +46,7 @@ router.get("/e2e_active", handleGetActive);
 async function handleListActivities(req, res) {
   try {
     const authCtx = extractRequestAuthContext(req);
-    const userId = String(req.query?.user_id || authCtx.twitterId || "").trim() || null;
+    const userId = authCtx.twitterId;
     const data = await listE2eActivities({
       userId,
       status: req.query?.status || "all",
@@ -73,7 +71,7 @@ router.get("/e2es", optionalAuth, handleListActivities);
 router.get("/tasks/:id", optionalAuth, async (req, res) => {
   try {
     const authCtx = extractRequestAuthContext(req);
-    const userId = String(req.query?.user_id || authCtx.twitterId || "").trim() || null;
+    const userId = authCtx.twitterId;
     const item = await getE2eActivityDetail(req.params.id, { userId });
     if (!item) {
       return res.status(404).json({ status: false, message: "任务不存在" });
@@ -142,7 +140,33 @@ async function handleActivateCampaign(req, res) {
 router.post("/activate", requiredAuth, express.json(), handleActivateCampaign);
 router.post("/e2e/activate", requiredAuth, express.json(), handleActivateCampaign);
 
-// 7. 用户报名参与任务（兼容 /register 与 /e2e/register）
+function sendE2eRegistrationError(res, error, fallbackCode) {
+  const code = error.code || (error.status ? error.message : null) || fallbackCode;
+  return res.status(error.status || 500).json({
+    success: false,
+    error: code,
+    code,
+    message: error.publicMessage || (error.status ? error.message : "Failed to process registration"),
+  });
+}
+
+// 7. 实时校验当前用户是否关注了目标推文的真实作者
+router.post("/tasks/:id/verify-follow", requiredAuth, express.json(), async (req, res) => {
+  try {
+    const authCtx = extractRequestAuthContext(req);
+    const verified = await verifyE2eAuthorFollow(req.params.id, {
+      identity: authCtx.twitterIdentity,
+      twitterUserId: authCtx.twitterId,
+      redisClient: req.redisClient,
+    });
+    return res.json({ success: true, verified: true, data: verified });
+  } catch (error) {
+    console.error("[echohunt/e2e] verifyE2eAuthorFollow failed:", error);
+    return sendE2eRegistrationError(res, error, "E2E_FOLLOW_VERIFY_FAILED");
+  }
+});
+
+// 8. 用户报名参与任务（兼容 /register 与 /e2e/register）
 async function handleRegisterParticipant(req, res) {
   try {
     const authCtx = extractRequestAuthContext(req);
@@ -151,15 +175,18 @@ async function handleRegisterParticipant(req, res) {
       address: body.address || body.e2e_address,
       tweet_id: body.tweet_id || body.tweetId,
       user_id: authCtx.twitterId,
-      user_address: authCtx.evmAddress,
+      user_address: body.user_address || body.userAddress || body.evmAddress,
       username: authCtx.username,
       name: authCtx.displayName,
       profile_image_url: authCtx.avatar,
+    }, {
+      identity: authCtx.twitterIdentity,
+      redisClient: req.redisClient,
     });
     return res.json(result);
   } catch (error) {
     console.error("[echohunt/e2e] registerE2eParticipant failed:", error);
-    return res.status(500).json({ success: false, message: error.message || "Failed to register" });
+    return sendE2eRegistrationError(res, error, "E2E_REGISTER_FAILED");
   }
 }
 router.post("/register", requiredAuth, express.json(), handleRegisterParticipant);

@@ -17,10 +17,15 @@ const {
   verifyExternalPayment,
 } = require("./e2ePaymentService");
 const { examineE2eTweet, parseTweetInput } = require("./e2eExamineService");
+const {
+  getEchohuntTweetDetail,
+  verifyEchohuntTwitterFollowTask,
+} = require("../../../xhunt/services/twitter-echohunt");
 
 const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
 const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
 const MAX_CAMPAIGN_PAGE_SIZE = 100;
+const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
 function toNumber(val, fallback = 0) {
   const num = Number(val);
@@ -34,7 +39,7 @@ function formatCampaignItem(campaign, signups = [], tweetMap = new Map(), curren
   const sortedSignups = [...signups].sort((a, b) => toNumber(b.point) - toNumber(a.point));
   const totalPoints = sortedSignups.reduce((acc, item) => acc + Math.max(0, toNumber(item.point)), 0);
 
-  const leaderboard = sortedSignups.map((item) => {
+  const leaderboardWithPrivateFields = sortedSignups.map((item) => {
     const r = typeof item.toJSON === "function" ? item.toJSON() : item;
     const pt = toNumber(r.point, 0);
     const mindshare = totalPoints > 0 ? Number(((pt / totalPoints) * 100).toFixed(2)) : 0;
@@ -58,8 +63,12 @@ function formatCampaignItem(campaign, signups = [], tweetMap = new Map(), curren
 
   const normalizedUserId = currentUserId ? String(currentUserId).trim() : "";
   const myItem = normalizedUserId
-    ? leaderboard.find((item) => String(item.user_id) === normalizedUserId)
+    ? leaderboardWithPrivateFields.find((item) => String(item.user_id) === normalizedUserId)
     : null;
+  const leaderboard = leaderboardWithPrivateFields.map((item) => ({
+    ...item,
+    user_address: null,
+  }));
 
   const current_user = myItem
     ? {
@@ -348,37 +357,101 @@ async function resolveTwitterUserMeta(twitterId) {
   return null;
 }
 
+function e2eRegistrationError(code, status, publicMessage) {
+  const error = new Error(code);
+  error.code = code;
+  error.status = status;
+  error.publicMessage = publicMessage;
+  return error;
+}
+
+async function findE2eCampaignForRegistration({ address, tweetId } = {}) {
+  const normalizedAddress = String(address || "").trim();
+  const normalizedTweetId = String(tweetId || "").trim();
+  if (normalizedAddress) return E2eList.findByPk(normalizedAddress);
+  if (!normalizedTweetId) return null;
+  return E2eList.findOne({
+    where: { tweet_id: normalizedTweetId, status: "active" },
+    order: [["start_time", "DESC"]],
+  });
+}
+
+async function verifyE2eAuthorFollow(campaignOrIdentifier, options = {}) {
+  const campaign = campaignOrIdentifier && typeof campaignOrIdentifier === "object"
+    ? campaignOrIdentifier
+    : await findE2eCampaignForRegistration({ tweetId: campaignOrIdentifier });
+  if (!campaign) {
+    throw e2eRegistrationError("E2E_CAMPAIGN_NOT_FOUND", 404, "The engage task was not found");
+  }
+  if (String(campaign.status || "").toLowerCase() !== "active") {
+    throw e2eRegistrationError("E2E_REGISTRATION_CLOSED", 400, "This engage task is not open for registration");
+  }
+
+  const twitterUserId = String(options.twitterUserId || "").trim();
+  if (!twitterUserId || !options.identity) {
+    throw e2eRegistrationError("X_REAUTH_REQUIRED", 401, "Please reconnect X to verify the follow requirement");
+  }
+
+  // Always resolve the author from the live tweet at verification time. Campaign
+  // creators may promote someone else's tweet, so campaign.user_id is not a safe
+  // follow target and must never be used as a fallback here.
+  const tweetDetail = await getEchohuntTweetDetail(options.identity, campaign.tweet_id);
+  const authorTwitterId = String(tweetDetail?.authorId || "").trim();
+  if (!authorTwitterId) {
+    throw e2eRegistrationError(
+      "E2E_TWEET_AUTHOR_UNAVAILABLE",
+      502,
+      "Unable to verify the author of this X post"
+    );
+  }
+  if (authorTwitterId === twitterUserId) {
+    throw e2eRegistrationError(
+      "E2E_AUTHOR_CANNOT_REGISTER",
+      400,
+      "The author of the X post cannot register for their own engage task"
+    );
+  }
+
+  const verified = await verifyEchohuntTwitterFollowTask({
+    task: {
+      id: `e2e-follow-author:${campaign.tweet_id}`,
+      type: "twitter",
+      targetTwitterId: authorTwitterId,
+      targetHandle: campaign.owner_handle || null,
+    },
+    identity: options.identity,
+    twitterUserId,
+    redisClient: options.redisClient,
+  });
+
+  return {
+    ...verified,
+    tweetId: String(campaign.tweet_id),
+    authorTwitterId,
+    authorHandle: campaign.owner_handle || null,
+  };
+}
+
 /**
  * 报名参加 E2E 活动（对应 POST /pro/api/e2e/register）
  */
-async function registerE2eParticipant(payload = {}) {
+async function registerE2eParticipant(payload = {}, options = {}) {
   const address = String(payload.address || payload.e2e_address || "").trim();
   const tweetIdInput = String(payload.tweet_id || "").trim();
   const userId = String(payload.user_id || "").trim();
   const userAddress = String(payload.user_address || "").trim();
 
   if (!userId) {
-    return { success: false, message: "请先连接 X (Twitter) 账号后再报名" };
-  }
-  if (!userAddress) {
-    return { success: false, message: "请先绑定或填写 EVM 收款钱包地址" };
+    throw e2eRegistrationError("E2E_TWITTER_REQUIRED", 401, "Please connect X before registering");
   }
 
-  let campaign = null;
-  if (address) {
-    campaign = await E2eList.findByPk(address);
-  } else if (tweetIdInput) {
-    campaign = await E2eList.findOne({
-      where: { tweet_id: tweetIdInput, status: "active" },
-      order: [["start_time", "DESC"]],
-    });
-  }
+  const campaign = await findE2eCampaignForRegistration({ address, tweetId: tweetIdInput });
 
   if (!campaign) {
-    return { success: false, message: "未找到对应的互动任务" };
+    throw e2eRegistrationError("E2E_CAMPAIGN_NOT_FOUND", 404, "The engage task was not found");
   }
   if (String(campaign.status || "").toLowerCase() !== "active") {
-    return { success: false, message: "该任务当前不在进行中，无法报名" };
+    throw e2eRegistrationError("E2E_REGISTRATION_CLOSED", 400, "This engage task is not open for registration");
   }
 
   const existing = await E2eRecord.findOne({
@@ -390,6 +463,19 @@ async function registerE2eParticipant(payload = {}) {
   if (existing) {
     return { success: true, message: "已报名成功", data: existing.toJSON() };
   }
+
+  if (!userAddress) {
+    throw e2eRegistrationError("E2E_EVM_ADDRESS_REQUIRED", 400, "Please enter an EVM payout address");
+  }
+  if (!EVM_ADDRESS_PATTERN.test(userAddress)) {
+    throw e2eRegistrationError("E2E_INVALID_EVM_ADDRESS", 400, "Please enter a valid EVM payout address");
+  }
+
+  const followVerification = await verifyE2eAuthorFollow(campaign, {
+    identity: options.identity,
+    twitterUserId: userId,
+    redisClient: options.redisClient,
+  });
 
   const userMeta = await resolveTwitterUserMeta(userId);
   const fanRank = userMeta?.fan_rank ?? null;
@@ -425,6 +511,7 @@ async function registerE2eParticipant(payload = {}) {
     success: true,
     message: "报名成功",
     data: created.toJSON(),
+    follow: followVerification,
   };
 }
 
@@ -621,6 +708,7 @@ module.exports = {
   getActiveTweetIds,
   listE2eActivities,
   getE2eActivityDetail,
+  verifyE2eAuthorFollow,
   registerE2eParticipant,
   createE2eCampaign,
   activateE2eCampaign,
