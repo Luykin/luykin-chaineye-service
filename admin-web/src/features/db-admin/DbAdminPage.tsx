@@ -26,6 +26,7 @@ import { DeleteOutlined, DownloadOutlined, EditOutlined, KeyOutlined, PlusOutlin
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { NoPermissionPage } from "@/pages/NoPermissionPage";
 import { useAuth } from "@/app/auth";
+import { TotpSetupDetails } from "@/components/security/TotpSetupDetails";
 import {
   beginDbAdminTotpSetup,
   createDbAdminRow,
@@ -732,11 +733,7 @@ export function DbAdminPage() {
               ) : null}
               {!securityStatus.totp?.enrolled && totpSetup ? (
                 <Card size="small" title="添加 Authenticator 账户">
-                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                    <Text type="secondary">在 Authenticator 应用中选择“输入设置密钥”，账户填写当前管理员邮箱，密钥类型选择“基于时间”：</Text>
-                    <Text code copyable={{ text: totpSetup.secret }} style={{ overflowWrap: "anywhere" }}>{totpSetup.secret}</Text>
-                    <Typography.Link href={totpSetup.otpauthUri}>在支持的 Authenticator 应用中直接打开</Typography.Link>
-                  </Space>
+                  <TotpSetupDetails setup={totpSetup} />
                 </Card>
               ) : null}
               {totpError ? <Alert type="error" showIcon message={totpError} /> : null}

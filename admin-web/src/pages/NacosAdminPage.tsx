@@ -29,6 +29,7 @@ import {
 } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { SensitivePageTotpGate } from "@/components/security/SensitivePageTotpGate";
 import { PageSection } from "@/components/ui/PageSection";
 import {
   deleteNacosAdminConfig,
@@ -167,7 +168,7 @@ function ConfigItem({ item, active, onClick }: { item: NacosAdminConfigMeta; act
   );
 }
 
-export function NacosAdminPage() {
+function NacosAdminContent() {
   const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
   const [selected, setSelected] = useState<{ dataId: string; group: string; tenant?: string } | null>(null);
@@ -410,7 +411,7 @@ export function NacosAdminPage() {
   }
 
   return (
-    <PermissionGuard permission="__super_only_nacos_admin__">
+    <>
       {contextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageSection
@@ -820,6 +821,20 @@ export function NacosAdminPage() {
           </Form.Item>
         </Form>
       </Modal>
+    </>
+  );
+}
+
+export function NacosAdminPage() {
+  return (
+    <PermissionGuard permission="__super_only_nacos_admin__">
+      <SensitivePageTotpGate
+        scope="nacos-admin"
+        title="验证后进入 Nacos 配置中心"
+        description="Nacos 配置会影响线上服务行为，进入页面及调用配置接口前必须完成 Authenticator 验证。"
+      >
+        <NacosAdminContent />
+      </SensitivePageTotpGate>
     </PermissionGuard>
   );
 }

@@ -3,6 +3,7 @@ import { Alert, Button, Card, Checkbox, Form, Input, Modal, Result, Select, Spac
 import { KeyOutlined, LockOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { TotpSetupDetails } from "@/components/security/TotpSetupDetails";
 import { PageSection } from "@/components/ui/PageSection";
 import { useAuth } from "@/app/auth";
 import {
@@ -286,9 +287,7 @@ function AdminUsersSecurityGate({ children }: { children: ReactNode }) {
               ) : (
                 <Card size="small" title="添加账户并输入验证码">
                   <Space direction="vertical" size={16} align="center" style={{ width: "100%" }}>
-                    <Typography.Text type="secondary">在 Authenticator 应用中选择“输入设置密钥”，账户填写当前管理员邮箱，密钥类型选择“基于时间”，并输入下面的密钥：</Typography.Text>
-                    <Typography.Text code copyable={{ text: totpSetup.secret }} style={{ wordBreak: "break-all" }}>{totpSetup.secret}</Typography.Text>
-                    <Typography.Link href={totpSetup.otpauthUri}>在支持的 Authenticator 应用中直接打开</Typography.Link>
+                    <TotpSetupDetails setup={totpSetup} />
                     <Input
                       value={totpCode}
                       onChange={(event) => { setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6)); setTotpError(null); }}

@@ -4,6 +4,10 @@ const {
   adminAuth,
   requirePermission,
 } = require("../../admin/middleware/adminAuth");
+const {
+  requireSensitivePageTotp,
+  sensitivePageTotpRouter,
+} = require("../../admin/admin-users/page-totp");
 const axios = require("axios");
 const XLSX = require("xlsx");
 const { QueryTypes } = require("sequelize");
@@ -41,7 +45,10 @@ const {
 const { isDeadFingerprint } = require("../utils/request-identity");
 
 const router = express.Router();
+const requireLogSearchTotp = requireSensitivePageTotp("log-search");
+const requireServerCommandTotp = requireSensitivePageTotp("server-command");
 router.use(twitterIdHandlerLookupRouter);
+router.use("/sensitive-totp", sensitivePageTotpRouter);
 router.use(createAdminWriteAudit((req) => {
   if (req.method === "POST" && req.path === "/feature-flags") return "feature-flags-publish";
   if (req.method === "POST" && req.path === "/rootdata-daily/set-initial") return "rootdata-daily-set-initial";
@@ -1093,6 +1100,7 @@ router.get(
   "/log-request-handlers",
   adminAuth,
   requirePermission("log-search:read"),
+  requireLogSearchTotp,
   async (req, res) => {
     try {
       const { XhuntVipTestUser } = require("../../models/postgres-start");
@@ -1128,6 +1136,7 @@ router.get(
   "/log-requests",
   adminAuth,
   requirePermission("log-search:read"),
+  requireLogSearchTotp,
   async (req, res) => {
     try {
       const handler = normalizeLogRequestHandler(req.query.handler);
@@ -1207,6 +1216,7 @@ router.get(
   "/log-search",
   adminAuth,
   requirePermission("log-search:read"),
+  requireLogSearchTotp,
   async (req, res) => {
     try {
       console.log(`[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}`);
@@ -1302,6 +1312,7 @@ router.get(
   "/error-logs",
   adminAuth,
   requirePermission("error-logs:read"),
+  requireLogSearchTotp,
   async (req, res) => {
     try {
       const { lines = 1000 } = req.query;
@@ -4676,33 +4687,36 @@ router.get("/security-violations", adminAuth, async (req, res) => {
 
 /**
  * POST /execute-command
- * 执行服务器命令（需要认证，仅 luykin 用户）
+ * 执行服务器命令（需要认证，仅超级管理员）
  * @body {string} command - 要执行的命令
  */
-router.post("/execute-command", adminAuth, async (req, res) => {
+async function requireServerCommandSuper(req, res, next) {
+  if (req.user?.role === "super") return next();
+  console.log(
+    `[执行命令] ❌ 权限不足: 用户=${req.user?.username || "unknown"}, 角色=${req.user?.role || "unknown"}`,
+  );
   try {
-    // 权限检查：只有 luykin 用户可以执行命令
-    if (!req.user || req.user.role !== "super") {
-      console.log(
-        `[执行命令] ❌ 权限不足: 用户=${
-          req.user?.username || "unknown"
-        }, 角色=${req.user?.role || "unknown"}`
-      );
-      try {
-        await logAdminAction(req, {
-          action: "execute-command",
-          success: false,
-          message: "forbidden",
-        });
-      } catch (e) {}
-      return res.status(403).json({
-        success: false,
-        error: "权限不足",
-        message: "仅 luykin 用户可以执行服务器命令",
-      });
-    }
+    await logAdminAction(req, {
+      action: "execute-command",
+      success: false,
+      message: "forbidden",
+    });
+  } catch (_) {}
+  return res.status(403).json({
+    success: false,
+    error: "权限不足",
+    message: "仅超级管理员可以执行服务器命令",
+  });
+}
 
-    const { command } = req.body;
+router.post(
+  "/execute-command",
+  adminAuth,
+  requireServerCommandSuper,
+  requireServerCommandTotp,
+  async (req, res) => {
+    try {
+      const { command } = req.body;
 
     if (!command || typeof command !== "string") {
       return res.status(400).json({
@@ -4851,15 +4865,16 @@ router.post("/execute-command", adminAuth, async (req, res) => {
       } catch (e) {}
       res.json(respErr);
     }
-  } catch (error) {
-    console.error("[执行命令] ❌ 处理失败:", error);
-    res.status(500).json({
-      success: false,
-      error: "处理命令失败",
-      message: error.message,
-    });
-  }
-});
+    } catch (error) {
+      console.error("[执行命令] ❌ 处理失败:", error);
+      res.status(500).json({
+        success: false,
+        error: "处理命令失败",
+        message: error.message,
+      });
+    }
+  },
+);
 
 
 module.exports = router;

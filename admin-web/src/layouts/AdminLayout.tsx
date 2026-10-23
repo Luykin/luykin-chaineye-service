@@ -11,6 +11,7 @@ import {
   MonitorOutlined,
   MoonOutlined,
   ProductOutlined,
+  QrcodeOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
@@ -45,6 +46,7 @@ import { buildApiUrl } from "@/services/apiClient";
 import { useAdminWebUpdate } from "@/app/version-update";
 import { adminMainNavItems, type AdminNavItem } from "@/config/admin-navigation";
 import chromeStoreIcon from "@/assets/icons/chrome-store.svg";
+import { AuthenticatorSettingsModal } from "@/components/security/AuthenticatorSettingsModal";
 
 const { Header, Content } = Layout;
 const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
@@ -142,6 +144,7 @@ export function AdminLayout() {
   const [messageApi, contextHolder] = message.useMessage();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [webauthnModalOpen, setWebauthnModalOpen] = useState(false);
+  const [authenticatorModalOpen, setAuthenticatorModalOpen] = useState(false);
   const [webauthnPromptOpen, setWebauthnPromptOpen] = useState(false);
   const [webauthnPromptSnoozeChecked, setWebauthnPromptSnoozeChecked] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
@@ -519,6 +522,12 @@ export function AdminLayout() {
                   },
                 },
                 {
+                  key: "authenticator",
+                  label: "Authenticator",
+                  icon: <QrcodeOutlined />,
+                  onClick: () => setAuthenticatorModalOpen(true),
+                },
+                {
                   key: "toggle-theme",
                   label: adminTheme.effectiveMode === "dark" ? "切换浅色模式" : "切换深色模式",
                   icon: adminTheme.effectiveMode === "dark" ? <BulbOutlined /> : <MoonOutlined />,
@@ -570,6 +579,12 @@ export function AdminLayout() {
       <Content className="admin-top-content">
         <Outlet />
       </Content>
+
+      <AuthenticatorSettingsModal
+        adminId={user?.id}
+        open={authenticatorModalOpen}
+        onClose={() => setAuthenticatorModalOpen(false)}
+      />
 
       <Modal
         className="admin-webauthn-prompt-modal"

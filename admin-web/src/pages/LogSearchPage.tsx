@@ -19,6 +19,7 @@ import {
 } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { SensitivePageTotpGate } from "@/components/security/SensitivePageTotpGate";
 import { PageSection } from "@/components/ui/PageSection";
 import { fetchErrorLogs, fetchLogRequestHandlers, fetchLogRequests, fetchLogSearch } from "@/services/stats";
 import type { LogRequestResultItem, LogSearchResultItem } from "@/types/stats";
@@ -78,7 +79,7 @@ function highlightText(text: string, keyword: string) {
   );
 }
 
-export function LogSearchPage() {
+function LogSearchContent() {
   const { hasPermission } = useAuth();
   const canReadErrorLogs = hasPermission("error-logs:read");
 
@@ -231,11 +232,10 @@ export function LogSearchPage() {
         : `命中行前后各 ${submittedContextLines} 行`;
 
   return (
-    <PermissionGuard permission="log-search:read">
-      <PageSection
-        title="日志搜索"
-        description="搜索 PM2 日志，也可以在有权限时查看最新 API 错误日志。"
-      >
+    <PageSection
+      title="日志搜索"
+      description="搜索 PM2 日志，也可以在有权限时查看最新 API 错误日志。"
+    >
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
@@ -623,7 +623,20 @@ export function LogSearchPage() {
               : []),
           ]}
         />
-      </PageSection>
+    </PageSection>
+  );
+}
+
+export function LogSearchPage() {
+  return (
+    <PermissionGuard permission="log-search:read">
+      <SensitivePageTotpGate
+        scope="log-search"
+        title="验证后进入日志搜索"
+        description="日志可能包含敏感运行信息，进入页面及读取日志接口前必须完成 Authenticator 验证。"
+      >
+        <LogSearchContent />
+      </SensitivePageTotpGate>
     </PermissionGuard>
   );
 }

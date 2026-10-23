@@ -29,6 +29,7 @@ const {
   adminUsersSecurityRouter,
   requireAdminUsersSecurity,
 } = require("../admin-users/security");
+const accountTotpRouter = require("../admin-users/account-totp");
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -1591,6 +1592,7 @@ router.post("/logout", adminAuth, async (req, res) => {
   }
 });
 
+router.use("/totp", accountTotpRouter);
 router.use("/users/security", adminUsersSecurityRouter);
 const adminUsersGuard = [adminAuth, requireRole("super"), requireAdminUsersSecurity];
 

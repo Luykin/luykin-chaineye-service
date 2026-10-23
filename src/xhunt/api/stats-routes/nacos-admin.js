@@ -4,6 +4,7 @@ const {
   adminAuth,
   requireRole,
 } = require("../../../admin/middleware/adminAuth");
+const { requireSensitivePageTotp } = require("../../../admin/admin-users/page-totp");
 const { logAdminAction } = require("./shared");
 const { nacosRequest } = require("../../services/nacosConfigClient");
 const { XhuntNacosConfigSnapshot } = require("../../../models/postgres-start");
@@ -12,6 +13,14 @@ const router = express.Router();
 const DEFAULT_GROUP = "DEFAULT_GROUP";
 const DEFAULT_TYPE = "json";
 const NACOS_ADMIN_HISTORY_IMPL_VERSION = "nacos-history-v3-only-20260629-01";
+const requireNacosAdminTotp = requireSensitivePageTotp("nacos-admin");
+
+function requireNacosAdminTotpForSuper(req, res, next) {
+  if (req.adminUser?.role !== "super") return next();
+  return requireNacosAdminTotp(req, res, next);
+}
+
+const nacosAdminGuard = [adminAuth, requireNacosAdminTotpForSuper];
 
 const NACOS_CONFIG_CATALOG = [
   {
@@ -340,7 +349,7 @@ async function fetchNacosNativeHistoryDetail({ dataId, group, tenant, nid, sourc
 
 router.get(
   "/nacos/admin/configs",
-  adminAuth,
+  ...nacosAdminGuard,
   requireRole("super"),
   async (req, res) => {
     try {
@@ -365,7 +374,7 @@ router.get(
 
 router.get(
   "/nacos/admin/config",
-  adminAuth,
+  ...nacosAdminGuard,
   async (req, res) => {
     try {
       const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
@@ -419,7 +428,7 @@ router.get(
 
 router.get(
   "/nacos/admin/config/native-history-version",
-  adminAuth,
+  ...nacosAdminGuard,
   requireRole("super"),
   async (req, res) => {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -437,7 +446,7 @@ router.get(
 
 router.get(
   "/nacos/admin/config/native-history",
-  adminAuth,
+  ...nacosAdminGuard,
   requireRole("super"),
   async (req, res) => {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -466,7 +475,7 @@ router.get(
 
 router.get(
   "/nacos/admin/config/native-history/:nid",
-  adminAuth,
+  ...nacosAdminGuard,
   requireRole("super"),
   async (req, res) => {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -495,7 +504,7 @@ router.get(
 
 router.get(
   "/nacos/admin/config/history",
-  adminAuth,
+  ...nacosAdminGuard,
   async (req, res) => {
     try {
       const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
@@ -527,7 +536,7 @@ router.get(
 
 router.get(
   "/nacos/admin/config/history/:id",
-  adminAuth,
+  ...nacosAdminGuard,
   async (req, res) => {
     try {
       const id = Number(req.params.id || 0);
@@ -554,7 +563,7 @@ router.get(
 
 router.post(
   "/nacos/admin/config",
-  adminAuth,
+  ...nacosAdminGuard,
   async (req, res) => {
     try {
       const dataId = validateIdentifier(normalizeDataId(req.body?.dataId), "dataId");
@@ -664,7 +673,7 @@ router.post(
  */
 router.post(
   "/nacos/admin/cleaner/ai-suggest-regex",
-  adminAuth,
+  ...nacosAdminGuard,
   express.json(),
   async (req, res) => {
     try {
@@ -698,7 +707,7 @@ router.post(
 
 router.delete(
   "/nacos/admin/config",
-  adminAuth,
+  ...nacosAdminGuard,
   requireRole("super"),
   async (req, res) => {
     try {

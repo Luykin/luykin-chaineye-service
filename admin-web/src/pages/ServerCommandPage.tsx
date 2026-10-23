@@ -14,6 +14,7 @@ import {
 } from "antd";
 import { useMutation } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { SensitivePageTotpGate } from "@/components/security/SensitivePageTotpGate";
 import { PageSection } from "@/components/ui/PageSection";
 import { executeServerCommand } from "@/services/admin-tools";
 
@@ -62,7 +63,7 @@ function createWelcomeEntries(): TerminalEntry[] {
   ];
 }
 
-export function ServerCommandPage() {
+function ServerCommandContent() {
   const [messageApi, contextHolder] = message.useMessage();
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -174,7 +175,7 @@ export function ServerCommandPage() {
   );
 
   return (
-    <PermissionGuard permission="server:execute">
+    <>
       {contextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageSection
@@ -298,6 +299,20 @@ export function ServerCommandPage() {
           </Row>
         </PageSection>
       </Space>
+    </>
+  );
+}
+
+export function ServerCommandPage() {
+  return (
+    <PermissionGuard permission="server:execute">
+      <SensitivePageTotpGate
+        scope="server-command"
+        title="验证后进入服务器命令"
+        description="服务器命令属于高风险操作，进入页面及执行命令前必须完成 Authenticator 验证。"
+      >
+        <ServerCommandContent />
+      </SensitivePageTotpGate>
     </PermissionGuard>
   );
 }
