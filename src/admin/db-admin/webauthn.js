@@ -8,13 +8,15 @@ const {
   getWebAuthnRequestConfig,
   filterWebAuthnCredentialsForRp,
 } = require("../utils/webauthnConfig");
+const { getAdminTotpStatus } = require("../admin-users/security");
 
-// DB Admin 是直接改 PostgreSQL 的高危入口；必须完成一次近期 WebAuthn 二次认证。
-// TTL 默认和备份恢复一致：10 分钟。过期后前端会重新弹指纹 / Face ID / 通行密钥。
+// DB Admin 是直接操作 PostgreSQL 的高危入口：所有账号必须完成近期 WebAuthn；
+// 超级管理员还必须完成 Authenticator。TTL 默认和备份恢复一致：10 分钟。
 const DB_ADMIN_REAUTH_TTL_SECONDS = Math.max(
   60,
   parseInt(process.env.ADMIN_DB_ADMIN_WEBAUTHN_TTL_SECONDS || "600", 10) || 600
 );
+const DB_ADMIN_TOTP_SCOPE = "db-admin";
 
 function getDbAdminReauthKey(adminId) {
   return `admin:webauthn:reauth:db-admin:${adminId}`;
@@ -44,14 +46,19 @@ async function getDbAdminWebAuthnStatus(req, admin) {
     await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
     webAuthnConfig.rpID,
   );
-  if (credentials.length <= 0) {
-    return {
-      enrolled: false,
-      verified: false,
-      ttlSeconds: 0,
-      expiresInSeconds: DB_ADMIN_REAUTH_TTL_SECONDS,
-    };
-  }
+  const totpRequired = admin.role === "super";
+  const totp = totpRequired
+    ? await getAdminTotpStatus(req, admin, DB_ADMIN_TOTP_SCOPE, DB_ADMIN_REAUTH_TTL_SECONDS)
+    : null;
+  if (credentials.length <= 0) return {
+    enrolled: false,
+    verified: false,
+    ttlSeconds: 0,
+    expiresInSeconds: DB_ADMIN_REAUTH_TTL_SECONDS,
+    totpRequired,
+    totp,
+    accessVerified: false,
+  };
 
   const key = getDbAdminReauthKey(admin.id);
   const verified = await req.redisClient.get(key);
@@ -64,11 +71,15 @@ async function getDbAdminWebAuthnStatus(req, admin) {
     }
   }
 
+  const webauthnVerified = verified === "1";
   return {
     enrolled: true,
-    verified: verified === "1",
+    verified: webauthnVerified,
     ttlSeconds,
     expiresInSeconds: DB_ADMIN_REAUTH_TTL_SECONDS,
+    totpRequired,
+    totp,
+    accessVerified: webauthnVerified && (!totpRequired || !!totp?.verified),
   };
 }
 
@@ -164,44 +175,95 @@ async function verifyDbAdminWebAuthn(req, admin, assertion) {
   };
 }
 
+function createDbAdminSecurityError(statusCode, code, message, detail = message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  error.detail = detail;
+  return error;
+}
+
+async function assertDbAdminRecentWebAuthn(req) {
+  const admin = req.adminUser;
+  if (!admin?.id) throw createDbAdminSecurityError(401, "UNAUTHORIZED", "请先登录");
+  const status = await getDbAdminWebAuthnStatus(req, admin);
+  if (!status.enrolled) {
+    throw createDbAdminSecurityError(
+      403,
+      "WEBAUTHN_NOT_ENROLLED",
+      "需要先录入生物识别",
+      "DB Admin 必须先在当前管理员账号录入指纹 / Face ID / 通行密钥",
+    );
+  }
+  if (!status.verified) {
+    throw createDbAdminSecurityError(
+      403,
+      "WEBAUTHN_REAUTH_REQUIRED",
+      "需要生物识别二次验证",
+      "请先完成指纹 / Face ID / 通行密钥验证后再进入数据表管理",
+    );
+  }
+}
+
+function sendDbAdminSecurityError(res, error, fallbackMessage) {
+  if (!error.statusCode || error.statusCode >= 500) console.error("[db-admin security] check failed:", error);
+  return res.status(error.statusCode || 500).json({
+    success: false,
+    error: error.message || fallbackMessage,
+    code: error.code,
+    message: error.detail,
+  });
+}
+
+async function requireDbAdminRecentWebAuthn(req, res, next) {
+  try {
+    res.set("Cache-Control", "no-store");
+    await assertDbAdminRecentWebAuthn(req);
+    return next();
+  } catch (error) {
+    return sendDbAdminSecurityError(res, error, "DB Admin 指纹认证检查失败");
+  }
+}
+
 async function requireDbAdminWebAuthn(req, res, next) {
   try {
     res.set("Cache-Control", "no-store");
-    const admin = req.adminUser;
-    if (!admin?.id) {
-      return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "请先登录" });
-    }
-
-    const status = await getDbAdminWebAuthnStatus(req, admin);
+    await assertDbAdminRecentWebAuthn(req);
+    if (req.adminUser?.role !== "super") return next();
+    const status = await getAdminTotpStatus(
+      req,
+      req.adminUser,
+      DB_ADMIN_TOTP_SCOPE,
+      DB_ADMIN_REAUTH_TTL_SECONDS,
+    );
     if (!status.enrolled) {
-      return res.status(403).json({
-        success: false,
-        error: "需要先录入生物识别",
-        code: "WEBAUTHN_NOT_ENROLLED",
-        message: "DB Admin 必须先在当前管理员账号录入指纹 / Face ID / 通行密钥",
-      });
+      throw createDbAdminSecurityError(
+        403,
+        "TOTP_NOT_ENROLLED",
+        "需要先绑定 Authenticator",
+        "超级管理员进入 DB Admin 前必须先绑定 Authenticator",
+      );
     }
-
     if (!status.verified) {
-      return res.status(403).json({
-        success: false,
-        error: "需要生物识别二次验证",
-        code: "WEBAUTHN_REAUTH_REQUIRED",
-        message: "请先完成指纹 / Face ID / 通行密钥验证后再进入数据表管理",
-      });
+      throw createDbAdminSecurityError(
+        403,
+        "TOTP_REAUTH_REQUIRED",
+        "需要 Authenticator 二次验证",
+        "请先完成 Authenticator 验证后再进入数据表管理",
+      );
     }
-
     return next();
   } catch (error) {
-    console.error("[db-admin webauthn] check failed:", error);
-    return res.status(500).json({ success: false, error: "DB Admin 指纹认证检查失败" });
+    return sendDbAdminSecurityError(res, error, "DB Admin 安全认证检查失败");
   }
 }
 
 module.exports = {
   DB_ADMIN_REAUTH_TTL_SECONDS,
+  DB_ADMIN_TOTP_SCOPE,
   getDbAdminWebAuthnStatus,
   createDbAdminWebAuthnOptions,
   verifyDbAdminWebAuthn,
+  requireDbAdminRecentWebAuthn,
   requireDbAdminWebAuthn,
 };

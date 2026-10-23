@@ -94,6 +94,20 @@ export interface DbAdminWebAuthnStatus {
   verified: boolean;
   ttlSeconds: number;
   expiresInSeconds: number;
+  totpRequired: boolean;
+  totp: {
+    enrolled: boolean;
+    verified: boolean;
+    ttlSeconds: number;
+    expiresInSeconds: number;
+  } | null;
+  accessVerified: boolean;
+}
+
+export interface DbAdminTotpSetupData {
+  secret: string;
+  otpauthUri: string;
+  expiresInSeconds: number;
 }
 
 export interface DbAdminWebAuthnOptionsResponse {

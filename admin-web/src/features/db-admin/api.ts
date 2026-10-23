@@ -5,6 +5,7 @@ import type {
   DbAdminDatabasesData,
   DbAdminRowsData,
   DbAdminTableMeta,
+  DbAdminTotpSetupData,
   DbAdminWebAuthnOptionsResponse,
   DbAdminWebAuthnStatus,
 } from "./types";
@@ -167,5 +168,25 @@ export function verifyDbAdminWebAuthn(assertion: unknown) {
   return apiRequest<ApiSuccess<{ verified: boolean; expiresInSeconds: number }>>(`${BASE_PATH}/webauthn/verify`, {
     method: "POST",
     body: { assertion },
+  });
+}
+
+export function beginDbAdminTotpSetup() {
+  return apiRequest<ApiSuccess<DbAdminTotpSetupData>>(`${BASE_PATH}/totp/setup`, {
+    method: "POST",
+  });
+}
+
+export function verifyDbAdminTotpSetup(code: string) {
+  return apiRequest<ApiSuccess<{ enrolled: boolean; verified: boolean; expiresInSeconds: number }>>(
+    `${BASE_PATH}/totp/setup/verify`,
+    { method: "POST", body: { code } },
+  );
+}
+
+export function verifyDbAdminTotp(code: string) {
+  return apiRequest<ApiSuccess<{ verified: boolean; expiresInSeconds: number }>>(`${BASE_PATH}/totp/verify`, {
+    method: "POST",
+    body: { code },
   });
 }

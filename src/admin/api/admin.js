@@ -25,6 +25,10 @@ const {
   DELEGATED_DB_ADMIN_PERMISSION,
   hasAnyAdminTableGrant,
 } = require("../db-admin/access");
+const {
+  adminUsersSecurityRouter,
+  requireAdminUsersSecurity,
+} = require("../admin-users/security");
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -1587,8 +1591,11 @@ router.post("/logout", adminAuth, async (req, res) => {
   }
 });
 
-// 管理员列表（用于配置是否接收日报）
-router.get("/users", adminAuth, async (req, res) => {
+router.use("/users/security", adminUsersSecurityRouter);
+const adminUsersGuard = [adminAuth, requireRole("super"), requireAdminUsersSecurity];
+
+// 管理员列表：仅超级管理员可用，且必须完成生物识别 + Authenticator 二次认证。
+router.get("/users", adminUsersGuard, async (req, res) => {
   try {
     const rows = await XhuntAdminManager.findAll({ attributes: ["id", "email", "role", "receivesDailyReport", "isActive", "canLogin", "failedLoginAttempts", "loginLockedUntil", "lastLoginAt", "permissions"], order: [["id", "ASC"]] });
     const creds = await XhuntAdminWebAuthnCredential.findAll({ attributes: ["adminId"] });
@@ -1601,7 +1608,7 @@ router.get("/users", adminAuth, async (req, res) => {
 });
 
 // 新增管理员（需要 admin:manage-permissions）
-router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
+router.post("/users", adminUsersGuard, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
   try {
     const { email, password, role = "admin", permissions } = req.body || {};
     if (!email || typeof email !== "string") {
@@ -1660,7 +1667,7 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
 });
 
 // 切换是否接收日报：super 可修改任意，admin 仅可修改自己
-router.patch("/users/:id", adminAuth, async (req, res) => {
+router.patch("/users/:id", adminUsersGuard, async (req, res) => {
   try {
     const { id } = req.params;
     const { receivesDailyReport } = req.body || {};
@@ -1681,7 +1688,7 @@ router.patch("/users/:id", adminAuth, async (req, res) => {
 });
 
 // 启用/停用管理员账号（需要 admin:manage-permissions 权限）
-router.patch("/users/:id/active", adminAuth, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
+router.patch("/users/:id/active", adminUsersGuard, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body || {};
@@ -1736,7 +1743,7 @@ router.patch("/users/:id/active", adminAuth, requirePermission("admin:manage-per
 });
 
 // 删除管理员账号：仅 super 可操作，保留审计记录但清理该账号的生物识别凭证
-router.delete("/users/:id", adminAuth, requireRole("super"), async (req, res) => {
+router.delete("/users/:id", adminUsersGuard, async (req, res) => {
   try {
     const { id } = req.params;
     const target = await XhuntAdminManager.findByPk(id);
@@ -1791,7 +1798,7 @@ router.delete("/users/:id", adminAuth, requireRole("super"), async (req, res) =>
 });
 
 // 重置其他管理员登录密码（需要 admin:manage-permissions 权限）
-router.post("/users/:id/password/reset-random", adminAuth, requirePermission("admin:manage-permissions"), async (req, res) => {
+router.post("/users/:id/password/reset-random", adminUsersGuard, requirePermission("admin:manage-permissions"), async (req, res) => {
   try {
     const { id } = req.params;
     const target = await XhuntAdminManager.findByPk(id);
@@ -1847,7 +1854,7 @@ router.post("/users/:id/password/reset-random", adminAuth, requirePermission("ad
 
 
 // 解锁管理员账号：仅 super 可操作
-router.post("/users/:id/unlock", adminAuth, requireRole("super"), async (req, res) => {
+router.post("/users/:id/unlock", adminUsersGuard, async (req, res) => {
   try {
     const { id } = req.params;
     const target = await XhuntAdminManager.findByPk(id);
@@ -1904,7 +1911,7 @@ router.post("/users/:id/unlock", adminAuth, requireRole("super"), async (req, re
 });
 
 // 更新管理员权限清单（需要 admin:manage-permissions 权限）
-router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
+router.patch("/users/:id/permissions", adminUsersGuard, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const { permissions } = req.body || {};

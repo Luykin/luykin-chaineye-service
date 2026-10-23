@@ -1,11 +1,29 @@
-import { useMemo, useState } from "react";
-import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
-import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Alert, Button, Card, Checkbox, Form, Input, Modal, Result, Select, Space, Spin, Steps, Switch, Table, Tag, Typography, message } from "antd";
+import { KeyOutlined, LockOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { useAuth } from "@/app/auth";
-import { createAdminUser, deleteAdminUser, fetchAdminUsers, resetAdminRandomPassword, unlockAdminUser, updateAdminActiveStatus, updateAdminPermissions, type AdminUserItem } from "@/services/admin-users";
+import {
+  beginAdminUsersTotpSetup,
+  createAdminUser,
+  deleteAdminUser,
+  fetchAdminUsers,
+  fetchAdminUsersSecurityStatus,
+  fetchAdminUsersWebAuthnOptions,
+  fetchAdminWebAuthnRegistrationOptions,
+  resetAdminRandomPassword,
+  unlockAdminUser,
+  updateAdminActiveStatus,
+  updateAdminPermissions,
+  verifyAdminUsersTotp,
+  verifyAdminUsersTotpSetup,
+  verifyAdminUsersWebAuthn,
+  verifyAdminWebAuthnRegistration,
+  type AdminUserItem,
+  type TotpSetupData,
+} from "@/services/admin-users";
 
 
 function isAdminUserLocked(row: AdminUserItem) {
@@ -75,7 +93,256 @@ function withoutDbAdminPermissions(permissions?: string[]) {
   return (permissions || []).filter((permission) => !DB_ADMIN_SEPARATE_PERMISSIONS.has(permission));
 }
 
-export function AdminUsersPage() {
+function AdminUsersSecurityGate({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const [messageApi, contextHolder] = message.useMessage();
+  const [workingAction, setWorkingAction] = useState<"register" | "webauthn" | "setup" | "totp" | null>(null);
+  const [totpSetup, setTotpSetup] = useState<TotpSetupData | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const isSuper = user?.role === "super";
+
+  const securityQuery = useQuery({
+    queryKey: ["admin-users", "security-status"],
+    queryFn: fetchAdminUsersSecurityStatus,
+    enabled: isSuper,
+    retry: false,
+  });
+  const status = securityQuery.data?.data;
+  const refetchSecurity = securityQuery.refetch;
+
+  useEffect(() => {
+    if (!status?.verified) return;
+    const ttlSeconds = Math.min(status.webauthn.ttlSeconds, status.totp.ttlSeconds);
+    const timer = window.setTimeout(() => {
+      void refetchSecurity();
+    }, Math.max(1, ttlSeconds) * 1000 + 250);
+    return () => window.clearTimeout(timer);
+  }, [refetchSecurity, status?.totp.ttlSeconds, status?.verified, status?.webauthn.ttlSeconds]);
+
+  async function registerWebAuthn() {
+    try {
+      setWorkingAction("register");
+      const browserApi = window.SimpleWebAuthnBrowser;
+      if (!browserApi || !(await Promise.resolve(browserApi.browserSupportsWebAuthn()).catch(() => false))) {
+        throw new Error("当前浏览器或设备不支持指纹 / Face ID / 通行密钥");
+      }
+      const options = await fetchAdminWebAuthnRegistrationOptions();
+      const attResp = await browserApi.startRegistration(options.options);
+      await verifyAdminWebAuthnRegistration(attResp, "管理员列表安全验证");
+      messageApi.success("生物识别已绑定，请继续完成一次验证");
+      await securityQuery.refetch();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "绑定生物识别失败");
+    } finally {
+      setWorkingAction(null);
+    }
+  }
+
+  async function verifyWebAuthn() {
+    try {
+      setWorkingAction("webauthn");
+      const browserApi = window.SimpleWebAuthnBrowser;
+      if (!browserApi || !(await Promise.resolve(browserApi.browserSupportsWebAuthn()).catch(() => false))) {
+        throw new Error("当前浏览器或设备不支持指纹 / Face ID / 通行密钥");
+      }
+      const options = await fetchAdminUsersWebAuthnOptions();
+      const assertion = await browserApi.startAuthentication(options.options);
+      await verifyAdminUsersWebAuthn(assertion);
+      messageApi.success("生物识别验证通过");
+      await securityQuery.refetch();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "生物识别验证失败");
+    } finally {
+      setWorkingAction(null);
+    }
+  }
+
+  async function beginTotpSetup() {
+    try {
+      setWorkingAction("setup");
+      const response = await beginAdminUsersTotpSetup();
+      setTotpSetup(response.data);
+      setTotpCode("");
+      setTotpError(null);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "生成 Authenticator 绑定信息失败");
+    } finally {
+      setWorkingAction(null);
+    }
+  }
+
+  async function submitTotp() {
+    if (!/^\d{6}$/.test(totpCode)) {
+      setTotpError("请输入 6 位 Authenticator 验证码");
+      return;
+    }
+    try {
+      setWorkingAction("totp");
+      setTotpError(null);
+      if (status?.totp.enrolled) {
+        await verifyAdminUsersTotp(totpCode);
+        messageApi.success("Authenticator 验证通过");
+      } else {
+        await verifyAdminUsersTotpSetup(totpCode);
+        messageApi.success("Authenticator 已绑定并验证通过");
+      }
+      setTotpCode("");
+      setTotpSetup(null);
+      await securityQuery.refetch();
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Authenticator 验证失败";
+      setTotpError(errorText);
+      messageApi.error(errorText);
+      await securityQuery.refetch();
+    } finally {
+      setWorkingAction(null);
+    }
+  }
+
+  if (!isSuper) {
+    return <Result status="403" title="仅超级管理员可访问" subTitle="管理员列表还要求生物识别与 Authenticator 双重认证。" />;
+  }
+
+  if (securityQuery.isLoading) {
+    return (
+      <div style={{ minHeight: 360, display: "grid", placeItems: "center" }}>
+        <Spin size="large" tip="正在检查双重认证状态..." />
+      </div>
+    );
+  }
+
+  if (securityQuery.isError || !status) {
+    return (
+      <Result
+        status="warning"
+        title="无法检查双重认证状态"
+        subTitle={securityQuery.error instanceof Error ? securityQuery.error.message : "请稍后重试"}
+        extra={<Button type="primary" onClick={() => void securityQuery.refetch()}>重新检查</Button>}
+      />
+    );
+  }
+
+  if (status.verified) return <>{contextHolder}{children}</>;
+
+  const currentStep = !status.webauthn.verified ? 0 : !status.totp.verified ? 1 : 2;
+  const busy = workingAction !== null;
+
+  return (
+    <div style={{ maxWidth: 760, margin: "0 auto", padding: "24px 0" }}>
+      {contextHolder}
+      <Card>
+        <Space direction="vertical" size={24} style={{ width: "100%" }}>
+          <div>
+            <Space size={10} align="center">
+              <LockOutlined style={{ color: "var(--ant-color-primary)", fontSize: 22 }} />
+              <Typography.Title level={3} style={{ margin: 0 }}>管理员列表安全验证</Typography.Title>
+            </Space>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              这是高敏感管理入口。仅超级管理员可访问，并且必须依次通过生物识别和 Authenticator 验证。
+            </Typography.Paragraph>
+          </div>
+
+          <Steps
+            current={currentStep}
+            items={[
+              { title: "生物识别", description: status.webauthn.verified ? "已验证" : status.webauthn.enrolled ? "等待验证" : "需要绑定" },
+              { title: "Authenticator", description: status.totp.verified ? "已验证" : status.totp.enrolled ? "等待验证" : "需要绑定" },
+              { title: "进入管理", description: "双重认证通过" },
+            ]}
+          />
+
+          {!status.webauthn.enrolled ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="请先绑定生物识别"
+              description="使用当前设备的指纹、Face ID、Windows Hello 或通行密钥完成绑定。绑定后还需要进行一次验证。"
+              action={
+                <Button size="large" type="primary" icon={<SafetyCertificateOutlined />} loading={workingAction === "register"} disabled={busy && workingAction !== "register"} onClick={() => void registerWebAuthn()}>
+                  绑定生物识别
+                </Button>
+              }
+            />
+          ) : !status.webauthn.verified ? (
+            <Alert
+              type="info"
+              showIcon
+              message="第一步：验证生物识别"
+              description="验证结果只在短时间内有效，过期后需重新验证。"
+              action={
+                <Button size="large" type="primary" icon={<SafetyCertificateOutlined />} loading={workingAction === "webauthn"} disabled={busy && workingAction !== "webauthn"} onClick={() => void verifyWebAuthn()}>
+                  开始验证
+                </Button>
+              }
+            />
+          ) : !status.totp.enrolled ? (
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <Alert type="success" showIcon message="生物识别已通过" description="第二步需要绑定 Authenticator。可使用 Google Authenticator、Microsoft Authenticator、1Password 等兼容应用。" />
+              {!totpSetup ? (
+                <Button size="large" type="primary" icon={<KeyOutlined />} loading={workingAction === "setup"} disabled={busy && workingAction !== "setup"} onClick={() => void beginTotpSetup()}>
+                  生成 Authenticator 绑定信息
+                </Button>
+              ) : (
+                <Card size="small" title="添加账户并输入验证码">
+                  <Space direction="vertical" size={16} align="center" style={{ width: "100%" }}>
+                    <Typography.Text type="secondary">在 Authenticator 应用中选择“输入设置密钥”，账户填写当前管理员邮箱，密钥类型选择“基于时间”，并输入下面的密钥：</Typography.Text>
+                    <Typography.Text code copyable={{ text: totpSetup.secret }} style={{ wordBreak: "break-all" }}>{totpSetup.secret}</Typography.Text>
+                    <Typography.Link href={totpSetup.otpauthUri}>在支持的 Authenticator 应用中直接打开</Typography.Link>
+                    <Input
+                      value={totpCode}
+                      onChange={(event) => { setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6)); setTotpError(null); }}
+                      onPressEnter={() => void submitTotp()}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      aria-label="Authenticator 六位验证码"
+                      placeholder="输入 6 位验证码"
+                      maxLength={6}
+                      size="large"
+                      style={{ maxWidth: 280 }}
+                    />
+                    {totpError ? <Alert type="error" showIcon message={totpError} /> : null}
+                    <Space wrap>
+                      <Button size="large" type="primary" loading={workingAction === "totp"} disabled={busy && workingAction !== "totp"} onClick={() => void submitTotp()}>
+                        确认绑定并进入
+                      </Button>
+                      <Button size="large" loading={workingAction === "setup"} disabled={busy && workingAction !== "setup"} onClick={() => void beginTotpSetup()}>
+                        重新生成密钥
+                      </Button>
+                    </Space>
+                  </Space>
+                </Card>
+              )}
+            </Space>
+          ) : (
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <Alert type="success" showIcon message="生物识别已通过" description="请输入已绑定 Authenticator 中当前显示的 6 位验证码。" />
+              <Form layout="vertical" onFinish={() => void submitTotp()} style={{ maxWidth: 360 }}>
+                <Form.Item label="Authenticator 验证码" required>
+                  <Input
+                    value={totpCode}
+                    onChange={(event) => { setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6)); setTotpError(null); }}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="000000"
+                    maxLength={6}
+                    size="large"
+                  />
+                </Form.Item>
+                {totpError ? <Alert type="error" showIcon message={totpError} style={{ marginBottom: 16 }} /> : null}
+                <Button size="large" type="primary" htmlType="submit" loading={workingAction === "totp"} disabled={busy && workingAction !== "totp"}>
+                  验证并进入管理员列表
+                </Button>
+              </Form>
+            </Space>
+          )}
+        </Space>
+      </Card>
+    </div>
+  );
+}
+
+function AdminUsersManagement() {
   const [messageApi, contextHolder] = message.useMessage();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUserItem | null>(null);
@@ -328,6 +595,16 @@ export function AdminUsersPage() {
         </Typography.Paragraph>
         <Typography.Text type="secondary">该随机密码只在此处显示一次，请立即复制给对应管理员。</Typography.Text>
       </Modal>
+    </PermissionGuard>
+  );
+}
+
+export function AdminUsersPage() {
+  return (
+    <PermissionGuard permission="admin-users">
+      <AdminUsersSecurityGate>
+        <AdminUsersManagement />
+      </AdminUsersSecurityGate>
     </PermissionGuard>
   );
 }

@@ -13,6 +13,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Steps,
   Switch,
   Table,
   Tag,
@@ -26,6 +27,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { NoPermissionPage } from "@/pages/NoPermissionPage";
 import { useAuth } from "@/app/auth";
 import {
+  beginDbAdminTotpSetup,
   createDbAdminRow,
   deleteDbAdminRow,
   exportDbAdminRows,
@@ -40,9 +42,11 @@ import {
   revokeDbAdminTableAccess,
   saveDbAdminCredentials,
   updateDbAdminRow,
+  verifyDbAdminTotp,
+  verifyDbAdminTotpSetup,
   verifyDbAdminWebAuthn,
 } from "./api";
-import type { DbAdminColumn, DbAdminDatabaseOption, DbAdminRow, DbAdminTableGrant, DbAdminTableMeta } from "./types";
+import type { DbAdminColumn, DbAdminDatabaseOption, DbAdminRow, DbAdminTableGrant, DbAdminTableMeta, DbAdminTotpSetupData, DbAdminWebAuthnStatus } from "./types";
 import "./db-admin.css";
 
 const { Text, Title } = Typography;
@@ -296,6 +300,11 @@ export function DbAdminPage() {
   const [reauthVerified, setReauthVerified] = useState(false);
   const [reauthing, setReauthing] = useState(false);
   const [reauthError, setReauthError] = useState<string | null>(null);
+  const [securityStatus, setSecurityStatus] = useState<DbAdminWebAuthnStatus | null>(null);
+  const [totpSetup, setTotpSetup] = useState<DbAdminTotpSetupData | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const [totpSubmitting, setTotpSubmitting] = useState(false);
   const [credModalOpen, setCredModalOpen] = useState(false);
   const [grantModalOpen, setGrantModalOpen] = useState(false);
   const [exportingTableKey, setExportingTableKey] = useState<string | null>(null);
@@ -305,6 +314,12 @@ export function DbAdminPage() {
 
   const canRead = isSuper || isDelegatedReader;
   const canWrite = isSuper && hasPermission("db-admin:write");
+
+  function applySecurityStatus(status: DbAdminWebAuthnStatus) {
+    setSecurityStatus(status);
+    setReauthVerified(status.accessVerified);
+    setReauthChecked(true);
+  }
 
   const performDbAdminReauth = async () => {
     try {
@@ -329,10 +344,12 @@ export function DbAdminPage() {
         throw new Error("DB Admin 指纹认证失败");
       }
 
-      setReauthVerified(true);
-      setReauthChecked(true);
-      messageApi.success("指纹认证通过，可以进入数据表管理");
-      return true;
+      const statusResponse = await fetchDbAdminWebAuthnStatus();
+      applySecurityStatus(statusResponse.data);
+      messageApi.success(statusResponse.data.accessVerified
+        ? "指纹认证通过，可以进入数据表管理"
+        : "生物识别已通过，请继续完成 Authenticator 验证");
+      return statusResponse.data.accessVerified;
     } catch (error) {
       const text = error instanceof Error ? error.message : "DB Admin 指纹认证失败";
       setReauthVerified(false);
@@ -355,9 +372,9 @@ export function DbAdminPage() {
         setReauthError(null);
         const statusResponse = await fetchDbAdminWebAuthnStatus();
         if (cancelled) return;
-        if (statusResponse.data?.verified) {
-          setReauthVerified(true);
-          setReauthChecked(true);
+        setSecurityStatus(statusResponse.data);
+        if (statusResponse.data?.accessVerified) {
+          applySecurityStatus(statusResponse.data);
           return;
         }
         if (!statusResponse.data?.enrolled) {
@@ -366,7 +383,11 @@ export function DbAdminPage() {
           setReauthError("DB Admin 需要先在当前管理员账号录入指纹 / Face ID / 通行密钥");
           return;
         }
-        await performDbAdminReauth();
+        if (!statusResponse.data.verified) {
+          await performDbAdminReauth();
+          return;
+        }
+        applySecurityStatus(statusResponse.data);
       } catch (error) {
         if (cancelled) return;
         setReauthVerified(false);
@@ -382,6 +403,68 @@ export function DbAdminPage() {
     // 进入 DB Admin 时只检查一次，避免重复弹出系统指纹窗口。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canRead]);
+
+  useEffect(() => {
+    if (!securityStatus?.accessVerified) return;
+    const factorTtls = [securityStatus.ttlSeconds];
+    if (securityStatus.totpRequired && securityStatus.totp) factorTtls.push(securityStatus.totp.ttlSeconds);
+    const ttlSeconds = Math.min(...factorTtls);
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetchDbAdminWebAuthnStatus();
+        applySecurityStatus(response.data);
+      } catch (error) {
+        setReauthVerified(false);
+        setReauthError(error instanceof Error ? error.message : "检查 DB Admin 安全认证状态失败");
+      }
+    }, Math.max(1, ttlSeconds) * 1000 + 250);
+    return () => window.clearTimeout(timer);
+  }, [securityStatus?.accessVerified, securityStatus?.totp?.ttlSeconds, securityStatus?.totpRequired, securityStatus?.ttlSeconds]);
+
+  async function beginTotpSetup() {
+    try {
+      setTotpSubmitting(true);
+      setTotpError(null);
+      const response = await beginDbAdminTotpSetup();
+      setTotpSetup(response.data);
+      setTotpCode("");
+    } catch (error) {
+      setTotpError(error instanceof Error ? error.message : "生成 Authenticator 绑定信息失败");
+    } finally {
+      setTotpSubmitting(false);
+    }
+  }
+
+  async function submitTotp() {
+    if (!/^\d{6}$/.test(totpCode)) {
+      setTotpError("请输入 6 位 Authenticator 验证码");
+      return;
+    }
+    try {
+      setTotpSubmitting(true);
+      setTotpError(null);
+      if (securityStatus?.totp?.enrolled) {
+        await verifyDbAdminTotp(totpCode);
+      } else {
+        await verifyDbAdminTotpSetup(totpCode);
+      }
+      const response = await fetchDbAdminWebAuthnStatus();
+      applySecurityStatus(response.data);
+      setTotpCode("");
+      setTotpSetup(null);
+      messageApi.success("Authenticator 验证通过，可以进入数据表管理");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Authenticator 验证失败";
+      setTotpError(text);
+      messageApi.error(text);
+      try {
+        const response = await fetchDbAdminWebAuthnStatus();
+        applySecurityStatus(response.data);
+      } catch (_) {}
+    } finally {
+      setTotpSubmitting(false);
+    }
+  }
 
   const databasesQuery = useQuery({
     queryKey: ["db-admin", "databases"],
@@ -606,31 +689,99 @@ export function DbAdminPage() {
         <section className="db-admin-hero db-admin-hero--locked">
           <div>
             <Text className="db-admin-eyebrow">Protected PostgreSQL Console</Text>
-            <Title level={2}>需要指纹认证后进入</Title>
+            <Title level={2}>{isSuper ? "需要双重认证后进入" : "需要指纹认证后进入"}</Title>
             <Text type="secondary">
               {isDelegatedReader
                 ? "你仅能查看超级管理员授权的数据库和数据表；进入页面和调用接口仍需完成指纹 / Face ID / 通行密钥二次验证。"
-                : "数据表管理是高危入口。进入页面和调用接口都必须完成指纹 / Face ID / 通行密钥二次验证。"}
+                : "数据表管理是高危入口。超级管理员进入页面和调用接口都必须完成生物识别与 Authenticator 双重认证。"}
             </Text>
           </div>
           <Space wrap>
             <Tag color="blue">{isDelegatedReader ? "授权表只读" : "超级管理员"}</Tag>
             <Tag color="gold">WebAuthn required</Tag>
+            {isSuper ? <Tag color="purple">Authenticator required</Tag> : null}
           </Space>
         </section>
         <Card className="db-admin-lock-card">
-          <Alert
-            type={reauthError ? "warning" : "info"}
-            showIcon
-            message={reauthError || (reauthChecked ? "请完成指纹认证" : "正在检查指纹认证状态...")}
-            description="验证通过后，后端会在短时间内允许访问 DB Admin 接口；过期后需要重新验证。"
-          />
-          <Space className="db-admin-lock-actions" wrap>
-            <Button type="primary" loading={reauthing} onClick={() => void performDbAdminReauth()}>
-              {reauthing ? "等待设备验证" : "重新进行指纹认证"}
-            </Button>
-            <Text type="secondary">如果提示未录入，请先在右上角账号菜单里添加生物识别。</Text>
-          </Space>
+          {isSuper ? (
+            <Steps
+              current={!securityStatus?.verified ? 0 : !securityStatus.totp?.verified ? 1 : 2}
+              items={[
+                { title: "生物识别", description: securityStatus?.verified ? "已验证" : "等待验证" },
+                { title: "Authenticator", description: securityStatus?.totp?.verified ? "已验证" : securityStatus?.totp?.enrolled ? "等待验证" : "需要绑定" },
+                { title: "进入管理", description: "双重认证通过" },
+              ]}
+              style={{ marginBottom: 20 }}
+            />
+          ) : null}
+
+          {isSuper && securityStatus?.verified ? (
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <Alert
+                type="success"
+                showIcon
+                message="生物识别已通过"
+                description={securityStatus.totp?.enrolled
+                  ? "请输入已绑定 Authenticator 中当前显示的 6 位验证码。"
+                  : "当前账号尚未绑定 Authenticator，请完成绑定后进入 DB Admin。"}
+              />
+              {!securityStatus.totp?.enrolled && !totpSetup ? (
+                <Button size="large" type="primary" icon={<KeyOutlined />} loading={totpSubmitting} onClick={() => void beginTotpSetup()}>
+                  生成 Authenticator 绑定信息
+                </Button>
+              ) : null}
+              {!securityStatus.totp?.enrolled && totpSetup ? (
+                <Card size="small" title="添加 Authenticator 账户">
+                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Text type="secondary">在 Authenticator 应用中选择“输入设置密钥”，账户填写当前管理员邮箱，密钥类型选择“基于时间”：</Text>
+                    <Text code copyable={{ text: totpSetup.secret }} style={{ overflowWrap: "anywhere" }}>{totpSetup.secret}</Text>
+                    <Typography.Link href={totpSetup.otpauthUri}>在支持的 Authenticator 应用中直接打开</Typography.Link>
+                  </Space>
+                </Card>
+              ) : null}
+              {totpError ? <Alert type="error" showIcon message={totpError} /> : null}
+              {(securityStatus.totp?.enrolled || totpSetup) ? (
+                <Form layout="vertical" onFinish={() => void submitTotp()} style={{ maxWidth: 380 }}>
+                  <Form.Item label="Authenticator 验证码" required>
+                    <Input
+                      value={totpCode}
+                      onChange={(event) => { setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6)); setTotpError(null); }}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="000000"
+                      maxLength={6}
+                      size="large"
+                    />
+                  </Form.Item>
+                  <Space wrap>
+                    <Button size="large" type="primary" htmlType="submit" loading={totpSubmitting}>
+                      {securityStatus.totp?.enrolled ? "验证并进入 DB Admin" : "确认绑定并进入"}
+                    </Button>
+                    {!securityStatus.totp?.enrolled ? (
+                      <Button size="large" loading={totpSubmitting} onClick={() => void beginTotpSetup()}>
+                        重新生成密钥
+                      </Button>
+                    ) : null}
+                  </Space>
+                </Form>
+              ) : null}
+            </Space>
+          ) : (
+            <>
+              <Alert
+                type={reauthError ? "warning" : "info"}
+                showIcon
+                message={reauthError || (reauthChecked ? "请完成指纹认证" : "正在检查指纹认证状态...")}
+                description="验证通过后，后端会在短时间内允许访问 DB Admin 接口；过期后需要重新验证。"
+              />
+              <Space className="db-admin-lock-actions" wrap>
+                <Button size="large" type="primary" loading={reauthing} onClick={() => void performDbAdminReauth()}>
+                  {reauthing ? "等待设备验证" : "重新进行指纹认证"}
+                </Button>
+                <Text type="secondary">如果提示未录入，请先在右上角账号菜单里添加生物识别。</Text>
+              </Space>
+            </>
+          )}
         </Card>
       </div>
     );

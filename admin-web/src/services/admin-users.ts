@@ -14,6 +14,65 @@ export interface AdminUserItem {
   webauthnCount?: number;
 }
 
+export interface AdminUsersSecurityStatus {
+  webauthn: { enrolled: boolean; verified: boolean; ttlSeconds: number };
+  totp: { enrolled: boolean; verified: boolean; ttlSeconds: number };
+  verified: boolean;
+  expiresInSeconds: number;
+}
+
+export interface TotpSetupData {
+  secret: string;
+  otpauthUri: string;
+  expiresInSeconds: number;
+}
+
+export function fetchAdminUsersSecurityStatus() {
+  return apiRequest<{ success: boolean; data: AdminUsersSecurityStatus }>(`/admin/users/security/status?_ts=${Date.now()}`);
+}
+
+export function fetchAdminUsersWebAuthnOptions() {
+  return apiRequest<{ success: boolean; options: unknown }>(`/admin/users/security/webauthn/options?_ts=${Date.now()}`);
+}
+
+export function verifyAdminUsersWebAuthn(assertion: unknown) {
+  return apiRequest<{ success: boolean; data: { verified: boolean; expiresInSeconds: number } }>(
+    "/admin/users/security/webauthn/verify",
+    { method: "POST", body: { assertion } },
+  );
+}
+
+export function fetchAdminWebAuthnRegistrationOptions() {
+  return apiRequest<{ success: boolean; options: unknown }>(`/admin/webauthn/registration/options?_ts=${Date.now()}`);
+}
+
+export function verifyAdminWebAuthnRegistration(attResp: unknown, nickname: string) {
+  return apiRequest<{ success: boolean }>("/admin/webauthn/registration/verify", {
+    method: "POST",
+    body: { attResp, nickname },
+  });
+}
+
+export function beginAdminUsersTotpSetup() {
+  return apiRequest<{ success: boolean; data: TotpSetupData }>("/admin/users/security/totp/setup", {
+    method: "POST",
+  });
+}
+
+export function verifyAdminUsersTotpSetup(code: string) {
+  return apiRequest<{ success: boolean; data: { enrolled: boolean; verified: boolean; expiresInSeconds: number } }>(
+    "/admin/users/security/totp/setup/verify",
+    { method: "POST", body: { code } },
+  );
+}
+
+export function verifyAdminUsersTotp(code: string) {
+  return apiRequest<{ success: boolean; data: { verified: boolean; expiresInSeconds: number } }>(
+    "/admin/users/security/totp/verify",
+    { method: "POST", body: { code } },
+  );
+}
+
 export function fetchAdminUsers() {
   return apiRequest<{ success: boolean; data: AdminUserItem[] }>("/admin/users");
 }

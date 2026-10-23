@@ -13,11 +13,19 @@ const {
   revokeTableAccess,
 } = require("./access");
 const {
+  DB_ADMIN_REAUTH_TTL_SECONDS,
+  DB_ADMIN_TOTP_SCOPE,
   getDbAdminWebAuthnStatus,
   createDbAdminWebAuthnOptions,
   verifyDbAdminWebAuthn,
+  requireDbAdminRecentWebAuthn,
   requireDbAdminWebAuthn,
 } = require("./webauthn");
+const {
+  beginAdminTotpSetup,
+  finishAdminTotpSetup,
+  verifyAdminTotp,
+} = require("../admin-users/security");
 
 const router = express.Router();
 
@@ -102,6 +110,7 @@ const entryGuard = [adminAuth, requireDbAdminEntry];
 const readGuard = [adminAuth, requireDbAdminEntry, requireDbAdminWebAuthn];
 const writeGuard = [adminAuth, requireRole("super"), requirePermission("db-admin:write"), requireDbAdminWebAuthn];
 const accessManagementGuard = [adminAuth, requireRole("super"), requireDbAdminWebAuthn];
+const superTotpGuard = [adminAuth, requireDbAdminEntry, requireRole("super"), requireDbAdminRecentWebAuthn];
 
 function sendError(res, error) {
   const statusCode = error.statusCode || 500;
@@ -158,6 +167,80 @@ router.post("/webauthn/verify", entryGuard, express.json(), async (req, res) => 
     return res.status(error.statusCode || 500).json({
       success: false,
       error: error.message || "DB Admin 指纹认证失败",
+      code: error.code,
+    });
+  }
+});
+
+router.post("/totp/setup", superTotpGuard, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await beginAdminTotpSetup(req, req.adminUser, DB_ADMIN_TOTP_SCOPE);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || "生成 DB Admin Authenticator 绑定信息失败",
+      code: error.code,
+    });
+  }
+});
+
+router.post("/totp/setup/verify", superTotpGuard, express.json(), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await finishAdminTotpSetup(
+      req,
+      req.adminUser,
+      req.body?.code,
+      DB_ADMIN_TOTP_SCOPE,
+      DB_ADMIN_REAUTH_TTL_SECONDS,
+    );
+    await createDbAdminAudit(req, "db-admin-totp-enroll", true, {
+      tableKey: "__db_admin__",
+      primaryKey: req.adminUser.id,
+      expiresInSeconds: data.expiresInSeconds,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await createDbAdminAudit(req, "db-admin-totp-enroll", false, {
+      tableKey: "__db_admin__",
+      primaryKey: req.adminUser?.id,
+      error: error.message,
+    });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || "绑定 DB Admin Authenticator 失败",
+      code: error.code,
+    });
+  }
+});
+
+router.post("/totp/verify", superTotpGuard, express.json(), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await verifyAdminTotp(
+      req,
+      req.adminUser,
+      req.body?.code,
+      DB_ADMIN_TOTP_SCOPE,
+      DB_ADMIN_REAUTH_TTL_SECONDS,
+    );
+    await createDbAdminAudit(req, "db-admin-totp-reauth", true, {
+      tableKey: "__db_admin__",
+      primaryKey: req.adminUser.id,
+      expiresInSeconds: data.expiresInSeconds,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    await createDbAdminAudit(req, "db-admin-totp-reauth", false, {
+      tableKey: "__db_admin__",
+      primaryKey: req.adminUser?.id,
+      error: error.message,
+    });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || "DB Admin Authenticator 验证失败",
       code: error.code,
     });
   }

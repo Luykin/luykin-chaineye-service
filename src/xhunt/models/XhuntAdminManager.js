@@ -15,6 +15,9 @@ module.exports = (sequelize) => {
       failedLoginAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       loginLockedUntil: { type: DataTypes.DATE, allowNull: true },
       lastLoginAt: { type: DataTypes.DATE, allowNull: true },
+      totpSecretEncrypted: { type: DataTypes.STRING(512), allowNull: true },
+      totpEnabledAt: { type: DataTypes.DATE, allowNull: true },
+      totpLastUsedStep: { type: DataTypes.BIGINT, allowNull: true },
     },
     {
       tableName: "xhunt_admin_managers",
