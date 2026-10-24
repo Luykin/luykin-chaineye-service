@@ -106,7 +106,7 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
   ];
   return <div style={{ width: "min(620px, calc(100vw - 56px))", maxHeight: "72vh", overflowY: "auto", paddingRight: 4 }}>
     <Typography.Paragraph style={{ marginBottom: 8 }}>
-      系统分别计算用户的有效评论和引用，再叠加 XHunt 排名权重。所有小数积分在相应步骤保留 2 位。
+      系统分别计算用户的有效评论和引用，再叠加 XHunt 排名权重。时间权重保留 6 位小数，单条互动得分和最终积分保留 2 位小数。
     </Typography.Paragraph>
     <Typography.Title level={5}>1. 有效互动筛选</Typography.Title>
     <ul style={{ margin: "0 0 12px", paddingLeft: 20 }}>
