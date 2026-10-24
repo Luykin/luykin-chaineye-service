@@ -24,7 +24,7 @@ export function beginAdminAuthenticatorSetup() {
 export function verifyAdminAuthenticatorSetup(code: string) {
   return apiRequest<{
     success: boolean;
-    data: { enrolled: boolean; verified: boolean; expiresInSeconds: number };
+    data: { enrolled: boolean; verified: boolean; replaced: boolean; expiresInSeconds: number };
   }>("/admin/totp/setup/verify", {
     method: "POST",
     body: { code },

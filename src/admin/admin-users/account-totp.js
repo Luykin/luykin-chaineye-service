@@ -53,7 +53,12 @@ router.get("/status", async (req, res) => {
 
 router.post("/setup", async (req, res) => {
   try {
-    const data = await beginAdminTotpSetup(req, req.adminUser, ACCOUNT_TOTP_SCOPE);
+    const data = await beginAdminTotpSetup(
+      req,
+      req.adminUser,
+      ACCOUNT_TOTP_SCOPE,
+      { allowReplace: true },
+    );
     return res.json({ success: true, data });
   } catch (error) {
     return sendError(res, error, "生成 Authenticator 绑定信息失败");
@@ -68,11 +73,12 @@ router.post("/setup/verify", express.json(), async (req, res) => {
       req.body?.code,
       ACCOUNT_TOTP_SCOPE,
       ACCOUNT_TOTP_TTL_SECONDS,
+      { allowReplace: true },
     );
-    await writeAudit(req, "account-totp-enroll", true);
+    await writeAudit(req, data.replaced ? "account-totp-replace" : "account-totp-enroll", true);
     return res.json({ success: true, data });
   } catch (error) {
-    await writeAudit(req, "account-totp-enroll", false, error.message);
+    await writeAudit(req, "account-totp-enroll-or-replace", false, error.message);
     return sendError(res, error, "绑定 Authenticator 失败");
   }
 });

@@ -31,6 +31,7 @@ export function AuthenticatorSettingsModal({ adminId, open, onClose }: Authentic
     staleTime: 0,
   });
   const status = statusQuery.data?.data;
+  const replacing = !!status?.enrolled;
 
   useEffect(() => {
     if (open) return;
@@ -63,13 +64,17 @@ export function AuthenticatorSettingsModal({ adminId, open, onClose }: Authentic
     try {
       setSubmitting(true);
       setError(null);
-      await verifyAdminAuthenticatorSetup(code);
+      const response = await verifyAdminAuthenticatorSetup(code);
       setSetup(null);
       setCode("");
       await statusQuery.refetch();
-      messageApi.success("Authenticator 已绑定");
+      messageApi.success(response.data.replaced ? "Authenticator 已更换" : "Authenticator 已绑定");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "绑定 Authenticator 失败");
+      setError(requestError instanceof Error
+        ? requestError.message
+        : replacing
+          ? "更换 Authenticator 失败"
+          : "绑定 Authenticator 失败");
     } finally {
       setSubmitting(false);
     }
@@ -98,41 +103,51 @@ export function AuthenticatorSettingsModal({ adminId, open, onClose }: Authentic
             description={statusQuery.error instanceof Error ? statusQuery.error.message : "请稍后重试"}
             action={<Button onClick={() => void statusQuery.refetch()}>重新检查</Button>}
           />
-        ) : status?.enrolled ? (
+        ) : status?.enrolled && !setup ? (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Alert
               type="success"
               showIcon
-              icon={<CheckCircleOutlined />}
+              icon={<CheckCircleOutlined aria-hidden="true" />}
               message="Authenticator 已绑定"
-              description="该账号已经启用 Authenticator，可用于需要二次验证的高敏感管理页面。为保护密钥安全，绑定完成后不会再次显示二维码或设置密钥。"
+              description="该账号已经启用 Authenticator，可用于需要二次验证的高敏感管理页面。"
             />
             {status.enabledAt ? (
               <Typography.Text type="secondary">
                 绑定时间：{new Date(status.enabledAt).toLocaleString()}
               </Typography.Text>
             ) : null}
+            <Button
+              size="large"
+              icon={<KeyOutlined aria-hidden="true" />}
+              loading={submitting}
+              onClick={() => void beginSetup()}
+            >
+              更换 Authenticator
+            </Button>
           </Space>
         ) : (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Alert
-              type="info"
+              type={replacing ? "warning" : "info"}
               showIcon
-              message="当前账号尚未绑定 Authenticator"
-              description="绑定后可进入要求 Authenticator 二次验证的管理页面。"
+              message={replacing ? "正在更换 Authenticator" : "当前账号尚未绑定 Authenticator"}
+              description={replacing
+                ? "请扫描新的二维码并输入一次新 Authenticator 显示的验证码。确认成功前，原 Authenticator 仍然有效。"
+                : "绑定后可进入要求 Authenticator 二次验证的管理页面。"}
             />
             {!setup ? (
               <Button
                 size="large"
                 type="primary"
-                icon={<KeyOutlined />}
+                icon={<KeyOutlined aria-hidden="true" />}
                 loading={submitting}
                 onClick={() => void beginSetup()}
               >
                 生成二维码并开始绑定
               </Button>
             ) : (
-              <Card size="small" title="扫描二维码并确认绑定">
+              <Card size="small" title={replacing ? "扫描新二维码并确认更换" : "扫描二维码并确认绑定"}>
                 <Space direction="vertical" size={20} style={{ width: "100%" }}>
                   <TotpSetupDetails setup={setup} />
                   <Form layout="vertical" onFinish={() => void submitSetup()} style={{ maxWidth: 380 }}>
@@ -158,7 +173,7 @@ export function AuthenticatorSettingsModal({ adminId, open, onClose }: Authentic
                     </Form.Item>
                     <Space wrap>
                       <Button size="large" type="primary" htmlType="submit" loading={submitting}>
-                        确认绑定
+                        {replacing ? "确认更换" : "确认绑定"}
                       </Button>
                       <Button size="large" loading={submitting} onClick={() => void beginSetup()}>
                         重新生成二维码

@@ -31,6 +31,14 @@ const TOTP_SETUP_TTL_SECONDS = 600;
 const TOTP_MAX_FAILURES = 5;
 const TOTP_FAILURE_WINDOW_SECONDS = 300;
 const TOTP_ENCRYPTION_SECRET = process.env.ADMIN_TOTP_ENCRYPTION_KEY || JWT_SECRET;
+const ADMIN_TOTP_VERIFICATION_SCOPES = [
+  "account-settings",
+  "admin-users",
+  "db-admin",
+  "server-command",
+  "log-search",
+  "nacos-admin",
+];
 
 function getWebAuthnVerifiedKey(adminId) {
   return `admin:admin-users:webauthn:verified:${adminId}`;
@@ -180,14 +188,22 @@ async function assertTotpAttemptsAvailable(req, res, scope = "admin-users") {
   return false;
 }
 
-async function verifyAndConsumeTotp(adminId, code, encryptedSecretOverride = null) {
+async function verifyAndConsumeTotp(
+  adminId,
+  code,
+  encryptedSecretOverride = null,
+  { allowReplace = false } = {},
+) {
   return XhuntAdminManager.sequelize.transaction(async (transaction) => {
     const admin = await XhuntAdminManager.findByPk(adminId, {
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
     if (!admin) return { ok: false, reason: "NOT_FOUND" };
-    if (encryptedSecretOverride && admin.totpSecretEncrypted && admin.totpEnabledAt) {
+    const replacing = !!(
+      encryptedSecretOverride && admin.totpSecretEncrypted && admin.totpEnabledAt
+    );
+    if (replacing && !allowReplace) {
       return { ok: false, reason: "ALREADY_ENROLLED" };
     }
     const encryptedSecret = encryptedSecretOverride || admin.totpSecretEncrypted;
@@ -196,7 +212,9 @@ async function verifyAndConsumeTotp(adminId, code, encryptedSecretOverride = nul
     const step = verifyTotpCode(secret, code, { window: 1 });
     if (step === null) return { ok: false, reason: "INVALID" };
 
-    const lastUsedStep = admin.totpLastUsedStep == null ? null : Number(admin.totpLastUsedStep);
+    const lastUsedStep = (encryptedSecretOverride || admin.totpLastUsedStep == null)
+      ? null
+      : Number(admin.totpLastUsedStep);
     if (lastUsedStep !== null && step <= lastUsedStep) return { ok: false, reason: "REPLAYED" };
 
     admin.totpLastUsedStep = step;
@@ -205,7 +223,7 @@ async function verifyAndConsumeTotp(adminId, code, encryptedSecretOverride = nul
       admin.totpEnabledAt = new Date();
     }
     await admin.save({ transaction });
-    return { ok: true, step };
+    return { ok: true, step, replaced: replacing };
   });
 }
 
@@ -216,8 +234,13 @@ function createTotpSecurityError(statusCode, code, message) {
   return error;
 }
 
-async function beginAdminTotpSetup(req, admin, scope = "admin-users") {
-  if (admin.totpSecretEncrypted && admin.totpEnabledAt) {
+async function beginAdminTotpSetup(
+  req,
+  admin,
+  scope = "admin-users",
+  { allowReplace = false } = {},
+) {
+  if (!allowReplace && admin.totpSecretEncrypted && admin.totpEnabledAt) {
     throw createTotpSecurityError(409, "TOTP_ALREADY_ENROLLED", "当前账号已绑定 Authenticator");
   }
   const secret = generateTotpSecret();
@@ -244,16 +267,26 @@ async function finishAdminTotpSetup(
   code,
   scope = "admin-users",
   expiresInSeconds = ADMIN_USERS_REAUTH_TTL_SECONDS,
+  { allowReplace = false } = {},
 ) {
   await ensureTotpAttemptsAvailable(req, admin.id, scope);
   const encryptedSecret = await req.redisClient.get(getTotpSetupKey(admin.id, scope));
   if (!encryptedSecret) {
     throw createTotpSecurityError(400, "TOTP_SETUP_EXPIRED", "绑定信息已过期，请重新生成");
   }
-  const result = await verifyAndConsumeTotp(admin.id, code, encryptedSecret);
+  const result = await verifyAndConsumeTotp(admin.id, code, encryptedSecret, { allowReplace });
   if (!result.ok) {
     await recordTotpFailure(req, admin.id, scope);
     throw createTotpSecurityError(401, result.reason, "Authenticator 验证码无效或已使用");
+  }
+  if (result.replaced) {
+    await Promise.all(
+      ADMIN_TOTP_VERIFICATION_SCOPES
+        .filter((verificationScope) => verificationScope !== scope)
+        .map((verificationScope) => (
+          req.redisClient.del(getTotpVerifiedKey(admin.id, verificationScope))
+        )),
+    );
   }
   await Promise.all([
     req.redisClient.del(getTotpSetupKey(admin.id, scope)),
@@ -261,7 +294,7 @@ async function finishAdminTotpSetup(
     req.redisClient.set(getTotpVerifiedKey(admin.id, scope), "1", { EX: expiresInSeconds }),
   ]);
   await admin.reload();
-  return { enrolled: true, verified: true, expiresInSeconds };
+  return { enrolled: true, verified: true, replaced: result.replaced, expiresInSeconds };
 }
 
 async function verifyAdminTotp(
