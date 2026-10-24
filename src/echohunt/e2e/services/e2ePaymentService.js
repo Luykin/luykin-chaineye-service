@@ -10,6 +10,7 @@ const E2E_V2_API_TIMEOUT_MS = Math.max(
   Number(process.env.E2E_V2_API_TIMEOUT_MS || 10000) || 10000
 );
 const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
+const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/;
 
 /**
  * 计算活动服务费与总充值金额
@@ -190,10 +191,61 @@ async function verifyExternalPayment({ address, requiredAmount } = {}) {
   }
 }
 
+function normalizeDistributionResponse(data, expectedAddress) {
+  const normalized = validatePaymentResponse(data, expectedAddress);
+  const distributionStatus = String(normalized.distribution_status || "pending").toLowerCase();
+  if (!["pending", "prepared", "submitted", "confirmed", "failed"].includes(distributionStatus)) {
+    throw createPaymentError("E2E_PAYMENT_INVALID_RESPONSE", 502, "E2E 支付服务返回了无效交易状态");
+  }
+  const txHash = normalized.tx_hash ? String(normalized.tx_hash) : null;
+  if (distributionStatus !== "pending" && (!txHash || !TX_HASH_PATTERN.test(txHash))) {
+    throw createPaymentError("E2E_PAYMENT_INVALID_RESPONSE", 502, "E2E 支付服务未返回有效交易哈希");
+  }
+  return { ...normalized, distribution_status: distributionStatus, tx_hash: txHash };
+}
+
+async function submitExternalDistribution({ address, recipients } = {}) {
+  const normalizedAddress = String(address || "").trim();
+  if (!EVM_ADDRESS_PATTERN.test(normalizedAddress)) {
+    throw createPaymentError("E2E_PAYMENT_INVALID_ADDRESS", 400, "无效的 E2E 活动地址");
+  }
+  if (!Array.isArray(recipients) || recipients.length < 1 || recipients.length > 500) {
+    throw createPaymentError("E2E_PAYMENT_INVALID_RECIPIENTS", 400, "E2E 分发地址数量必须为 1-500");
+  }
+  try {
+    const response = await axios.post(
+      `${E2E_V2_API_BASE_URL}/${encodeURIComponent(normalizedAddress)}/distribution`,
+      { recipients },
+      getE2eV2RequestConfig()
+    );
+    return normalizeDistributionResponse(response?.data, normalizedAddress);
+  } catch (error) {
+    throw normalizePaymentApiError(error, "提交 E2E 奖励分发失败，请稍后重试");
+  }
+}
+
+async function getExternalDistributionStatus(address) {
+  const normalizedAddress = String(address || "").trim();
+  if (!EVM_ADDRESS_PATTERN.test(normalizedAddress)) {
+    throw createPaymentError("E2E_PAYMENT_INVALID_ADDRESS", 400, "无效的 E2E 活动地址");
+  }
+  try {
+    const response = await axios.get(
+      `${E2E_V2_API_BASE_URL}/${encodeURIComponent(normalizedAddress)}`,
+      getE2eV2RequestConfig()
+    );
+    return normalizeDistributionResponse(response?.data, normalizedAddress);
+  } catch (error) {
+    throw normalizePaymentApiError(error, "查询 E2E 分发状态失败，请稍后重试");
+  }
+}
+
 module.exports = {
   DEFAULT_FEE_PERCENTAGE,
   E2E_V2_API_BASE_URL,
   calculateDepositAmounts,
   createExternalPaymentOrder,
+  getExternalDistributionStatus,
+  submitExternalDistribution,
   verifyExternalPayment,
 };

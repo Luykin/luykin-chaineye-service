@@ -1,9 +1,26 @@
 const express = require("express");
 const { Op, fn, col } = require("sequelize");
 const { requirePermission } = require("../middleware/adminAuth");
-const { E2eList, E2eRecord, E2eTweet, pgInstance } = require("../../models/postgres-start");
+const {
+  E2eList,
+  E2eRecord,
+  E2eTweet,
+  E2eLog,
+  E2eCrawlRun,
+  pgInstance,
+} = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
 const { forceActivateE2eCampaign } = require("../../echohunt/e2e/services/e2eService");
+const { calculateCampaignScores } = require("../../echohunt/e2e/services/e2eScoreService");
+const { normalizeScoringConfig, validateScoringConfig } = require("../../echohunt/e2e/services/e2eScoringConfig");
+const {
+  approveSettlement,
+  generateSettlementDraft,
+  getSettlementDetail,
+  refreshSettlementDistribution,
+  reviseSettlementExclusion,
+  submitSettlementDistribution,
+} = require("../../echohunt/e2e/services/e2eSettlementService");
 
 const router = express.Router();
 const MANAGE_PERMISSION = "e2e-campaigns";
@@ -146,6 +163,7 @@ function serializeCampaign(row, tweetRow = null, { participantCount = 0 } = {}) 
     type: item.type || null,
     lang: item.lang || null,
     retro: item.retro === null || item.retro === undefined ? null : Boolean(item.retro),
+    scoreConfig: normalizeScoringConfig(item.score_config),
     startTime: toIso(item.start_time),
     endTime: toIso(item.end_time),
     participantCount,
@@ -166,9 +184,71 @@ function serializeRecord(row) {
     rewards: toFiniteNumber(item.rewards),
     userAddress: item.user_address || null,
     explanation: item.explaination || null,
+    scoreBreakdown: item.score_breakdown || null,
     createTime: toIso(item.create_time),
     updateTime: toIso(item.update_time),
   };
+}
+
+function serializeSettlementItem(row) {
+  const item = row.toJSON ? row.toJSON() : row;
+  return {
+    id: String(item.id),
+    userId: String(item.user_id),
+    username: item.username || "",
+    name: item.name || "",
+    profileImageUrl: item.profile_image_url || null,
+    payoutAddress: item.payout_address || null,
+    fanRank: toFiniteNumber(item.fan_rank),
+    point: toFiniteNumber(item.point) || 0,
+    rank: toFiniteNumber(item.rank),
+    rewardAmount: String(item.reward_amount || "0.000000"),
+    isWinner: Boolean(item.is_winner),
+    excluded: Boolean(item.excluded),
+    exclusionReason: item.exclusion_reason || null,
+    excludedBy: item.excluded_by ? String(item.excluded_by) : null,
+    excludedByEmail: item.excluded_by_email || null,
+    excludedAt: toIso(item.excluded_at),
+    scoreBreakdown: item.score_breakdown || null,
+    interactions: Array.isArray(item.interactions) ? item.interactions : [],
+  };
+}
+
+function serializeSettlement(row, items = []) {
+  const item = row.toJSON ? row.toJSON() : row;
+  return {
+    id: String(item.id),
+    campaignAddress: String(item.campaign_address),
+    revision: Number(item.revision),
+    status: item.status,
+    rewardPool: String(item.reward_pool),
+    feeAmount: String(item.fee_amount),
+    depositAmount: String(item.deposit_amount),
+    winnerCount: Number(item.winner_count || 0),
+    excludedCount: Number(item.excluded_count || 0),
+    uniqueRecipientCount: Number(item.unique_recipient_count || 0),
+    calculationConfig: item.calculation_config || {},
+    distributionRecipients: item.distribution_recipients || [],
+    generatedAt: toIso(item.generated_at),
+    payoutDueAt: toIso(item.payout_due_at),
+    approvedBy: item.approved_by ? String(item.approved_by) : null,
+    approvedByEmail: item.approved_by_email || null,
+    approvedAt: toIso(item.approved_at),
+    submittedBy: item.submitted_by ? String(item.submitted_by) : null,
+    submittedByEmail: item.submitted_by_email || null,
+    submittedAt: toIso(item.submitted_at),
+    distributionStatus: item.distribution_status,
+    txHash: item.tx_hash || null,
+    confirmedAt: toIso(item.confirmed_at),
+    lastError: item.last_error || null,
+    providerResponse: item.provider_response || null,
+    items: items.map(serializeSettlementItem),
+  };
+}
+
+async function loadSettlementResponse(address) {
+  const detail = await getSettlementDetail(address);
+  return detail ? serializeSettlement(detail.settlement, detail.items) : null;
 }
 
 async function computeStats(address, { transaction } = {}) {
@@ -309,6 +389,219 @@ router.get("/campaigns/:address/records", async (req, res) => {
   }
 });
 
+router.get("/campaigns/:address/settlement", async (req, res) => {
+  try {
+    const address = String(req.params.address || "").trim();
+    const campaign = await E2eList.findByPk(address, { attributes: ["address"] });
+    if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
+    return res.json({ success: true, data: await loadSettlementResponse(address) });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.post("/campaigns/:address/settlement/recalculate", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    const campaign = await E2eList.findByPk(address);
+    if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
+    if (String(campaign.status) !== "review") {
+      throw publicError("只有待发奖活动可以重新计算", 409, "E2E_CAMPAIGN_NOT_REVIEW");
+    }
+    await calculateCampaignScores(campaign, { skipStatusTransition: true });
+    await generateSettlementDraft(address, { force: true });
+    await logAdminAction(req, { action: "e2e_settlement_recalculate", success: true, message: `address=${address}` });
+    return res.json({ success: true, data: await loadSettlementResponse(address) });
+  } catch (error) {
+    await logAdminAction(req, { action: "e2e_settlement_recalculate", success: false, message: `address=${address};${error.message}` }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
+router.patch("/campaigns/:address/settlement/items/:itemId/exclusion", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    if (typeof req.body?.excluded !== "boolean") {
+      throw publicError("excluded 必须是布尔值", 400, "E2E_INVALID_EXCLUSION");
+    }
+    await reviseSettlementExclusion(address, req.params.itemId, {
+      excluded: req.body.excluded,
+      reason: text(req.body.reason, 500),
+      admin: req.adminUser,
+    });
+    await logAdminAction(req, {
+      action: req.body.excluded ? "e2e_settlement_exclude_user" : "e2e_settlement_restore_user",
+      success: true,
+      message: `address=${address};itemId=${req.params.itemId};reason=${text(req.body.reason, 500) || ""}`,
+    });
+    return res.json({ success: true, data: await loadSettlementResponse(address) });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.post("/campaigns/:address/settlement/approve", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    await approveSettlement(address, req.adminUser);
+    await logAdminAction(req, { action: "e2e_settlement_approve", success: true, message: `address=${address}` });
+    return res.json({ success: true, data: await loadSettlementResponse(address) });
+  } catch (error) {
+    await logAdminAction(req, { action: "e2e_settlement_approve", success: false, message: `address=${address};${error.message}` }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
+router.post("/campaigns/:address/settlement/distribute", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    await submitSettlementDistribution(address, req.adminUser);
+    await logAdminAction(req, { action: "e2e_settlement_distribute", success: true, message: `address=${address}` });
+    return res.json({ success: true, data: await loadSettlementResponse(address) });
+  } catch (error) {
+    await logAdminAction(req, { action: "e2e_settlement_distribute", success: false, message: `address=${address};${error.message}` }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
+router.post("/campaigns/:address/settlement/refresh", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    await refreshSettlementDistribution(address);
+    return res.json({ success: true, data: await loadSettlementResponse(address) });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.get("/campaigns/:address/diagnostics", async (req, res) => {
+  try {
+    const address = String(req.params.address || "").trim();
+    const campaign = await E2eList.findByPk(address);
+    if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
+    const [runs, records, logs, tweet] = await Promise.all([
+      E2eCrawlRun.findAll({ where: { campaign_address: address }, order: [["started_at", "DESC"]], limit: 20 }),
+      E2eRecord.findAll({ where: { address }, order: [["point", "DESC"], ["user_id", "ASC"]], limit: 500 }),
+      E2eLog.findAll({
+        where: { address },
+        order: [["calc_time", "DESC"]],
+        limit: 100,
+      }),
+      campaign.tweet_id ? E2eTweet.findByPk(String(campaign.tweet_id)) : null,
+    ]);
+    const scoreRows = records.map(serializeRecord);
+    const scoredInteractions = scoreRows.flatMap((record) => {
+      const details = Array.isArray(record.scoreBreakdown?.interactions) ? record.scoreBreakdown.interactions : [];
+      return details.map((item) => ({
+        ...item,
+        userId: record.userId,
+        username: record.username,
+        profileImageUrl: record.profileImageUrl,
+        finalUserPoint: record.point,
+      }));
+    });
+    const scoredByKey = new Map(scoredInteractions.map((item) => [`${item.type}:${item.id}`, item]));
+    const participantById = new Map(scoreRows.map((record) => [record.userId, record]));
+    const engageData = tweet?.engage_data && typeof tweet.engage_data === "object" ? tweet.engage_data : {};
+    const rawInteractions = [
+      ...Object.values(engageData.replies || {}).map((item) => ({ ...item, type: "reply" })),
+      ...Object.values(engageData.quotes || {}).map((item) => ({ ...item, type: "quote" })),
+      ...(Array.isArray(engageData.engage_ids?.retweeted_user_ids) ? engageData.engage_ids.retweeted_user_ids : [])
+        .map((userId) => ({ id: `retweet:${userId}`, user_id: String(userId), type: "retweet", text: "", create_time: null })),
+    ];
+    const interactions = rawInteractions.map((raw) => {
+      const scored = scoredByKey.get(`${raw.type}:${raw.id}`);
+      if (scored) return scored;
+      const participant = participantById.get(String(raw.user_id));
+      return {
+        id: String(raw.id || ""),
+        type: raw.type,
+        text: raw.text || "",
+        createTime: raw.create_time || null,
+        metrics: {
+          likes: Number(raw.likes || 0), replies: Number(raw.replies || 0),
+          retweets: Number(raw.retweets || 0), views: Number(raw.views || 0),
+        },
+        base: 0, charLength: Array.from(String(raw.text || "")).length,
+        lengthBonus: 0, engagementBonus: 0, timeWeight: 1,
+        scoreBeforeDecay: 0, score: 0, counted: false,
+        reason: raw.type === "retweet" ? "普通转推不计分" : "未报名或不符合活动语言/时间条件",
+        userId: String(raw.user_id || ""),
+        username: raw.username || participant?.username || "",
+        profileImageUrl: raw.profile_image_url || participant?.profileImageUrl || null,
+        finalUserPoint: participant?.point || 0,
+      };
+    });
+    return res.json({
+      success: true,
+      data: {
+        crawlRuns: runs.map((row) => ({
+          id: String(row.id),
+          status: row.status,
+          startedAt: toIso(row.started_at),
+          finishedAt: toIso(row.finished_at),
+          replyCount: Number(row.reply_count || 0),
+          quoteCount: Number(row.quote_count || 0),
+          retweeterCount: Number(row.retweeter_count || 0),
+          endpointDetails: row.endpoint_details || {},
+          error: row.error || null,
+        })),
+        scores: scoreRows,
+        interactions,
+        scoreLogs: logs.map((row) => ({
+          userId: String(row.user_id),
+          username: row.username || "",
+          point: toFiniteNumber(row.point),
+          explanation: row.explanation || null,
+          scoreBreakdown: row.score_breakdown || null,
+          calculatedAt: toIso(row.calc_time),
+        })),
+      },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.put("/campaigns/:address/scoring-config", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    const config = validateScoringConfig(req.body?.config);
+    const campaign = await E2eList.findByPk(address);
+    if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
+    const status = String(campaign.status || "").toLowerCase();
+    if (status === "complete") {
+      throw publicError("已完成活动不能修改评分规则", 409, "E2E_SCORING_CONFIG_LOCKED");
+    }
+    const currentSettlement = await getSettlementDetail(address);
+    if (currentSettlement && currentSettlement.settlement.status !== "draft" && status === "review") {
+      throw publicError("获奖名单已确认，评分规则已锁定", 409, "E2E_SCORING_CONFIG_LOCKED");
+    }
+    await campaign.update({ score_config: config });
+    if (status === "active") {
+      await calculateCampaignScores(campaign);
+    } else if (status === "review") {
+      await calculateCampaignScores(campaign, { skipStatusTransition: true });
+      await generateSettlementDraft(address, { force: true });
+    }
+    await logAdminAction(req, {
+      action: "e2e_scoring_config_update",
+      success: true,
+      message: `address=${address};status=${status};config=${JSON.stringify(config)}`,
+    });
+    return res.json({
+      success: true,
+      data: {
+        detail: await loadCampaignDetail(address),
+        settlement: await loadSettlementResponse(address),
+      },
+    });
+  } catch (error) {
+    await logAdminAction(req, { action: "e2e_scoring_config_update", success: false, message: `address=${address};${error.message}` }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
 router.put("/campaigns/:address", async (req, res) => {
   const address = String(req.params.address || "").trim();
   try {
@@ -396,6 +689,14 @@ router.post("/campaigns/:address/force-activate", async (req, res) => {
 router.post("/campaigns/:address/complete", async (req, res) => {
   const address = String(req.params.address || "").trim();
   try {
+    const settlement = await getSettlementDetail(address);
+    if (settlement) {
+      throw publicError(
+        "该活动已进入新版结算流程，请确认名单并通过 E2E V2 分发，不能手工标记完成",
+        409,
+        "E2E_MANUAL_COMPLETE_DISABLED"
+      );
+    }
     const txHash = text(req.body?.txHash, 128);
     if (!txHash || !TX_HASH_PATTERN.test(txHash)) {
       throw publicError("txHash 必须是 0x 开头的 64 位十六进制交易哈希", 400, "E2E_INVALID_TX_HASH");

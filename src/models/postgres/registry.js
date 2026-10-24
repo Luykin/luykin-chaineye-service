@@ -67,6 +67,9 @@ const E2eListModel = require("../../echohunt/e2e/models/E2eList");
 const E2eRecordModel = require("../../echohunt/e2e/models/E2eRecord");
 const E2eLogModel = require("../../echohunt/e2e/models/E2eLog");
 const E2eTweetModel = require("../../echohunt/e2e/models/E2eTweet");
+const E2eSettlementModel = require("../../echohunt/e2e/models/E2eSettlement");
+const E2eSettlementItemModel = require("../../echohunt/e2e/models/E2eSettlementItem");
+const E2eCrawlRunModel = require("../../echohunt/e2e/models/E2eCrawlRun");
 
 function initModels(pgInstance) {
   return {
@@ -146,6 +149,9 @@ function initModels(pgInstance) {
     E2eRecord: E2eRecordModel(pgInstance),
     E2eLog: E2eLogModel(pgInstance),
     E2eTweet: E2eTweetModel(pgInstance),
+    E2eSettlement: E2eSettlementModel(pgInstance),
+    E2eSettlementItem: E2eSettlementItemModel(pgInstance),
+    E2eCrawlRun: E2eCrawlRunModel(pgInstance),
   };
 }
 

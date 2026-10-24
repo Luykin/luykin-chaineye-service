@@ -1,6 +1,7 @@
 const schedule = require("node-schedule");
 const { updateActiveE2eTweetEngages } = require("../services/e2eEngageService");
 const { runE2eScoringCycle } = require("../services/e2eScoreService");
+const { refreshPendingDistributions } = require("../services/e2eSettlementService");
 
 let engageRunning = false;
 let scoreRunning = false;
@@ -25,8 +26,12 @@ async function runScoringTaskSafely() {
   scoreRunning = true;
   try {
     const result = await runE2eScoringCycle();
+    const distributionResult = await refreshPendingDistributions();
     if (result.campaignCount > 0) {
       console.log(`[EchoHunt E2E] 算分与状态流转完成: 处理了 ${result.campaignCount} 个活跃活动`);
+    }
+    if (distributionResult.checked > 0) {
+      console.log(`[EchoHunt E2E] 分发状态刷新完成: 查询 ${distributionResult.checked} 笔，失败 ${distributionResult.failed} 笔`);
     }
   } catch (error) {
     console.error("[EchoHunt E2E] 算分任务异常:", error?.message || error);

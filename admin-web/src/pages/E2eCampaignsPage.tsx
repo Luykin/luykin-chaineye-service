@@ -4,9 +4,11 @@ import { LinkOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
+import { E2eDiagnosticsTab } from "@/components/e2e/E2eDiagnosticsTab";
+import { E2eSettlementTab } from "@/components/e2e/E2eSettlementTab";
+import { E2eScoringConfigCard } from "@/components/e2e/E2eScoringConfigCard";
 import { ApiError } from "@/services/apiClient";
 import {
-  completeCampaign,
   forceActivateCampaign,
   getCampaign,
   listCampaignRecords,
@@ -44,7 +46,6 @@ const LANG_OPTIONS = [
 const TYPE_LABEL: Record<string, string> = { mindshare: "Mindshare", equal: "Equal" };
 const LANG_LABEL: Record<string, string> = { all: "全部", zh: "中文 (zh)", cn: "中文 (cn)", en: "English" };
 const FLAG_LABEL: Record<string, string> = { political: "政治", sexual: "色情", violence: "暴力", abusive: "辱骂" };
-const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/;
 const AMOUNT_PATTERN = /^\d{1,10}(?:\.\d{1,6})?$/;
 
 const toLocalInput = (value?: string | null) => {
@@ -83,15 +84,13 @@ export function E2eCampaignsPage() {
   const [keywordInput, setKeywordInput] = useState("");
 
   const [detailAddress, setDetailAddress] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<"info" | "records">("info");
+  const [detailTab, setDetailTab] = useState<"info" | "records" | "scoring" | "settlement" | "diagnostics">("info");
   const [recordPage, setRecordPage] = useState(1);
   const [recordPageSize, setRecordPageSize] = useState(10);
 
   const [editing, setEditing] = useState<E2eCampaign | null>(null);
   const [activating, setActivating] = useState<E2eCampaign | null>(null);
-  const [completing, setCompleting] = useState<E2eCampaign | null>(null);
   const [editForm] = Form.useForm();
-  const [completeForm] = Form.useForm();
 
   const query = useQuery({
     queryKey: ["e2e-campaigns", page, pageSize, statusFilter, keyword],
@@ -125,17 +124,6 @@ export function E2eCampaignsPage() {
     onSuccess: (res, variables) => {
       messageApi.success("已保存");
       setEditing(null);
-      if (res.data) applyDetail(variables.address, res.data);
-      else invalidateAll();
-    },
-    onError: (error: Error) => messageApi.error(errorMessage(error)),
-  });
-
-  const complete = useMutation({
-    mutationFn: ({ address, txHash }: { address: string; txHash: string }) => completeCampaign(address, txHash),
-    onSuccess: (res, variables) => {
-      messageApi.success("已标记结算完成");
-      setCompleting(null);
       if (res.data) applyDetail(variables.address, res.data);
       else invalidateAll();
     },
@@ -287,8 +275,8 @@ export function E2eCampaignsPage() {
             </Button>
           )}
           {row.status === "review" && (
-            <Button size="small" type="primary" ghost onClick={() => { setCompleting(row); completeForm.resetFields(); }}>
-              标记结算完成
+            <Button size="small" type="primary" ghost onClick={() => { openDetail(row); setDetailTab("settlement"); }}>
+              审核发奖
             </Button>
           )}
         </Space>
@@ -355,7 +343,7 @@ export function E2eCampaignsPage() {
     ? Object.entries(detailTweet.flags || {}).filter(([, value]) => value).map(([key]) => key)
     : [];
 
-  return <PermissionGuard permission="e2e-campaigns"><PageSection title="E2E 活动管理" description="管理 E2E 链上活动：查看活动配置与报名排行、编辑活动参数、确认支付并激活活动、在待发奖阶段标记结算完成。"><>{contextHolder}
+  return <PermissionGuard permission="e2e-campaigns"><PageSection title="E2E 活动管理" description="查看抓取与评分依据，审核不可变获奖名单，并在管理员确认后触发 E2E V2 链上分发。"><>{contextHolder}
     <Space size={8} wrap style={{ marginBottom: 12 }} role="group" aria-label="活动状态筛选">
       <Button
         type={statusFilter === undefined ? "primary" : "default"}
@@ -398,7 +386,7 @@ export function E2eCampaignsPage() {
 
     <Drawer
       open={Boolean(detailAddress)}
-      width={760}
+      width={1180}
       title={
         <Space size={8}>
           <span>活动详情</span>
@@ -412,7 +400,7 @@ export function E2eCampaignsPage() {
     >
       <Tabs
         activeKey={detailTab}
-        onChange={(key) => setDetailTab(key as "info" | "records")}
+        onChange={(key) => setDetailTab(key as "info" | "records" | "scoring" | "settlement" | "diagnostics")}
         items={[
           {
             key: "info",
@@ -533,6 +521,21 @@ export function E2eCampaignsPage() {
               />
             ),
           },
+          {
+            key: "scoring",
+            label: "评分规则",
+            children: detailAddress && detailCampaign ? <E2eScoringConfigCard address={detailAddress} status={detailCampaign.status} config={detailCampaign.scoreConfig} /> : null,
+          },
+          {
+            key: "settlement",
+            label: "结算审核",
+            children: detailAddress ? <E2eSettlementTab address={detailAddress} campaignStatus={detailCampaign?.status} /> : null,
+          },
+          {
+            key: "diagnostics",
+            label: "抓取与算分",
+            children: detailAddress ? <E2eDiagnosticsTab address={detailAddress} /> : null,
+          },
         ]}
       />
     </Drawer>
@@ -652,36 +655,5 @@ export function E2eCampaignsPage() {
       )}
     </Modal>
 
-    <Modal
-      open={Boolean(completing)}
-      title="标记结算完成"
-      width={520}
-      onCancel={() => setCompleting(null)}
-      onOk={() => completeForm.submit()}
-      confirmLoading={complete.isPending}
-      okText="确认完成"
-      cancelText="取消"
-      destroyOnClose
-    >
-      <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-        确认链上奖励已发放后，填写结算交易哈希将活动标记为已结束（complete）。仅待发奖（review）状态的活动可执行此操作。
-      </Typography.Paragraph>
-      <Form
-        form={completeForm}
-        layout="vertical"
-        onFinish={(values) => completing && complete.mutate({ address: completing.address, txHash: String(values.txHash).trim() })}
-      >
-        <Form.Item
-          name="txHash"
-          label="结算交易哈希"
-          rules={[
-            { required: true, message: "请输入交易哈希" },
-            { pattern: TX_HASH_PATTERN, message: "格式应为 0x 开头的 64 位十六进制字符" },
-          ]}
-        >
-          <Input placeholder="0x..." allowClear />
-        </Form.Item>
-      </Form>
-    </Modal>
   </></PageSection></PermissionGuard>;
 }

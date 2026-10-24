@@ -1,6 +1,6 @@
 const axios = require("axios");
 const { QueryTypes } = require("sequelize");
-const { E2eList, E2eTweet } = require("../../../models/postgres-start");
+const { E2eList, E2eTweet, E2eCrawlRun } = require("../../../models/postgres-start");
 const {
   getPostgresReadOnlyInstance,
   getPostgresReadOnlyStatus,
@@ -25,9 +25,13 @@ function getCrawlerUrl() {
   return baseUrl ? `${baseUrl}/crawler` : "";
 }
 
-async function callCrawlerEndpoint(endpoint, tweetId, cursor = null) {
+async function callCrawlerEndpoint(endpoint, tweetId, cursor = null, diagnostic = null) {
   const crawlerUrl = getCrawlerUrl();
-  if (!crawlerUrl) return null;
+  if (!crawlerUrl) {
+    if (diagnostic) diagnostic.error = "未配置抓取服务地址";
+    return null;
+  }
+  const startedAt = Date.now();
   try {
     const payload = {
       endpoint,
@@ -40,8 +44,19 @@ async function callCrawlerEndpoint(endpoint, tweetId, cursor = null) {
       headers: { "Content-Type": "application/json" },
     });
     const body = response.data || {};
+    if (diagnostic) {
+      diagnostic.requests += 1;
+      diagnostic.durationMs += Date.now() - startedAt;
+      diagnostic.lastHttpStatus = response.status;
+    }
     return body.data || body;
-  } catch (_) {
+  } catch (error) {
+    if (diagnostic) {
+      diagnostic.requests += 1;
+      diagnostic.durationMs += Date.now() - startedAt;
+      diagnostic.lastHttpStatus = error?.response?.status || null;
+      diagnostic.error = error?.message || "抓取请求失败";
+    }
     return null;
   }
 }
@@ -64,9 +79,13 @@ function normalizeCrawlerTweet(raw = {}) {
   };
 }
 
-async function fetchReadonlyDevEngageData(tweetId) {
+async function fetchReadonlyDevEngageData(tweetId, diagnostic = null) {
   try {
     const status = getPostgresReadOnlyStatus();
+    if (diagnostic) {
+      diagnostic.configured = isPostgresReadOnlyConfigured();
+      diagnostic.ready = Boolean(status.ready);
+    }
     if (!isPostgresReadOnlyConfigured() || !status.ready) return null;
     const db = getPostgresReadOnlyInstance();
     const [mainRow] = await db.query(
@@ -110,7 +129,8 @@ async function fetchReadonlyDevEngageData(tweetId) {
       engageIds,
       interactionRows: interactionRows || [],
     };
-  } catch (_) {
+  } catch (error) {
+    if (diagnostic) diagnostic.error = error?.message || "只读库查询失败";
     return null;
   }
 }
@@ -119,9 +139,26 @@ async function fetchReadonlyDevEngageData(tweetId) {
  * 对应原 twitter_task_tweet_engage.rs 中的 update_tweet_engage_by_tweet_id
  * 拉取单条目标推文的评论(replies)、引用(quotes)、转推用户(retweeters)，并持久化至 luykindatabase 的 EchohuntE2eTweets.engage_data
  */
-async function updateTweetEngageByTweetId(tweetId) {
+async function updateTweetEngageByTweetId(tweetId, campaignAddress = null) {
   const cleanTweetId = String(tweetId || "").trim();
   if (!cleanTweetId) return null;
+
+  const startedAt = new Date();
+  const endpointDetails = {
+    tweet_replies: { requests: 0, pages: 0, items: 0, durationMs: 0, lastHttpStatus: null, error: null },
+    tweet_quotes: { requests: 0, pages: 0, items: 0, durationMs: 0, lastHttpStatus: null, error: null },
+    tweet_retweeters: { requests: 0, pages: 0, items: 0, durationMs: 0, lastHttpStatus: null, error: null },
+    readonly: { configured: false, ready: false, used: false, items: 0, error: null },
+  };
+  const crawlRun = await E2eCrawlRun.create({
+    tweet_id: cleanTweetId,
+    campaign_address: campaignAddress || null,
+    status: "running",
+    started_at: startedAt,
+    endpoint_details: endpointDetails,
+  });
+
+  try {
 
   const existingRecord = await E2eTweet.findByPk(cleanTweetId);
   const prevEngage =
@@ -140,9 +177,11 @@ async function updateTweetEngageByTweetId(tweetId) {
   // 1. 尝试通过爬虫分页抓取 tweet_replies / tweet_quotes / tweet_retweeters
   let replyCursor = null;
   for (let i = 0; i < MAX_PAGES; i += 1) {
-    const res = await callCrawlerEndpoint("tweet_replies", cleanTweetId, replyCursor);
+    const res = await callCrawlerEndpoint("tweet_replies", cleanTweetId, replyCursor, endpointDetails.tweet_replies);
     const tweets = Array.isArray(res?.tweets) ? res.tweets : [];
     if (!tweets.length) break;
+    endpointDetails.tweet_replies.pages += 1;
+    endpointDetails.tweet_replies.items += tweets.length;
     for (const item of tweets) {
       const normalized = normalizeCrawlerTweet(item);
       if (normalized.id) {
@@ -156,9 +195,11 @@ async function updateTweetEngageByTweetId(tweetId) {
 
   let quoteCursor = null;
   for (let i = 0; i < MAX_PAGES; i += 1) {
-    const res = await callCrawlerEndpoint("tweet_quotes", cleanTweetId, quoteCursor);
+    const res = await callCrawlerEndpoint("tweet_quotes", cleanTweetId, quoteCursor, endpointDetails.tweet_quotes);
     const tweets = Array.isArray(res?.tweets) ? res.tweets : [];
     if (!tweets.length) break;
+    endpointDetails.tweet_quotes.pages += 1;
+    endpointDetails.tweet_quotes.items += tweets.length;
     for (const item of tweets) {
       const normalized = normalizeCrawlerTweet(item);
       if (normalized.id) {
@@ -172,9 +213,11 @@ async function updateTweetEngageByTweetId(tweetId) {
 
   let retweeterCursor = null;
   for (let i = 0; i < MAX_PAGES; i += 1) {
-    const res = await callCrawlerEndpoint("tweet_retweeters", cleanTweetId, retweeterCursor);
+    const res = await callCrawlerEndpoint("tweet_retweeters", cleanTweetId, retweeterCursor, endpointDetails.tweet_retweeters);
     const users = Array.isArray(res?.users) ? res.users : [];
     if (!users.length) break;
+    endpointDetails.tweet_retweeters.pages += 1;
+    endpointDetails.tweet_retweeters.items += users.length;
     for (const user of users) {
       const uid = String(user?.id || user?.user_id || "").trim();
       if (uid) retweetedUserIds.add(uid);
@@ -184,8 +227,10 @@ async function updateTweetEngageByTweetId(tweetId) {
   }
 
   // 2. 同时合并只读库 dev.tweet 中已有的互动数据（若已配置）
-  const readonlyData = await fetchReadonlyDevEngageData(cleanTweetId);
+  const readonlyData = await fetchReadonlyDevEngageData(cleanTweetId, endpointDetails.readonly);
   if (readonlyData) {
+    endpointDetails.readonly.used = true;
+    endpointDetails.readonly.items = (readonlyData.interactionRows || []).length;
     for (const id of readonlyData.engageIds?.replied_ids || []) repliedIds.add(String(id));
     for (const id of readonlyData.engageIds?.quoted_ids || []) quotedIds.add(String(id));
     for (const uid of readonlyData.engageIds?.retweeted_user_ids || []) retweetedUserIds.add(String(uid));
@@ -232,7 +277,27 @@ async function updateTweetEngageByTweetId(tweetId) {
     });
   }
 
+  const endpointErrors = Object.values(endpointDetails).map((item) => item.error).filter(Boolean);
+  await crawlRun.update({
+    status: endpointErrors.length ? "partial" : "success",
+    finished_at: new Date(),
+    reply_count: Object.keys(repliesMap).length,
+    quote_count: Object.keys(quotesMap).length,
+    retweeter_count: retweetedUserIds.size,
+    endpoint_details: endpointDetails,
+    error: endpointErrors.join("; ") || null,
+  });
+
   return nextEngageData;
+  } catch (error) {
+    await crawlRun.update({
+      status: "failed",
+      finished_at: new Date(),
+      endpoint_details: endpointDetails,
+      error: error?.message || "抓取任务失败",
+    }).catch(() => {});
+    throw error;
+  }
 }
 
 /**
@@ -242,18 +307,21 @@ async function updateTweetEngageByTweetId(tweetId) {
 async function updateActiveE2eTweetEngages() {
   const activeCampaigns = await E2eList.findAll({
     where: { status: "active" },
-    attributes: ["tweet_id"],
+    attributes: ["tweet_id", "address"],
   });
-  const tweetIds = Array.from(
-    new Set(activeCampaigns.map((item) => String(item.tweet_id || "").trim()).filter(Boolean))
-  );
+  const campaignByTweetId = new Map();
+  activeCampaigns.forEach((item) => {
+    const tweetId = String(item.tweet_id || "").trim();
+    if (tweetId && !campaignByTweetId.has(tweetId)) campaignByTweetId.set(tweetId, String(item.address));
+  });
+  const tweetIds = Array.from(campaignByTweetId.keys());
   if (!tweetIds.length) {
     return { updatedCount: 0, tweetIds: [] };
   }
 
   for (let i = 0; i < tweetIds.length; i += BATCH_SIZE) {
     const batch = tweetIds.slice(i, i + BATCH_SIZE);
-    await Promise.allSettled(batch.map((tid) => updateTweetEngageByTweetId(tid)));
+    await Promise.allSettled(batch.map((tid) => updateTweetEngageByTweetId(tid, campaignByTweetId.get(tid))));
   }
 
   return {

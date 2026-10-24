@@ -1,0 +1,32 @@
+const { DataTypes } = require("sequelize");
+
+module.exports = (sequelize) =>
+  sequelize.define("E2eSettlement", {
+    id: { type: DataTypes.BIGINT, autoIncrement: true, primaryKey: true },
+    campaign_address: { type: DataTypes.STRING, allowNull: false },
+    revision: { type: DataTypes.INTEGER, allowNull: false },
+    status: { type: DataTypes.STRING, allowNull: false, defaultValue: "draft" },
+    reward_pool: { type: DataTypes.DECIMAL(20, 6), allowNull: false },
+    fee_amount: { type: DataTypes.DECIMAL(20, 6), allowNull: false },
+    deposit_amount: { type: DataTypes.DECIMAL(20, 6), allowNull: false },
+    winner_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    excluded_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    unique_recipient_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    calculation_config: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+    distribution_recipients: { type: DataTypes.JSONB, allowNull: true },
+    generated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    payout_due_at: { type: DataTypes.DATE, allowNull: false },
+    approved_by: { type: DataTypes.BIGINT, allowNull: true },
+    approved_by_email: { type: DataTypes.STRING, allowNull: true },
+    approved_at: { type: DataTypes.DATE, allowNull: true },
+    submitted_by: { type: DataTypes.BIGINT, allowNull: true },
+    submitted_by_email: { type: DataTypes.STRING, allowNull: true },
+    submitted_at: { type: DataTypes.DATE, allowNull: true },
+    distribution_status: { type: DataTypes.STRING, allowNull: false, defaultValue: "pending" },
+    tx_hash: { type: DataTypes.STRING, allowNull: true },
+    confirmed_at: { type: DataTypes.DATE, allowNull: true },
+    last_error: { type: DataTypes.TEXT, allowNull: true },
+    provider_response: { type: DataTypes.JSONB, allowNull: true },
+    created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  }, { tableName: "EchohuntE2eSettlements", timestamps: false });

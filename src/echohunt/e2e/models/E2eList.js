@@ -25,6 +25,7 @@ module.exports = (sequelize) =>
       fees: { type: DataTypes.DECIMAL, allowNull: true },
       lang: { type: DataTypes.STRING, allowNull: true },
       retro: { type: DataTypes.BOOLEAN, allowNull: true },
+      score_config: { type: DataTypes.JSONB, allowNull: true },
     },
     {
       tableName: "EchohuntE2eLists",

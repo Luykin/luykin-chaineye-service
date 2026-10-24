@@ -15,6 +15,8 @@ module.exports = (sequelize) =>
       username: { type: DataTypes.STRING, allowNull: true },
       point: { type: DataTypes.DECIMAL, allowNull: true },
       explanation: { type: DataTypes.TEXT, allowNull: true },
+      address: { type: DataTypes.STRING, allowNull: true },
+      score_breakdown: { type: DataTypes.JSONB, allowNull: true },
     },
     {
       tableName: "EchohuntE2eLogs",

@@ -4,6 +4,33 @@ export type E2eCampaignStatus = "pending" | "active" | "review" | "complete";
 export type E2eCampaignType = "mindshare" | "equal";
 export type E2eCampaignLang = "all" | "zh" | "cn" | "en";
 
+export interface E2eScoringConfig {
+  timeDecayFloor: number;
+  replyBase: number;
+  quoteBase: number;
+  lengthCharsPerPoint: number;
+  lengthBonusCap: number;
+  likeMultiplier: number;
+  replyMultiplier: number;
+  retweetReceivedMultiplier: number;
+  viewsPerPoint: number;
+  viewBonusCap: number;
+  engagementBonusCap: number;
+  maxReplies: number;
+  maxQuotes: number;
+  rankThreshold1: number;
+  rankThreshold2: number;
+  rankThreshold3: number;
+  rankThreshold4: number;
+  rankThreshold5: number;
+  rankWeightTop1000: number;
+  rankWeightTop5000: number;
+  rankWeightTop20000: number;
+  rankWeightTop50000: number;
+  rankWeightTop100000: number;
+  rankWeightDefault: number;
+}
+
 export interface E2eCampaign {
   address: string;
   tweetId: string | null;
@@ -27,6 +54,7 @@ export interface E2eCampaign {
   startTime: string | null;
   endTime: string | null;
   participantCount: number;
+  scoreConfig: E2eScoringConfig;
 }
 
 export interface E2eTweet {
@@ -74,8 +102,118 @@ export interface E2eCampaignRecord {
   rewards: number | null;
   userAddress: string | null;
   explanation: string | null;
+  scoreBreakdown: E2eScoreBreakdown | null;
   createTime: string | null;
   updateTime: string | null;
+}
+
+export interface E2eInteractionScore {
+  id: string;
+  type: "reply" | "quote" | "retweet";
+  text: string;
+  createTime: string | null;
+  metrics: { likes: number; replies: number; retweets: number; views: number };
+  base: number;
+  charLength: number;
+  lengthBonus: number;
+  engagementBonus: number;
+  timeWeight: number;
+  scoreBeforeDecay: number;
+  score: number;
+  counted: boolean;
+  reason: string | null;
+  userId?: string;
+  username?: string;
+  profileImageUrl?: string | null;
+  finalUserPoint?: number | null;
+}
+
+export interface E2eScoreBreakdown {
+  version: number;
+  policy: Record<string, unknown>;
+  rawScore: number;
+  rankMultiplier: number;
+  point: number;
+  interactions: E2eInteractionScore[];
+  captured: { replies: number; quotes: number; ordinaryRetweet: boolean };
+}
+
+export interface E2eSettlementItem {
+  id: string;
+  userId: string;
+  username: string;
+  name: string;
+  profileImageUrl: string | null;
+  payoutAddress: string | null;
+  fanRank: number | null;
+  point: number;
+  rank: number | null;
+  rewardAmount: string;
+  isWinner: boolean;
+  excluded: boolean;
+  exclusionReason: string | null;
+  excludedBy: string | null;
+  excludedByEmail: string | null;
+  excludedAt: string | null;
+  scoreBreakdown: E2eScoreBreakdown | null;
+  interactions: E2eInteractionScore[];
+}
+
+export type E2eSettlementStatus = "draft" | "approved" | "submitting" | "submitted" | "confirmed" | "failed" | "superseded";
+
+export interface E2eSettlement {
+  id: string;
+  campaignAddress: string;
+  revision: number;
+  status: E2eSettlementStatus;
+  rewardPool: string;
+  feeAmount: string;
+  depositAmount: string;
+  winnerCount: number;
+  excludedCount: number;
+  uniqueRecipientCount: number;
+  calculationConfig: Record<string, unknown>;
+  distributionRecipients: Array<{ address: string; amount: string }>;
+  generatedAt: string;
+  payoutDueAt: string;
+  approvedBy: string | null;
+  approvedByEmail: string | null;
+  approvedAt: string | null;
+  submittedBy: string | null;
+  submittedByEmail: string | null;
+  submittedAt: string | null;
+  distributionStatus: string;
+  txHash: string | null;
+  confirmedAt: string | null;
+  lastError: string | null;
+  providerResponse: unknown;
+  items: E2eSettlementItem[];
+}
+
+export interface E2eCrawlRun {
+  id: string;
+  status: string;
+  startedAt: string;
+  finishedAt: string | null;
+  replyCount: number;
+  quoteCount: number;
+  retweeterCount: number;
+  endpointDetails: Record<string, unknown>;
+  error: string | null;
+}
+
+export interface E2eDiagnostics {
+  crawlRuns: E2eCrawlRun[];
+  scores: E2eCampaignRecord[];
+  interactions: E2eInteractionScore[];
+  scoreLogs: Array<{
+    userId: string;
+    username: string;
+    point: number | null;
+    explanation: string | null;
+    scoreBreakdown: E2eScoreBreakdown | null;
+    calculatedAt: string;
+  }>;
 }
 
 export interface E2ePagination {
@@ -155,4 +293,54 @@ export const completeCampaign = (address: string, txHash: string) =>
   apiRequest<{ success: boolean; data: E2eCampaignDetail }>(
     `${base}/campaigns/${encodeURIComponent(address)}/complete`,
     { method: "POST", body: { txHash } }
+  );
+
+export const getCampaignSettlement = (address: string) =>
+  apiRequest<{ success: boolean; data: E2eSettlement | null }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/settlement`
+  );
+
+export const recalculateCampaignSettlement = (address: string) =>
+  apiRequest<{ success: boolean; data: E2eSettlement }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/settlement/recalculate`,
+    { method: "POST" }
+  );
+
+export const setSettlementItemExclusion = (
+  address: string,
+  itemId: string,
+  excluded: boolean,
+  reason?: string,
+) => apiRequest<{ success: boolean; data: E2eSettlement }>(
+  `${base}/campaigns/${encodeURIComponent(address)}/settlement/items/${encodeURIComponent(itemId)}/exclusion`,
+  { method: "PATCH", body: { excluded, reason } }
+);
+
+export const approveCampaignSettlement = (address: string) =>
+  apiRequest<{ success: boolean; data: E2eSettlement }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/settlement/approve`,
+    { method: "POST" }
+  );
+
+export const distributeCampaignSettlement = (address: string) =>
+  apiRequest<{ success: boolean; data: E2eSettlement }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/settlement/distribute`,
+    { method: "POST" }
+  );
+
+export const refreshCampaignSettlement = (address: string) =>
+  apiRequest<{ success: boolean; data: E2eSettlement }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/settlement/refresh`,
+    { method: "POST" }
+  );
+
+export const getCampaignDiagnostics = (address: string) =>
+  apiRequest<{ success: boolean; data: E2eDiagnostics }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/diagnostics`
+  );
+
+export const updateCampaignScoringConfig = (address: string, config: E2eScoringConfig) =>
+  apiRequest<{ success: boolean; data: { detail: E2eCampaignDetail; settlement: E2eSettlement | null } }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/scoring-config`,
+    { method: "PUT", body: { config } }
   );

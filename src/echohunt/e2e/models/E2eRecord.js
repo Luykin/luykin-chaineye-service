@@ -25,6 +25,7 @@ module.exports = (sequelize) =>
         defaultValue: DataTypes.NOW,
       },
       explaination: { type: DataTypes.TEXT, allowNull: true },
+      score_breakdown: { type: DataTypes.JSONB, allowNull: true },
     },
     {
       tableName: "EchohuntE2eRecords",

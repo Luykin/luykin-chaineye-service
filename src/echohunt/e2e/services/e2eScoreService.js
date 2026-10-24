@@ -1,4 +1,7 @@
 const { E2eList, E2eRecord, E2eLog, E2eTweet } = require("../../../models/postgres-start");
+const { normalizeDecayFloor, ordinaryRetweetScoreDetail, scoreSingleInteraction } = require("./e2eScoringPolicy");
+const { normalizeScoringConfig } = require("./e2eScoringConfig");
+const { updateTweetEngageByTweetId } = require("./e2eEngageService");
 
 function hasChinese(text) {
   return /[\u4e00-\u9fff]/.test(String(text || ""));
@@ -13,203 +16,172 @@ function matchesLanguage(text, lang) {
   return true;
 }
 
-function computeRankWeight(fanRank) {
+function computeRankWeight(fanRank, scoringConfig = {}) {
+  const config = normalizeScoringConfig(scoringConfig);
   const rank = Number(fanRank);
-  if (!Number.isFinite(rank) || rank <= 0) return 1.0;
-  if (rank <= 1000) return 2.5;
-  if (rank <= 5000) return 2.0;
-  if (rank <= 20000) return 1.6;
-  if (rank <= 50000) return 1.35;
-  if (rank <= 100000) return 1.15;
-  return 1.0;
+  if (!Number.isFinite(rank) || rank <= 0) return config.rankWeightDefault;
+  if (rank <= config.rankThreshold1) return config.rankWeightTop1000;
+  if (rank <= config.rankThreshold2) return config.rankWeightTop5000;
+  if (rank <= config.rankThreshold3) return config.rankWeightTop20000;
+  if (rank <= config.rankThreshold4) return config.rankWeightTop50000;
+  if (rank <= config.rankThreshold5) return config.rankWeightTop100000;
+  return config.rankWeightDefault;
 }
 
-function scoreSingleInteraction(item, type) {
-  const text = String(item?.text || "").trim();
-  const charLen = Array.from(text).length;
-  const baseWeight = type === "quote" ? 15 : 10;
-  const lengthBonus = Math.min(25, Math.floor(charLen / 12));
-  const engagementBonus = Math.min(
-    30,
-    Number(item?.likes || 0) * 1.5 +
-      Number(item?.replies || 0) * 2 +
-      Number(item?.retweets || 0) * 2 +
-      Math.min(10, Number(item?.views || 0) / 200)
-  );
-  return baseWeight + lengthBonus + engagementBonus;
+function interactionOrder(a, b) {
+  const aTime = new Date(a?.create_time || 0).getTime() || 0;
+  const bTime = new Date(b?.create_time || 0).getTime() || 0;
+  if (aTime !== bTime) return aTime - bTime;
+  return String(a?.id || "").localeCompare(String(b?.id || ""));
+}
+
+function selectUserInteractions(items, userId, campaign, signup) {
+  const allowRetro = campaign.retro !== false;
+  const langRequirement = campaign.lang || "all";
+  const signupTime = signup.create_time ? new Date(signup.create_time).getTime() : 0;
+  const campaignEndTime = campaign.end_time ? new Date(campaign.end_time).getTime() : 0;
+  return items.filter((item) => {
+    if (String(item.user_id) !== userId) return false;
+    if (!matchesLanguage(item.text, langRequirement)) return false;
+    const itemTime = new Date(item.create_time || 0).getTime();
+    if (campaignEndTime > 0 && itemTime > campaignEndTime) return false;
+    if (!allowRetro && signupTime > 0) {
+      if (itemTime > 0 && itemTime < signupTime) return false;
+    }
+    return true;
+  }).sort(interactionOrder);
+}
+
+function buildUserScoreBreakdown({ signup, campaign, replies, quotes, hasRetweet }) {
+  const userId = String(signup.user_id);
+  const scoringConfig = normalizeScoringConfig(campaign.score_config);
+  const decayFloor = normalizeDecayFloor(scoringConfig.timeDecayFloor);
+  const userReplies = selectUserInteractions(replies, userId, campaign, signup);
+  const userQuotes = selectUserInteractions(quotes, userId, campaign, signup);
+  const scoreGroup = (items, type) => items.map((item, index) => {
+    const detail = scoreSingleInteraction(item, type, campaign.start_time, campaign.end_time, scoringConfig);
+    const maximum = type === "quote" ? scoringConfig.maxQuotes : scoringConfig.maxReplies;
+    if (index >= maximum) {
+      detail.counted = false;
+      detail.reason = `每位用户最多计入 ${maximum} 条${type === "quote" ? "引用" : "评论"}`;
+      detail.score = 0;
+    }
+    return detail;
+  });
+  const replyDetails = scoreGroup(userReplies, "reply");
+  const quoteDetails = scoreGroup(userQuotes, "quote");
+  const rawScore = [...replyDetails, ...quoteDetails]
+    .filter((item) => item.counted)
+    .reduce((sum, item) => sum + item.score, 0);
+  const rankMultiplier = computeRankWeight(signup.fan_rank, scoringConfig);
+  const point = Number((rawScore * rankMultiplier).toFixed(2));
+  const retweetDetail = hasRetweet ? [ordinaryRetweetScoreDetail(userId)] : [];
+  return {
+    version: 3,
+    policy: {
+      ordinaryRetweetPoints: 0,
+      ...scoringConfig,
+      timeDecay: "linear",
+      timeDecayFloor: decayFloor,
+    },
+    rawScore: Number(rawScore.toFixed(2)),
+    rankMultiplier,
+    point,
+    interactions: [...replyDetails, ...quoteDetails, ...retweetDetail],
+    captured: {
+      replies: userReplies.length,
+      quotes: userQuotes.length,
+      ordinaryRetweet: hasRetweet,
+    },
+  };
 }
 
 async function reviewExpiredCampaign(campaign) {
   const endTimeMs = campaign.end_time ? new Date(campaign.end_time).getTime() : 0;
-  if (campaign.status === "active" && endTimeMs > 0 && Date.now() >= endTimeMs) {
-    await settleCampaignRewardsPreview(campaign);
-    await campaign.update({ status: "review" });
-  }
+  if (campaign.status !== "active" || endTimeMs <= 0 || Date.now() < endTimeMs) return;
+  const { generateSettlementDraft } = require("./e2eSettlementService");
+  await generateSettlementDraft(campaign);
+  await campaign.update({ status: "review" });
 }
 
-/**
- * 对单个活动执行算分与状态流转
- */
-async function calculateCampaignScores(campaign) {
+async function calculateCampaignScores(campaign, { skipStatusTransition = false } = {}) {
   if (!campaign || !campaign.address || !campaign.tweet_id) return null;
-
   const tweetId = String(campaign.tweet_id);
   const address = String(campaign.address);
-  const signups = await E2eRecord.findAll({
-    where: { address },
-  });
-  if (!signups.length) {
-    await reviewExpiredCampaign(campaign);
-    return { address, tweetId, updatedUsers: 0 };
+  const campaignExpired = campaign.status === "active" && campaign.end_time && Date.now() >= new Date(campaign.end_time).getTime();
+  if (campaignExpired) {
+    // 结束结算前再抓取一次，避免 5 分钟抓取任务与 10 分钟算分任务的调度间隙漏掉最后一批互动。
+    await updateTweetEngageByTweetId(tweetId, address);
   }
-
+  const signups = await E2eRecord.findAll({ where: { address } });
   const tweetRecord = await E2eTweet.findByPk(tweetId);
-  const engageData =
-    tweetRecord?.engage_data && typeof tweetRecord.engage_data === "object"
-      ? tweetRecord.engage_data
-      : {};
+  const engageData = tweetRecord?.engage_data && typeof tweetRecord.engage_data === "object"
+    ? tweetRecord.engage_data
+    : {};
   const replies = Object.values(engageData.replies || {});
   const quotes = Object.values(engageData.quotes || {});
-  const retweeters = new Set(
-    Array.isArray(engageData.engage_ids?.retweeted_user_ids)
-      ? engageData.engage_ids.retweeted_user_ids.map(String)
-      : []
-  );
-
-  const allowRetro = campaign.retro !== false;
-  const langRequirement = campaign.lang || "all";
+  const retweeters = new Set(Array.isArray(engageData.engage_ids?.retweeted_user_ids)
+    ? engageData.engage_ids.retweeted_user_ids.map(String)
+    : []);
   const now = new Date();
   let updatedUsers = 0;
 
   for (const signup of signups) {
-    const userId = String(signup.user_id);
-    const signupTime = signup.create_time ? new Date(signup.create_time).getTime() : 0;
-
-    const userReplies = replies.filter((item) => {
-      if (String(item.user_id) !== userId) return false;
-      if (!matchesLanguage(item.text, langRequirement)) return false;
-      if (!allowRetro && signupTime > 0) {
-        const itemTime = new Date(item.create_time || 0).getTime();
-        if (itemTime > 0 && itemTime < signupTime) return false;
-      }
-      return true;
+    const breakdown = buildUserScoreBreakdown({
+      signup,
+      campaign,
+      replies,
+      quotes,
+      hasRetweet: retweeters.has(String(signup.user_id)),
     });
-
-    const userQuotes = quotes.filter((item) => {
-      if (String(item.user_id) !== userId) return false;
-      if (!matchesLanguage(item.text, langRequirement)) return false;
-      if (!allowRetro && signupTime > 0) {
-        const itemTime = new Date(item.create_time || 0).getTime();
-        if (itemTime > 0 && itemTime < signupTime) return false;
-      }
-      return true;
+    const explanation = [
+      `Quotes: ${breakdown.captured.quotes}`,
+      `Replies: ${breakdown.captured.replies}`,
+      "Retweet points: 0",
+      `Time decay floor: ${breakdown.policy.timeDecayFloor}`,
+      `Rank weight: x${breakdown.rankMultiplier}`,
+    ].join(", ");
+    const changed = Number(signup.point || 0) !== breakdown.point ||
+      signup.explaination !== explanation ||
+      JSON.stringify(signup.score_breakdown || null) !== JSON.stringify(breakdown);
+    if (!changed) continue;
+    await signup.update({
+      point: breakdown.point,
+      rewards: null,
+      explaination: explanation,
+      score_breakdown: breakdown,
+      update_time: now,
     });
-
-    const hasRetweet = retweeters.has(userId);
-    if (!userReplies.length && !userQuotes.length && !hasRetweet) {
-      continue;
-    }
-
-    let rawScore = 0;
-    for (const reply of userReplies.slice(0, 3)) {
-      rawScore += scoreSingleInteraction(reply, "reply");
-    }
-    for (const quote of userQuotes.slice(0, 3)) {
-      rawScore += scoreSingleInteraction(quote, "quote");
-    }
-    if (hasRetweet) {
-      rawScore += 5;
-    }
-
-    const rankMultiplier = computeRankWeight(signup.fan_rank);
-    const computedPoint = Number((rawScore * rankMultiplier).toFixed(2));
-    const prevPoint = Number(signup.point || 0);
-    const finalPoint = Math.max(prevPoint, computedPoint);
-
-    const explanationParts = [];
-    if (userQuotes.length) explanationParts.push(`Quotes: ${userQuotes.length}`);
-    if (userReplies.length) explanationParts.push(`Replies: ${userReplies.length}`);
-    if (hasRetweet) explanationParts.push("Retweeted: yes");
-    explanationParts.push(`Rank weight: x${rankMultiplier}`);
-    const explanation = explanationParts.join(", ");
-
-    if (finalPoint !== prevPoint || !signup.explaination) {
-      await signup.update({
-        point: finalPoint,
-        explaination: explanation,
-        update_time: now,
-      });
-      await E2eLog.create({
-        tweet_id: tweetId,
-        user_id: userId,
-        calc_time: now,
-        username: signup.username || null,
-        point: finalPoint,
-        explanation,
-      }).catch(() => {});
-      updatedUsers += 1;
-    }
+    await E2eLog.create({
+      tweet_id: tweetId,
+      user_id: String(signup.user_id),
+      address,
+      calc_time: new Date(),
+      username: signup.username || null,
+      point: breakdown.point,
+      explanation,
+      score_breakdown: breakdown,
+    }).catch(() => {});
+    updatedUsers += 1;
   }
-
-  // 若活动已过结束时间，流转至 review 并计算预估奖励分配
-  await reviewExpiredCampaign(campaign);
-
+  if (!skipStatusTransition) await reviewExpiredCampaign(campaign);
   return { address, tweetId, updatedUsers };
 }
 
-/**
- * 根据活动分配模式（equal 或 mindshare）与 winners 数量计算每个获奖者的 rewards
- */
-async function settleCampaignRewardsPreview(campaign) {
-  const signups = await E2eRecord.findAll({
-    where: { address: String(campaign.address) },
-  });
-  const sorted = [...signups].sort((a, b) => Number(b.point || 0) - Number(a.point || 0));
-  const positiveScorers = sorted.filter((item) => Number(item.point || 0) > 0);
-  const maxWinners = Math.max(1, Number(campaign.winners || 20));
-  const winnersList = positiveScorers.slice(0, maxWinners);
-  if (!winnersList.length) return;
-
-  const totalRewards = Number(campaign.rewards || 0);
-  const mode = String(campaign.type || "mindshare").toLowerCase();
-
-  if (mode === "equal") {
-    const perWinner = Number((totalRewards / winnersList.length).toFixed(4));
-    for (const winner of winnersList) {
-      await winner.update({ rewards: perWinner });
-    }
-    return;
-  }
-
-  const totalPoints = winnersList.reduce((acc, item) => acc + Number(item.point || 0), 0);
-  if (totalPoints <= 0) return;
-  for (const winner of winnersList) {
-    const share = Number(winner.point || 0) / totalPoints;
-    const rewardAmount = Number((totalRewards * share).toFixed(4));
-    await winner.update({ rewards: rewardAmount });
-  }
-}
-
-/**
- * 扫描所有 active 任务执行算分与到期流转
- */
 async function runE2eScoringCycle() {
-  const activeCampaigns = await E2eList.findAll({
-    where: { status: "active" },
-  });
+  const activeCampaigns = await E2eList.findAll({ where: { status: "active" } });
   const results = [];
   for (const campaign of activeCampaigns) {
-    const res = await calculateCampaignScores(campaign);
-    if (res) results.push(res);
+    const result = await calculateCampaignScores(campaign);
+    if (result) results.push(result);
   }
-  return {
-    campaignCount: activeCampaigns.length,
-    results,
-  };
+  return { campaignCount: activeCampaigns.length, results };
 }
 
 module.exports = {
+  buildUserScoreBreakdown,
   calculateCampaignScores,
-  settleCampaignRewardsPreview,
+  computeRankWeight,
+  matchesLanguage,
   runE2eScoringCycle,
 };
