@@ -205,14 +205,31 @@ async function getEchohuntTweetDetail(identity, tweetId) {
   const response = await requestXApiWithIdentity(identity, (accessToken) =>
     axios.get(`${X_API_BASE_URL}/tweets/${encodeURIComponent(normalizedTweetId)}`, {
       timeout: 3000,
-      params: { "tweet.fields": "author_id" },
+      params: {
+        "tweet.fields": "author_id",
+        expansions: "author_id",
+        "user.fields": "id,name,username,profile_image_url",
+      },
       headers: { Authorization: `Bearer ${accessToken}` },
     })
   );
   const data = response?.data?.data;
   if (!data || !normalizeTwitterId(data.id)) return null;
   const text = typeof data.text === "string" && data.text.trim() ? data.text : null;
-  return { text, authorId: normalizeTwitterId(data.author_id) };
+  const authorId = normalizeTwitterId(data.author_id);
+  const author = Array.isArray(response?.data?.includes?.users)
+    ? response.data.includes.users.find((user) => normalizeTwitterId(user?.id) === authorId)
+    : null;
+  return {
+    text,
+    authorId,
+    authorUsername: normalizeTwitterHandle(author?.username),
+    authorName: typeof author?.name === "string" ? author.name.trim() || null : null,
+    authorProfileImageUrl:
+      typeof author?.profile_image_url === "string"
+        ? author.profile_image_url.trim() || null
+        : null,
+  };
 }
 
 async function getEchohuntTweetText(identity, tweetId) {

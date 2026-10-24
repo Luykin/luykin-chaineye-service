@@ -226,10 +226,28 @@ async function runAiTweetExamine(text) {
   }
 }
 
+async function fetchTweetFromXApi(identity, tweetId, parsed, existing = null) {
+  if (!identity) return null;
+  try {
+    const detail = await getEchohuntTweetDetail(identity, tweetId);
+    if (!detail || (!detail.text && !existing?.text)) return null;
+    return {
+      tweet_id: String(tweetId),
+      text: detail.text || existing?.text || "",
+      html: existing?.html || null,
+      owner_user_id: detail.authorId || existing?.owner_user_id || null,
+      owner_handle: detail.authorUsername || parsed.handle || existing?.owner_handle || null,
+      owner_image_url: detail.authorProfileImageUrl || null,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 /**
  * 校验并解析目标推文（支持传 tweet_id 或完整推文链接 tweet_url）
  */
-async function examineE2eTweet({ tweet_id, tweet_url, identity, fallbackOwner } = {}) {
+async function examineE2eTweet({ tweet_id, tweet_url, identity } = {}) {
   const parsed = parseTweetInput(tweet_url || tweet_id);
   const tweetId = parsed.tweetId;
   if (!tweetId) {
@@ -241,34 +259,33 @@ async function examineE2eTweet({ tweet_id, tweet_url, identity, fallbackOwner } 
 
   const existing = await E2eTweet.findByPk(String(tweetId));
   if (existing && existing.text && existing.passed !== null) {
+    const rawTweet = await fetchTweetFromXApi(identity, tweetId, parsed, existing);
+    const existingData = existing.toJSON();
+    const ownerPatch = {};
+    for (const field of ["owner_user_id", "owner_handle", "owner_image_url"]) {
+      if (rawTweet?.[field] && rawTweet[field] !== existingData[field]) {
+        ownerPatch[field] = rawTweet[field];
+      }
+    }
+    if (Object.keys(ownerPatch).length > 0) {
+      if (typeof existing.update === "function") {
+        await existing.update(ownerPatch);
+      } else if (typeof E2eTweet.update === "function") {
+        await E2eTweet.update(ownerPatch, { where: { tweet_id: String(tweetId) } });
+      }
+    }
+    const data = { ...existingData, ...ownerPatch };
     return {
       status: Boolean(existing.passed),
       message: existing.passed ? "ok" : existing.explanation || "该推文未通过合规审核",
-      data: existing.toJSON(),
+      data,
     };
   }
 
   let rawTweet =
     (await fetchTweetFromReadonlyDb(tweetId)) ||
-    (await fetchTweetFromCrawler(tweetId));
-
-  if (!rawTweet && identity) {
-    try {
-      const detail = await getEchohuntTweetDetail(identity, tweetId);
-      if (detail?.text) {
-        rawTweet = {
-          tweet_id: String(tweetId),
-          text: detail.text,
-          html: null,
-          owner_user_id: detail.authorId || fallbackOwner?.twitterId || null,
-          owner_handle: parsed.handle || fallbackOwner?.username || null,
-          owner_image_url: fallbackOwner?.avatar || null,
-        };
-      }
-    } catch (_) {
-      // ignore X API fallback error
-    }
-  }
+    (await fetchTweetFromCrawler(tweetId)) ||
+    (await fetchTweetFromXApi(identity, tweetId, parsed, existing));
 
   if (!rawTweet) {
     if (!existing?.text) {
@@ -297,7 +314,7 @@ async function examineE2eTweet({ tweet_id, tweet_url, identity, fallbackOwner } 
     summary_en: aiExamine.summary_en || existing?.summary_en || "",
     owner_handle: rawTweet.owner_handle || existing?.owner_handle || parsed.handle || null,
     owner_image_url: rawTweet.owner_image_url || existing?.owner_image_url || null,
-    owner_user_id: String(rawTweet.owner_user_id || existing?.owner_user_id || fallbackOwner?.twitterId || tweetId),
+    owner_user_id: String(rawTweet.owner_user_id || existing?.owner_user_id || tweetId),
     political: aiExamine.political,
     sexual: aiExamine.sexual,
     violence: aiExamine.violence,
