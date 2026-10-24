@@ -33,6 +33,7 @@ const TOTP_FAILURE_WINDOW_SECONDS = 300;
 const TOTP_ENCRYPTION_SECRET = process.env.ADMIN_TOTP_ENCRYPTION_KEY || JWT_SECRET;
 const ADMIN_TOTP_VERIFICATION_SCOPES = [
   "account-settings",
+  "account-settings-replace",
   "admin-users",
   "db-admin",
   "server-command",

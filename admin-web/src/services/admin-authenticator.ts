@@ -21,6 +21,16 @@ export function beginAdminAuthenticatorSetup() {
   });
 }
 
+export function verifyCurrentAdminAuthenticator(code: string) {
+  return apiRequest<{
+    success: boolean;
+    data: { verified: boolean; expiresInSeconds: number };
+  }>("/admin/totp/replace/verify-current", {
+    method: "POST",
+    body: { code },
+  });
+}
+
 export function verifyAdminAuthenticatorSetup(code: string) {
   return apiRequest<{
     success: boolean;
