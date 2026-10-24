@@ -187,6 +187,7 @@ function isRequestInternalTestUser(req) {
 }
 
 module.exports = {
+  isInternalTestUserHandle,
   isRequestXHuntVip,
   isRequestInternalTestUser,
   loadVipLists,

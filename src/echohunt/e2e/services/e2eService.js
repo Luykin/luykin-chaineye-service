@@ -6,6 +6,7 @@ const {
   verifyExternalPayment,
 } = require("./e2ePaymentService");
 const { examineE2eTweet, parseTweetInput } = require("./e2eExamineService");
+const { validateE2eCampaignRewards } = require("./e2eRewardsPolicy");
 const {
   getEchohuntTweetDetail,
   verifyEchohuntTwitterFollowTask,
@@ -18,7 +19,6 @@ const {
 const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
 const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
 const MAX_CAMPAIGN_PAGE_SIZE = 100;
-const MAX_CAMPAIGN_REWARDS = 2000;
 const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
 function toNumber(val, fallback = 0) {
@@ -462,17 +462,19 @@ async function createE2eCampaign(payload = {}, options = {}) {
     return { status: false, message: "无效的推文链接或推文 ID" };
   }
 
-  const rewardsNum = Number(payload.rewards);
-  if (!Number.isFinite(rewardsNum) || rewardsNum <= 0 || rewardsNum > MAX_CAMPAIGN_REWARDS) {
-    return { status: false, message: `奖池金额必须大于 0 且不超过 ${MAX_CAMPAIGN_REWARDS} USDC` };
-  }
-
   const creatorUserId = String(
     options.fallbackOwner?.twitterId || options.identity?.providerSubject || ""
   ).trim();
   if (!creatorUserId) {
     return { status: false, message: "请先连接 X 账号后再投放任务" };
   }
+
+  const isInternalTestUser = options.isInternalTestUser === true;
+  const rewardsValidation = validateE2eCampaignRewards(payload.rewards, { isInternalTestUser });
+  if (!rewardsValidation.valid) {
+    return { status: false, message: rewardsValidation.message };
+  }
+  const rewardsNum = rewardsValidation.rewards;
 
   const existingCreatorCampaign = await E2eList.findOne({
     where: {

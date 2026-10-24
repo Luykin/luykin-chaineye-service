@@ -10,6 +10,7 @@ const {
   activateE2eCampaign,
 } = require("../services/e2eService");
 const { examineE2eTweet } = require("../services/e2eExamineService");
+const { isInternalTestUserHandle } = require("../../../xhunt/constants/xhuntVip");
 
 const router = express.Router();
 const optionalAuth = authenticateAuthCenterToken({ optional: true });
@@ -106,9 +107,13 @@ router.post("/e2e_tweet_examine", requiredAuth, express.json(), handleExamineTwe
 async function handleCreateCampaign(req, res) {
   try {
     const authCtx = extractRequestAuthContext(req);
+    const isInternalTestUser = [authCtx.twitterId, authCtx.username]
+      .filter(Boolean)
+      .some(isInternalTestUserHandle);
     const result = await createE2eCampaign(req.body || {}, {
       identity: authCtx.twitterIdentity,
       fallbackOwner: authCtx,
+      isInternalTestUser,
     });
     return res.json(result);
   } catch (error) {
