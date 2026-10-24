@@ -1,5 +1,5 @@
 const { Op, fn, col } = require("sequelize");
-const { E2eList, E2eRecord, E2eTweet } = require("../../../models/postgres-start");
+const { E2eList, E2eRecord, E2eTweet, pgInstance } = require("../../../models/postgres-start");
 const {
   calculateDepositAmounts,
   createExternalPaymentOrder,
@@ -476,18 +476,6 @@ async function createE2eCampaign(payload = {}, options = {}) {
   }
   const rewardsNum = rewardsValidation.rewards;
 
-  const existingCreatorCampaign = await E2eList.findOne({
-    where: {
-      tweet_id: String(tweetId),
-      user_id: creatorUserId,
-      status: { [Op.in]: ["pending", "active"] },
-    },
-    attributes: ["tweet_id", "status"],
-  });
-  if (existingCreatorCampaign) {
-    return { status: false, message: "你对该推文的上一次投放尚未结束，请等待任务结束后再试" };
-  }
-
   const activeCampaign = await E2eList.findOne({
     where: { tweet_id: String(tweetId), status: "active" },
     attributes: ["tweet_id"],
@@ -518,16 +506,22 @@ async function createE2eCampaign(payload = {}, options = {}) {
   const retro = payload.retro !== undefined ? Boolean(payload.retro) : true;
 
   const { rewards, fees, depositRewards, feePercentage } = calculateDepositAmounts(rewardsNum);
-  const previousCampaignCount = await E2eList.count({
-    where: {
-      tweet_id: String(tweetId),
-      user_id: creatorUserId,
-    },
-  });
+  const creatorCampaignWhere = {
+    tweet_id: String(tweetId),
+    user_id: creatorUserId,
+  };
+  const [maxCampaignSequence, previousCampaignCount] = await Promise.all([
+    E2eList.max("campaign_sequence", { where: creatorCampaignWhere }),
+    E2eList.count({ where: creatorCampaignWhere }),
+  ]);
+  const campaignSequence = Math.max(
+    Number(maxCampaignSequence) || 0,
+    Number(previousCampaignCount) || 0
+  ) + 1;
   const paymentOrder = await createExternalPaymentOrder({
     tweetId: String(tweetId),
     payerUserId: creatorUserId,
-    campaignSequence: previousCampaignCount + 1,
+    campaignSequence,
     rewards,
     fees,
     depositRewards,
@@ -541,27 +535,34 @@ async function createE2eCampaign(payload = {}, options = {}) {
   const endTime = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   endTime.setUTCHours(23, 59, 59, 999);
 
-  await E2eList.create({
-    tweet_id: String(tweetId),
-    user_id: creatorUserId,
-    rewards,
-    address,
-    start_time: now,
-    end_time: endTime,
-    target,
-    winners,
-    text: tweetData.text || "",
-    summary_cn: tweetData.summary_cn || "",
-    summary_en: tweetData.summary_en || "",
-    owner_handle: tweetData.owner_handle || parsed.handle || null,
-    owner_image_url: tweetData.owner_image_url || null,
-    owner_user_id: String(tweetData.owner_user_id || creatorUserId),
-    status: "pending",
-    complete_tx: null,
-    type,
-    fees,
-    lang,
-    retro,
+  await pgInstance.transaction(async (transaction) => {
+    await E2eList.destroy({
+      where: { ...creatorCampaignWhere, status: "pending" },
+      transaction,
+    });
+    await E2eList.create({
+      tweet_id: String(tweetId),
+      user_id: creatorUserId,
+      campaign_sequence: campaignSequence,
+      rewards,
+      address,
+      start_time: now,
+      end_time: endTime,
+      target,
+      winners,
+      text: tweetData.text || "",
+      summary_cn: tweetData.summary_cn || "",
+      summary_en: tweetData.summary_en || "",
+      owner_handle: tweetData.owner_handle || parsed.handle || null,
+      owner_image_url: tweetData.owner_image_url || null,
+      owner_user_id: String(tweetData.owner_user_id || creatorUserId),
+      status: "pending",
+      complete_tx: null,
+      type,
+      fees,
+      lang,
+      retro,
+    }, { transaction });
   });
 
   return {
@@ -572,6 +573,7 @@ async function createE2eCampaign(payload = {}, options = {}) {
     rewards,
     fees,
     tweet_id: String(tweetId),
+    campaign_sequence: campaignSequence,
   };
 }
 

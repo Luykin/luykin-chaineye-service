@@ -6,6 +6,7 @@ module.exports = (sequelize) =>
     {
       tweet_id: { type: DataTypes.STRING, allowNull: false },
       user_id: { type: DataTypes.STRING, allowNull: false },
+      campaign_sequence: { type: DataTypes.INTEGER, allowNull: true },
       rewards: { type: DataTypes.DECIMAL, allowNull: true },
       address: { type: DataTypes.STRING, allowNull: false, primaryKey: true },
       start_time: { type: DataTypes.DATE, allowNull: true },
