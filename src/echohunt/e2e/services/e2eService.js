@@ -466,6 +466,25 @@ async function createE2eCampaign(payload = {}, options = {}) {
     return { status: false, message: "奖池金额必须大于 0" };
   }
 
+  const creatorUserId = String(
+    options.fallbackOwner?.twitterId || options.identity?.providerSubject || ""
+  ).trim();
+  if (!creatorUserId) {
+    return { status: false, message: "请先连接 X 账号后再投放任务" };
+  }
+
+  const existingCreatorCampaign = await E2eList.findOne({
+    where: {
+      tweet_id: String(tweetId),
+      user_id: creatorUserId,
+      status: { [Op.in]: ["pending", "active"] },
+    },
+    attributes: ["tweet_id", "status"],
+  });
+  if (existingCreatorCampaign) {
+    return { status: false, message: "你对该推文的上一次投放尚未结束，请等待任务结束后再试" };
+  }
+
   const activeCampaign = await E2eList.findOne({
     where: { tweet_id: String(tweetId), status: "active" },
     attributes: ["tweet_id"],
@@ -496,8 +515,16 @@ async function createE2eCampaign(payload = {}, options = {}) {
   const retro = payload.retro !== undefined ? Boolean(payload.retro) : true;
 
   const { rewards, fees, depositRewards, feePercentage } = calculateDepositAmounts(rewardsNum);
+  const previousCampaignCount = await E2eList.count({
+    where: {
+      tweet_id: String(tweetId),
+      user_id: creatorUserId,
+    },
+  });
   const paymentOrder = await createExternalPaymentOrder({
     tweetId: String(tweetId),
+    payerUserId: creatorUserId,
+    campaignSequence: previousCampaignCount + 1,
     rewards,
     fees,
     depositRewards,
@@ -510,13 +537,6 @@ async function createE2eCampaign(payload = {}, options = {}) {
   const now = new Date();
   const endTime = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   endTime.setUTCHours(23, 59, 59, 999);
-
-  const creatorUserId = String(
-    payload.user_id ||
-      options.fallbackOwner?.twitterId ||
-      tweetData.owner_user_id ||
-      tweetId
-  );
 
   await E2eList.create({
     tweet_id: String(tweetId),

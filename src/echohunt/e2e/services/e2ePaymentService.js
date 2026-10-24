@@ -112,14 +112,27 @@ function normalizeResponseUsdcAmount(value) {
   }
 }
 
-async function createExternalPaymentOrder({ tweetId, depositRewards } = {}) {
+async function createExternalPaymentOrder({
+  tweetId,
+  payerUserId,
+  campaignSequence,
+  depositRewards,
+} = {}) {
   const normalizedTweetId = String(tweetId || "").trim();
   if (!normalizedTweetId) {
     throw createPaymentError("E2E_PAYMENT_EXTERNAL_ID_REQUIRED", 400, "缺少 E2E 支付活动标识");
   }
+  const normalizedPayerUserId = String(payerUserId || "").trim();
+  if (!normalizedPayerUserId) {
+    throw createPaymentError("E2E_PAYMENT_PAYER_REQUIRED", 400, "缺少 E2E 投放人标识");
+  }
+  const normalizedSequence = Number(campaignSequence);
+  if (!Number.isSafeInteger(normalizedSequence) || normalizedSequence <= 0) {
+    throw createPaymentError("E2E_PAYMENT_SEQUENCE_INVALID", 400, "无效的 E2E 投放批次");
+  }
 
   const depositAmount = normalizeUsdcAmount(depositRewards);
-  const externalId = `echohunt-e2e:${normalizedTweetId}`;
+  const externalId = `echohunt-e2e:${normalizedTweetId}:${normalizedPayerUserId}:${normalizedSequence}`;
   try {
     const response = await axios.post(
       `${E2E_V2_API_BASE_URL}/`,
