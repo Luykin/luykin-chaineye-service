@@ -1,16 +1,5 @@
-const { Op, QueryTypes, fn, col } = require("sequelize");
-const {
-  E2eList,
-  E2eRecord,
-  E2eTweet,
-  XHuntUser,
-  AuthCenterXhuntIdentity,
-} = require("../../../models/postgres-start");
-const {
-  getPostgresReadOnlyInstance,
-  getPostgresReadOnlyStatus,
-  isPostgresReadOnlyConfigured,
-} = require("../../../infra/k8s/postgres-readonly");
+const { Op, fn, col } = require("sequelize");
+const { E2eList, E2eRecord, E2eTweet } = require("../../../models/postgres-start");
 const {
   calculateDepositAmounts,
   createExternalPaymentOrder,
@@ -21,6 +10,10 @@ const {
   getEchohuntTweetDetail,
   verifyEchohuntTwitterFollowTask,
 } = require("../../../xhunt/services/twitter-echohunt");
+const {
+  fetchCampaignRankByDomain,
+  rankResultMeetsThreshold,
+} = require("../../../xhunt/services/campaignRegistrationService");
 
 const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
 const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
@@ -281,82 +274,6 @@ async function getE2eActivityDetail(idOrAddress, { userId = null } = {}) {
   return formatCampaignItem(campaign, signups, tweetMap, userId);
 }
 
-async function resolveTwitterUserMeta(twitterId) {
-  const cleanId = String(twitterId || "").trim();
-  if (!cleanId) return null;
-
-  // 1. 优先尝试只读库 dev.twitter_user 获取最新排名和头像
-  try {
-    const status = getPostgresReadOnlyStatus();
-    if (isPostgresReadOnlyConfigured() && status.ready) {
-      const db = getPostgresReadOnlyInstance();
-      const [row] = await db.query(
-        `
-          SELECT id::text, username, name, profile, feature
-          FROM dev.twitter_user
-          WHERE id::text = :twitterId
-          LIMIT 1
-        `,
-        {
-          type: QueryTypes.SELECT,
-          replacements: { twitterId: cleanId },
-        }
-      );
-      if (row) {
-        const profile = row.profile && typeof row.profile === "object" ? row.profile : {};
-        const feature = row.feature && typeof row.feature === "object" ? row.feature : {};
-        const rank =
-          feature?.rank?.kolRank ??
-          feature?.rank?.globalRank ??
-          feature?.kol_info?.globalKolRank ??
-          null;
-        return {
-          user_id: cleanId,
-          username: row.username || profile.username || null,
-          name: row.name || profile.name || row.username || null,
-          profile_image_url:
-            profile.profile_image_url ||
-            profile.profile_image_url_https ||
-            null,
-          fan_rank: rank !== null && Number.isFinite(Number(rank)) ? Number(rank) : null,
-        };
-      }
-    }
-  } catch (_) {
-    // fall through
-  }
-
-  // 2. 回退查主库 XHuntUser / AuthCenterXhuntIdentity
-  try {
-    const xhuntUser = await XHuntUser.findOne({ where: { twitterId: cleanId } });
-    if (xhuntUser) {
-      return {
-        user_id: cleanId,
-        username: xhuntUser.username || null,
-        name: xhuntUser.displayName || xhuntUser.username || null,
-        profile_image_url: xhuntUser.avatar || null,
-        fan_rank: null,
-      };
-    }
-    const identity = await AuthCenterXhuntIdentity.findOne({
-      where: { provider: "twitter", providerSubject: cleanId },
-    });
-    if (identity) {
-      return {
-        user_id: cleanId,
-        username: identity.username || null,
-        name: identity.displayName || identity.username || null,
-        profile_image_url: identity.avatar || null,
-        fan_rank: null,
-      };
-    }
-  } catch (_) {
-    // ignore
-  }
-
-  return null;
-}
-
 function e2eRegistrationError(code, status, publicMessage) {
   const error = new Error(code);
   error.code = code;
@@ -477,16 +394,34 @@ async function registerE2eParticipant(payload = {}, options = {}) {
     redisClient: options.redisClient,
   });
 
-  const userMeta = await resolveTwitterUserMeta(userId);
-  const fanRank = userMeta?.fan_rank ?? null;
+  let rankResult;
+  try {
+    rankResult = await fetchCampaignRankByDomain("web3", userId);
+  } catch {
+    throw e2eRegistrationError(
+      "E2E_RANK_DATA_UNAVAILABLE",
+      502,
+      "实时排名服务暂时不可用，请稍后重试"
+    );
+  }
+
+  const rawFanRank = Number(rankResult?.kolRank);
+  const fanRank = Number.isFinite(rawFanRank) && rawFanRank > 0 ? rawFanRank : null;
 
   const targetRank = Number(campaign.target || 0);
-  if (targetRank > 0 && (!Number.isFinite(fanRank) || fanRank <= 0 || fanRank > targetRank)) {
+  const threshold = targetRank === -1 ? 200000 : targetRank;
+  const includeCreator = targetRank === -1;
+  const meetsThreshold = rankResultMeetsThreshold(rankResult, threshold, includeCreator);
+  if ((targetRank > 0 || includeCreator) && !meetsThreshold) {
     return {
       success: false,
-      message: fanRank
-        ? `当前账号 XHunt 排名 (#${fanRank}) 未达到该任务要求的 Top ${targetRank} 门槛`
-        : "暂时无法获取当前账号的 XHunt 排名，请稍后重试",
+      message: includeCreator
+        ? fanRank
+          ? `当前账号 XHunt 排名 (#${fanRank}) 且非认证创作者，未达到该任务要求的 Top 200000 或认证创作者门槛`
+          : "当前账号暂无有效 XHunt 排名且非认证创作者，未达到该任务要求的 Top 200000 或认证创作者门槛"
+        : fanRank
+          ? `当前账号 XHunt 排名 (#${fanRank}) 未达到该任务要求的 Top ${targetRank} 门槛`
+          : `当前账号暂无有效 XHunt 排名，未达到该任务要求的 Top ${targetRank} 门槛`,
     };
   }
 
@@ -495,10 +430,10 @@ async function registerE2eParticipant(payload = {}, options = {}) {
     tweet_id: String(campaign.tweet_id),
     user_id: userId,
     fan_rank: fanRank,
-    username: payload.username || userMeta?.username || null,
-    name: payload.name || userMeta?.name || payload.username || userMeta?.username || null,
+    username: payload.username || null,
+    name: payload.name || payload.username || null,
     point: 0,
-    profile_image_url: payload.profile_image_url || userMeta?.profile_image_url || null,
+    profile_image_url: payload.profile_image_url || null,
     rewards: null,
     address: String(campaign.address),
     user_address: userAddress,
