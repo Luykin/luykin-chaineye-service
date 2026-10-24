@@ -18,6 +18,7 @@ const {
 const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
 const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
 const MAX_CAMPAIGN_PAGE_SIZE = 100;
+const MAX_CAMPAIGN_REWARDS = 2000;
 const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
 function toNumber(val, fallback = 0) {
@@ -462,8 +463,8 @@ async function createE2eCampaign(payload = {}, options = {}) {
   }
 
   const rewardsNum = Number(payload.rewards);
-  if (!Number.isFinite(rewardsNum) || rewardsNum <= 0) {
-    return { status: false, message: "奖池金额必须大于 0" };
+  if (!Number.isFinite(rewardsNum) || rewardsNum <= 0 || rewardsNum > MAX_CAMPAIGN_REWARDS) {
+    return { status: false, message: `奖池金额必须大于 0 且不超过 ${MAX_CAMPAIGN_REWARDS} USDC` };
   }
 
   const creatorUserId = String(
