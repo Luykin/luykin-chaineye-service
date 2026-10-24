@@ -31,7 +31,16 @@ function setupBodyParsers(app) {
     })
   );
 
-  // 3. 普通接口：200KB 限制
+  // 3. 征文名单 Excel 预览使用 base64 传输，解析后不会直接写入配置。
+  app.use(
+    "/api/xhunt/stats/essay-contest-winners/import-preview",
+    express.json({
+      limit: "5mb",
+      verify: captureRawBody,
+    })
+  );
+
+  // 4. 普通接口：200KB 限制
   app.use(express.json({ limit: "200kb", verify: captureRawBody }));
 }
 

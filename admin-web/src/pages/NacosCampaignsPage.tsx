@@ -21,6 +21,7 @@ import type { WebsiteCampaignRecord } from "@/types/nacos";
 import type { VipListItem } from "@/types/feature-flags";
 import { CampaignRegistrationsModal, getRegistrationCampaignKey } from "@/components/campaigns/CampaignRegistrationsModal";
 import { CampaignTweetSubmissionsModal } from "@/components/campaigns/CampaignTweetSubmissionsModal";
+import { EssayWinnerImportModal } from "@/components/campaigns/EssayWinnerImportModal";
 import { ExternalLeaderboardAdapterCard } from "@/components/campaigns/ExternalLeaderboardAdapter";
 import customLeaderboardKeyContract from "../../../shared/xhunt/custom-leaderboard-key-contract.json";
 import tweetSubmissionContract from "../../../shared/xhunt/tweet-submission-contract.json";
@@ -3932,13 +3933,13 @@ function CustomLeaderboards({
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <Space size={8}>
-            <strong style={{ fontSize: 12 }}>征文大赛（手动录入获奖名单）</strong>
-            <Tooltip title="开启后可直接在下方手动录入获奖名单，接口返回结构与旧版征文大赛及标准榜单完全兼容；开启后将自动隐藏外部榜单数据适配器。">
+            <strong style={{ fontSize: 12 }}>征文大赛获奖名单</strong>
+            <Tooltip title="开启后可手动录入，也可从 Google Sheets、Excel 或 CSV 批量导入并预览；名单随活动配置一起发布，接口返回结构与旧版征文大赛及标准榜单完全兼容。">
               <QuestionCircleOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
             </Tooltip>
             <span style={{ color: "#8c8c8c", fontSize: 12 }}>
               {it.isEssayContest
-                ? `已开启手动录入（当前 ${Array.isArray(it.winners) ? it.winners.length : 0} 位获奖者），无需外部适配器`
+                ? `已开启名单管理（当前 ${Array.isArray(it.winners) ? it.winners.length : 0} 位获奖者），无需外部适配器`
                 : "关闭时使用外部榜单数据适配器或接口返回数据"}
             </span>
           </Space>
@@ -3956,19 +3957,26 @@ function CustomLeaderboards({
           <div style={{ marginTop: 12 }}>
             <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 600 }}>获奖名单</span>
-              <Button
-                size="small"
-                onClick={() => {
-                  const nextWinners = Array.isArray(it.winners) ? [...it.winners] : [];
-                  nextWinners.push({ name: "", handler: "", avatar: "", reward: "", award: "", post: "", url: "" });
-                  update("customLeaderboards", i, "winners", nextWinners);
-                }}
-              >
-                + 添加获奖者
-              </Button>
+              <Space size={8}>
+                <EssayWinnerImportModal
+                  existingWinners={Array.isArray(it.winners) ? it.winners : []}
+                  onImport={(nextWinners) => update("customLeaderboards", i, "winners", nextWinners)}
+                  onMessage={onMessage}
+                />
+                <Button
+                  size="small"
+                  onClick={() => {
+                    const nextWinners = Array.isArray(it.winners) ? [...it.winners] : [];
+                    nextWinners.push({ name: "", handler: "", avatar: "", reward: "", award: "", post: "", url: "" });
+                    update("customLeaderboards", i, "winners", nextWinners);
+                  }}
+                >
+                  + 添加获奖者
+                </Button>
+              </Space>
             </Space>
             {!Array.isArray(it.winners) || !it.winners.length ? (
-              <EmptyHint>暂无获奖者，可点击右上角「+ 添加获奖者」手动录入。</EmptyHint>
+              <EmptyHint>暂无获奖者，可批量导入表格或点击「+ 添加获奖者」手动录入。</EmptyHint>
             ) : (
               <Space direction="vertical" size={8} style={{ width: "100%" }}>
                 {it.winners.map((winner: AnyObj, wIdx: number) => {

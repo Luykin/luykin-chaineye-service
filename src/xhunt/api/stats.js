@@ -30,6 +30,7 @@ const nacosAdminRouter = require("./stats-routes/nacos-admin");
 const kolMatchConfigRouter = require("./stats-routes/kol-match-config");
 const externalLoginStatusRouter = require("./stats-routes/external-login-status");
 const twitterIdHandlerLookupRouter = require("./stats-routes/twitter-id-handler-lookup");
+const essayContestWinnerImportRouter = require("./stats-routes/essay-contest-winner-import");
 const { logAdminAction } = require("./stats-routes/shared");
 const { createAdminWriteAudit } = require("../../admin/services/admin-audit");
 const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
@@ -48,6 +49,7 @@ const router = express.Router();
 const requireLogSearchTotp = requireSensitivePageTotp("log-search");
 const requireServerCommandTotp = requireSensitivePageTotp("server-command");
 router.use(twitterIdHandlerLookupRouter);
+router.use(essayContestWinnerImportRouter);
 router.use("/sensitive-totp", sensitivePageTotpRouter);
 router.use(createAdminWriteAudit((req) => {
   if (req.method === "POST" && req.path === "/feature-flags") return "feature-flags-publish";
