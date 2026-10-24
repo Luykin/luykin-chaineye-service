@@ -10,6 +10,15 @@ export class ApiError extends Error {
   }
 }
 
+export function getApiErrorMessage(error: unknown, fallback = "请求失败") {
+  if (error instanceof ApiError && error.data && typeof error.data === "object") {
+    const data = error.data as { message?: unknown; error?: unknown };
+    if (typeof data.message === "string" && data.message.trim()) return data.message;
+    if (typeof data.error === "string" && data.error.trim()) return data.error;
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: BodyInit | Record<string, unknown> | null;
 };

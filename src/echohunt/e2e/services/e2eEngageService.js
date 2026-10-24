@@ -137,7 +137,8 @@ async function fetchReadonlyDevEngageData(tweetId, diagnostic = null) {
 
 /**
  * 对应原 twitter_task_tweet_engage.rs 中的 update_tweet_engage_by_tweet_id
- * 拉取单条目标推文的评论(replies)、引用(quotes)、转推用户(retweeters)，并持久化至 luykindatabase 的 EchohuntE2eTweets.engage_data
+ * 拉取单条目标推文的评论(replies)、引用(quotes)，并持久化至 luykindatabase 的 EchohuntE2eTweets.engage_data。
+ * 普通转推固定不计分，因此不再消耗 crawler 配额抓取 tweet_retweeters。
  */
 async function updateTweetEngageByTweetId(tweetId, campaignAddress = null) {
   const cleanTweetId = String(tweetId || "").trim();
@@ -147,7 +148,16 @@ async function updateTweetEngageByTweetId(tweetId, campaignAddress = null) {
   const endpointDetails = {
     tweet_replies: { requests: 0, pages: 0, items: 0, durationMs: 0, lastHttpStatus: null, error: null },
     tweet_quotes: { requests: 0, pages: 0, items: 0, durationMs: 0, lastHttpStatus: null, error: null },
-    tweet_retweeters: { requests: 0, pages: 0, items: 0, durationMs: 0, lastHttpStatus: null, error: null },
+    tweet_retweeters: {
+      requests: 0,
+      pages: 0,
+      items: 0,
+      durationMs: 0,
+      lastHttpStatus: null,
+      error: null,
+      skipped: true,
+      reason: "ordinary_retweet_not_scored",
+    },
     readonly: { configured: false, ready: false, used: false, items: 0, error: null },
   };
   const crawlRun = await E2eCrawlRun.create({
@@ -174,7 +184,7 @@ async function updateTweetEngageByTweetId(tweetId, campaignAddress = null) {
     Array.isArray(prevEngage.engage_ids?.retweeted_user_ids) ? prevEngage.engage_ids.retweeted_user_ids : []
   );
 
-  // 1. 尝试通过爬虫分页抓取 tweet_replies / tweet_quotes / tweet_retweeters
+  // 1. 尝试通过爬虫分页抓取 tweet_replies / tweet_quotes。
   let replyCursor = null;
   for (let i = 0; i < MAX_PAGES; i += 1) {
     const res = await callCrawlerEndpoint("tweet_replies", cleanTweetId, replyCursor, endpointDetails.tweet_replies);
@@ -209,21 +219,6 @@ async function updateTweetEngageByTweetId(tweetId, campaignAddress = null) {
     }
     if (!res?.next_cursor) break;
     quoteCursor = res.next_cursor;
-  }
-
-  let retweeterCursor = null;
-  for (let i = 0; i < MAX_PAGES; i += 1) {
-    const res = await callCrawlerEndpoint("tweet_retweeters", cleanTweetId, retweeterCursor, endpointDetails.tweet_retweeters);
-    const users = Array.isArray(res?.users) ? res.users : [];
-    if (!users.length) break;
-    endpointDetails.tweet_retweeters.pages += 1;
-    endpointDetails.tweet_retweeters.items += users.length;
-    for (const user of users) {
-      const uid = String(user?.id || user?.user_id || "").trim();
-      if (uid) retweetedUserIds.add(uid);
-    }
-    if (!res?.next_cursor) break;
-    retweeterCursor = res.next_cursor;
   }
 
   // 2. 同时合并只读库 dev.tweet 中已有的互动数据（若已配置）
@@ -283,7 +278,7 @@ async function updateTweetEngageByTweetId(tweetId, campaignAddress = null) {
     finished_at: new Date(),
     reply_count: Object.keys(repliesMap).length,
     quote_count: Object.keys(quotesMap).length,
-    retweeter_count: retweetedUserIds.size,
+    retweeter_count: 0,
     endpoint_details: endpointDetails,
     error: endpointErrors.join("; ") || null,
   });

@@ -1,5 +1,9 @@
 const axios = require("axios");
 const { DATA_SERVICE_BASE_URL } = require("../../../xhunt/constants/dataService");
+const {
+  EVM_ADDRESS_PATTERN,
+  MAX_DISTRIBUTION_RECIPIENTS,
+} = require("./e2eMoney");
 
 const DEFAULT_FEE_PERCENTAGE = Number(process.env.E2E_FEE_PERCENTAGE || 10);
 const E2E_V2_API_BASE_URL = String(
@@ -9,7 +13,6 @@ const E2E_V2_API_TIMEOUT_MS = Math.max(
   1000,
   Number(process.env.E2E_V2_API_TIMEOUT_MS || 10000) || 10000
 );
-const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/;
 
 /**
@@ -209,8 +212,12 @@ async function submitExternalDistribution({ address, recipients } = {}) {
   if (!EVM_ADDRESS_PATTERN.test(normalizedAddress)) {
     throw createPaymentError("E2E_PAYMENT_INVALID_ADDRESS", 400, "无效的 E2E 活动地址");
   }
-  if (!Array.isArray(recipients) || recipients.length < 1 || recipients.length > 500) {
-    throw createPaymentError("E2E_PAYMENT_INVALID_RECIPIENTS", 400, "E2E 分发地址数量必须为 1-500");
+  if (!Array.isArray(recipients) || recipients.length < 1 || recipients.length > MAX_DISTRIBUTION_RECIPIENTS) {
+    throw createPaymentError(
+      "E2E_PAYMENT_INVALID_RECIPIENTS",
+      400,
+      `E2E 分发地址数量必须为 1-${MAX_DISTRIBUTION_RECIPIENTS}`
+    );
   }
   try {
     const response = await axios.post(

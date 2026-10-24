@@ -16,7 +16,7 @@ export function E2eDiagnosticsTab({ address }: { address: string }) {
     { title: "状态", dataIndex: "status", width: 90, render: (value: string) => <Tag color={runColor[value] || "default"}>{value}</Tag> },
     { title: "评论", dataIndex: "replyCount", width: 70 },
     { title: "引用", dataIndex: "quoteCount", width: 70 },
-    { title: "转推用户", dataIndex: "retweeterCount", width: 85 },
+    { title: "本轮转推抓取", dataIndex: "retweeterCount", width: 105 },
     { title: "异常", dataIndex: "error", ellipsis: true, render: (value: string | null) => value ? <Typography.Text type="danger">{value}</Typography.Text> : "-" },
   ];
   const interactionColumns = [
@@ -39,7 +39,7 @@ export function E2eDiagnosticsTab({ address }: { address: string }) {
   ];
 
   return <Space direction="vertical" size={16} style={{ width: "100%" }}>
-    <Alert type="info" showIcon message="当前评分口径" description="评论和引用参与评分；普通转推会被抓取用于核对，但固定计 0 分。互动越晚时间权重越低；评论/引用收到的点赞仍按原有 ×1.5 规则计入质量分。" />
+    <Alert type="info" showIcon message="当前评分口径" description="评论和引用参与评分；普通转推固定计 0 分，已停止调用 tweet_retweeters 抓取接口以节省配额，历史或只读库已有的转推数据仅供核对。互动越晚时间权重越低；评论/引用收到的点赞仍按当前配置计入质量分。" />
     <Card size="small" title="最近抓取过程">
       <Table rowKey="id" size="small" columns={runColumns} dataSource={data.crawlRuns} scroll={{ x: 760 }} pagination={{ pageSize: 5 }} expandable={{ expandedRowRender: (row) => <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12 }}>{JSON.stringify(row.endpointDetails, null, 2)}</pre> }} />
     </Card>

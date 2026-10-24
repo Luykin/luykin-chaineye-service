@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Alert, Avatar, Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Row, Space, Spin, Statistic, Steps, Table, Tag, Typography, message } from "antd";
 import { CheckCircleOutlined, ReloadOutlined, SendOutlined, StopOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError } from "@/services/apiClient";
+import { getApiErrorMessage } from "@/services/apiClient";
 import {
   approveCampaignSettlement,
   distributeCampaignSettlement,
@@ -22,12 +22,6 @@ const statusMeta: Record<string, { text: string; color: string }> = {
   failed: { text: "交易失败", color: "red" },
 };
 
-const errorMessage = (error: Error) => {
-  if (error instanceof ApiError && error.data && typeof error.data === "object" && "message" in error.data) {
-    return String((error.data as { message?: string }).message || error.message);
-  }
-  return error.message;
-};
 const formatTime = (value?: string | null) => value ? new Date(value).toLocaleString() : "-";
 const shortAddress = (value?: string | null) => value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "-";
 
@@ -45,7 +39,7 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
   };
   const mutationOptions = (successText: string) => ({
     onSuccess: (response: { data: unknown }) => { messageApi.success(successText); refreshQueries(response.data); },
-    onError: (error: Error) => messageApi.error(errorMessage(error)),
+    onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
   });
   const recalculate = useMutation({ mutationFn: () => recalculateCampaignSettlement(address), ...mutationOptions("已生成新的结算版本") });
   const approve = useMutation({ mutationFn: () => approveCampaignSettlement(address), ...mutationOptions("获奖名单已确认并锁定") });

@@ -1,6 +1,7 @@
 const USDC_SCALE = 1_000_000n;
 const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const MAX_DISTRIBUTION_RECIPIENTS = 500;
 
 function toUsdcMicros(value, { allowZero = true } = {}) {
   const raw = String(value ?? "").trim();
@@ -72,6 +73,7 @@ function aggregateDistributionRecipients(items, { feeAddress, feeMicros = 0n } =
 module.exports = {
   USDC_SCALE,
   EVM_ADDRESS_PATTERN,
+  MAX_DISTRIBUTION_RECIPIENTS,
   ZERO_ADDRESS,
   toUsdcMicros,
   formatUsdcMicros,

@@ -11,6 +11,13 @@ const {
 } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
 const { forceActivateE2eCampaign } = require("../../echohunt/e2e/services/e2eService");
+const { verifyExternalPayment } = require("../../echohunt/e2e/services/e2ePaymentService");
+const {
+  grantE2ePublishAccess,
+  listE2ePublishAccesses,
+  revokeE2ePublishAccess,
+  serializeE2ePublishAccess,
+} = require("../../echohunt/e2e/services/e2eAccessService");
 const { calculateCampaignScores } = require("../../echohunt/e2e/services/e2eScoreService");
 const { normalizeScoringConfig, validateScoringConfig } = require("../../echohunt/e2e/services/e2eScoringConfig");
 const {
@@ -35,6 +42,62 @@ const MAX_WINNERS = 200;
 
 router.use(express.json({ limit: "1mb" }));
 router.use(requirePermission(MANAGE_PERMISSION));
+
+router.get("/publish-accesses", async (req, res) => {
+  try {
+    const status = text(req.query.status, 32);
+    if (status && !["active", "revoked"].includes(status)) {
+      throw publicError("status 只能是 active 或 revoked", 400, "E2E_PUBLISH_ACCESS_STATUS_INVALID");
+    }
+    return res.json({
+      success: true,
+      data: await listE2ePublishAccesses({ status: status || "active" }),
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.post("/publish-accesses", async (req, res) => {
+  try {
+    const result = await grantE2ePublishAccess(req.body || {}, req.adminUser?.id || null);
+    await logAdminAction(req, {
+      action: "e2e_publish_access_grant",
+      success: true,
+      message: `handle=@${result.access.twitterHandle};created=${result.created}`,
+    });
+    return res.status(result.created ? 201 : 200).json({
+      success: true,
+      data: { access: serializeE2ePublishAccess(result.access), created: result.created },
+    });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "e2e_publish_access_grant",
+      success: false,
+      message: error.message || "failed",
+    }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
+router.delete("/publish-accesses/:accessId", async (req, res) => {
+  try {
+    const access = await revokeE2ePublishAccess(req.params.accessId, req.adminUser?.id || null);
+    await logAdminAction(req, {
+      action: "e2e_publish_access_revoke",
+      success: true,
+      message: `handle=@${access.twitterHandle}`,
+    });
+    return res.json({ success: true, data: serializeE2ePublishAccess(access) });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "e2e_publish_access_revoke",
+      success: false,
+      message: error.message || "failed",
+    }).catch(() => {});
+    return sendError(res, error);
+  }
+});
 
 function publicError(message, status = 400, code = "E2E_BAD_REQUEST") {
   const error = new Error(message);
@@ -360,6 +423,37 @@ router.get("/campaigns", async (req, res) => {
 router.get("/campaigns/:address", async (req, res) => {
   try {
     return res.json({ success: true, data: await loadCampaignDetail(req.params.address) });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.get("/campaigns/:address/payment-status", async (req, res) => {
+  try {
+    const address = String(req.params.address || "").trim();
+    const campaign = await E2eList.findByPk(address, {
+      attributes: ["address", "status", "rewards", "fees"],
+    });
+    if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
+    const requiredAmount = round6(Number(campaign.rewards || 0) + Number(campaign.fees || 0));
+    if (requiredAmount <= 0) {
+      throw publicError("活动应付金额无效", 409, "E2E_PAYMENT_AMOUNT_INVALID");
+    }
+    const payment = await verifyExternalPayment({ address, requiredAmount });
+    return res.json({
+      success: true,
+      data: {
+        address,
+        campaignStatus: String(campaign.status || "").toLowerCase(),
+        requiredAmount: payment.required,
+        paid: payment.paid,
+        funded: payment.funded,
+        verified: payment.verified,
+        balance: payment.balance,
+        message: payment.message,
+        checkedAt: new Date().toISOString(),
+      },
+    });
   } catch (error) {
     return sendError(res, error);
   }

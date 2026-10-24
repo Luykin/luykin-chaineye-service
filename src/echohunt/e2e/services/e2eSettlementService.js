@@ -8,6 +8,7 @@ const {
 } = require("../../../models/postgres-start");
 const {
   EVM_ADDRESS_PATTERN,
+  MAX_DISTRIBUTION_RECIPIENTS,
   aggregateDistributionRecipients,
   allocateUsdcMicros,
   formatUsdcMicros,
@@ -255,7 +256,13 @@ function buildDistributionRecipients(settlement, items) {
     }
     throw error;
   }
-  if (recipients.length > 500) throw serviceError("E2E_TOO_MANY_RECIPIENTS", 409, "合并后收款地址超过 500 个");
+  if (recipients.length > MAX_DISTRIBUTION_RECIPIENTS) {
+    throw serviceError(
+      "E2E_TOO_MANY_RECIPIENTS",
+      409,
+      `合并后收款地址超过 ${MAX_DISTRIBUTION_RECIPIENTS} 个`
+    );
+  }
   const total = recipients.reduce((sum, item) => sum + toUsdcMicros(item.amount), 0n);
   if (total !== toUsdcMicros(settlement.deposit_amount)) {
     throw serviceError("E2E_DISTRIBUTION_TOTAL_MISMATCH", 409, "分发总额与支付订单金额不一致");

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Alert, Button, Card, Col, Collapse, Descriptions, Divider, Form, InputNumber, Popover, Row, Space, Tag, Typography, message } from "antd";
 import { InfoCircleOutlined, SaveOutlined, UndoOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError } from "@/services/apiClient";
+import { getApiErrorMessage } from "@/services/apiClient";
 import {
   getCampaignSettlement,
   updateCampaignScoringConfig,
@@ -75,13 +75,6 @@ const rankFields: FieldDefinition[] = [
   { name: "rankWeightTop100000", label: "第 5 档权重", help: "默认 ×1.15", min: 0, max: 10, step: 0.05, precision: 2 },
   { name: "rankWeightDefault", label: "其他 / 无排名权重", help: "排名超过第 5 档上限或无有效排名", min: 0, max: 10, step: 0.05, precision: 2 },
 ];
-
-function errorMessage(error: Error) {
-  if (error instanceof ApiError && error.data && typeof error.data === "object" && "message" in error.data) {
-    return String((error.data as { message?: string }).message || error.message);
-  }
-  return error.message;
-}
 
 function FieldGrid({ fields }: { fields: FieldDefinition[] }) {
   return <Row gutter={[16, 0]}>{fields.map((field) => <Col xs={24} md={12} xl={8} key={field.name}>
@@ -189,7 +182,7 @@ export function E2eScoringConfigCard({ address, status, config }: { address: str
       void queryClient.invalidateQueries({ queryKey: ["e2e-campaigns"] });
       void queryClient.invalidateQueries({ queryKey: ["e2e-campaigns", "diagnostics", address] });
     },
-    onError: (error: Error) => messageApi.error(errorMessage(error)),
+    onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
   });
 
   return <Space direction="vertical" size={16} style={{ width: "100%" }}>

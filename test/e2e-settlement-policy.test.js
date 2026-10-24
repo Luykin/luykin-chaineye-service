@@ -17,7 +17,7 @@ const {
   toUsdcMicros,
 } = require("../src/echohunt/e2e/services/e2eMoney");
 
-test("ordinary retweet is captured but never scores", () => {
+test("historical ordinary retweet data never scores", () => {
   const detail = ordinaryRetweetScoreDetail("123");
   assert.equal(detail.score, 0);
   assert.equal(detail.counted, false);

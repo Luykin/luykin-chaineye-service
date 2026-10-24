@@ -11,6 +11,10 @@ const {
 } = require("../services/e2eService");
 const { examineE2eTweet } = require("../services/e2eExamineService");
 const { isInternalTestUserHandle } = require("../../../xhunt/constants/xhuntVip");
+const {
+  assertE2ePublishAccess,
+  getE2ePublishAccessSummary,
+} = require("../services/e2eAccessService");
 
 const router = express.Router();
 const optionalAuth = authenticateAuthCenterToken({ optional: true });
@@ -68,6 +72,18 @@ router.get("/list", optionalAuth, handleListActivities);
 router.get("/tasks", optionalAuth, handleListActivities);
 router.get("/e2es", optionalAuth, handleListActivities);
 
+router.get("/access", requiredAuth, async (req, res) => {
+  try {
+    return res.json({ status: true, data: await getE2ePublishAccessSummary(req.authCenter) });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      status: false,
+      code: error.code || "E2E_PUBLISH_ACCESS_FAILED",
+      message: error.message || "查询 E2E 投放权限失败",
+    });
+  }
+});
+
 // 3. 获取单个 E2E 任务详情与排行榜
 router.get("/tasks/:id", optionalAuth, async (req, res) => {
   try {
@@ -87,6 +103,7 @@ router.get("/tasks/:id", optionalAuth, async (req, res) => {
 // 4. 校验推文是否可投放（兼容 /examine 与 /e2e_tweet_examine，支持传 tweet_url 或 tweet_id）
 async function handleExamineTweet(req, res) {
   try {
+    await assertE2ePublishAccess(req.authCenter);
     const authCtx = extractRequestAuthContext(req);
     const result = await examineE2eTweet({
       tweet_id: req.body?.tweet_id || req.body?.tweetId,
@@ -97,7 +114,11 @@ async function handleExamineTweet(req, res) {
     return res.json(result);
   } catch (error) {
     console.error("[echohunt/e2e] examineE2eTweet failed:", error);
-    return res.status(500).json({ status: false, message: error.message || "Failed to examine tweet" });
+    return res.status(error.status || 500).json({
+      status: false,
+      code: error.code || "E2E_EXAMINE_FAILED",
+      message: error.message || "Failed to examine tweet",
+    });
   }
 }
 router.post("/examine", requiredAuth, express.json(), handleExamineTweet);
@@ -106,6 +127,7 @@ router.post("/e2e_tweet_examine", requiredAuth, express.json(), handleExamineTwe
 // 5. 预创建活动并获取外部支付订单（兼容 /create 与 /e2e/create）
 async function handleCreateCampaign(req, res) {
   try {
+    await assertE2ePublishAccess(req.authCenter);
     const authCtx = extractRequestAuthContext(req);
     const isInternalTestUser = [authCtx.twitterId, authCtx.username]
       .filter(Boolean)

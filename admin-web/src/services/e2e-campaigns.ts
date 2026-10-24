@@ -84,6 +84,31 @@ export interface E2eCampaignStats {
   winnerCount: number;
 }
 
+export interface E2ePaymentStatus {
+  address: string;
+  campaignStatus: string;
+  requiredAmount: string;
+  paid: boolean;
+  funded: boolean;
+  verified: boolean;
+  balance: string | number | null;
+  message: string;
+  checkedAt: string;
+}
+
+export interface E2ePublishAccess {
+  id: string;
+  twitterId: string | null;
+  twitterHandle: string;
+  authCenterUserId: string | null;
+  xhuntUserId: string | null;
+  status: "active" | "revoked" | string;
+  grantedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface E2eCampaignDetail {
   campaign: E2eCampaign;
   tweet: E2eTweet | null;
@@ -267,6 +292,28 @@ export const listCampaigns = (params: { page: number; pageSize: number; status?:
 
 export const getCampaign = (address: string) =>
   apiRequest<{ success: boolean; data: E2eCampaignDetail }>(`${base}/campaigns/${encodeURIComponent(address)}`);
+
+export const getCampaignPaymentStatus = (address: string) =>
+  apiRequest<{ success: boolean; data: E2ePaymentStatus }>(
+    `${base}/campaigns/${encodeURIComponent(address)}/payment-status`
+  );
+
+export const listE2ePublishAccesses = (status: "active" | "revoked" = "active") =>
+  apiRequest<{ success: boolean; data: E2ePublishAccess[] }>(
+    `${base}/publish-accesses?status=${encodeURIComponent(status)}`
+  );
+
+export const grantE2ePublishAccess = (twitterHandle: string) =>
+  apiRequest<{ success: boolean; data: { access: E2ePublishAccess; created: boolean } }>(
+    `${base}/publish-accesses`,
+    { method: "POST", body: { twitterHandle } }
+  );
+
+export const revokeE2ePublishAccess = (accessId: string) =>
+  apiRequest<{ success: boolean; data: E2ePublishAccess }>(
+    `${base}/publish-accesses/${encodeURIComponent(accessId)}`,
+    { method: "DELETE" }
+  );
 
 export const listCampaignRecords = (address: string, page: number, pageSize: number) => {
   const search = new URLSearchParams();

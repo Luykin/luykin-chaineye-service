@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Avatar, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
+import { Alert, Avatar, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
 import { LinkOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -7,10 +7,12 @@ import { PageSection } from "@/components/ui/PageSection";
 import { E2eDiagnosticsTab } from "@/components/e2e/E2eDiagnosticsTab";
 import { E2eSettlementTab } from "@/components/e2e/E2eSettlementTab";
 import { E2eScoringConfigCard } from "@/components/e2e/E2eScoringConfigCard";
-import { ApiError } from "@/services/apiClient";
+import { E2ePublishAccessCard } from "@/components/e2e/E2ePublishAccessCard";
+import { getApiErrorMessage } from "@/services/apiClient";
 import {
   forceActivateCampaign,
   getCampaign,
+  getCampaignPaymentStatus,
   listCampaignRecords,
   listCampaigns,
   updateCampaign,
@@ -66,14 +68,6 @@ const tweetLink = (tweetId?: string | null, ownerHandle?: string | null) => {
     ? `https://x.com/${ownerHandle}/status/${tweetId}`
     : `https://x.com/i/web/status/${tweetId}`;
 };
-const errorMessage = (error: Error) => {
-  if (error instanceof ApiError && error.data && typeof error.data === "object" && "message" in error.data) {
-    const backendMessage = (error.data as { message?: string }).message;
-    if (backendMessage) return String(backendMessage);
-  }
-  return error.message;
-};
-
 export function E2eCampaignsPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const queryClient = useQueryClient();
@@ -112,6 +106,14 @@ export function E2eCampaignsPage() {
         : Promise.reject(new Error("No address")),
     enabled: Boolean(detailAddress) && detailTab === "records",
   });
+  const paymentStatusQuery = useQuery({
+    queryKey: ["e2e-campaigns", "payment-status", detailAddress],
+    queryFn: () => detailAddress
+      ? getCampaignPaymentStatus(detailAddress)
+      : Promise.reject(new Error("No address")),
+    enabled: false,
+    retry: false,
+  });
 
   const applyDetail = (address: string, detail: E2eCampaignDetail) => {
     queryClient.setQueryData(["e2e-campaigns", "detail", address], { success: true, data: detail });
@@ -127,7 +129,7 @@ export function E2eCampaignsPage() {
       if (res.data) applyDetail(variables.address, res.data);
       else invalidateAll();
     },
-    onError: (error: Error) => messageApi.error(errorMessage(error)),
+    onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
   });
 
   const forceActivate = useMutation({
@@ -138,7 +140,7 @@ export function E2eCampaignsPage() {
       if (res.data) applyDetail(address, res.data);
       else invalidateAll();
     },
-    onError: (error: Error) => messageApi.error(errorMessage(error)),
+    onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
   });
 
   const openDetail = (row: E2eCampaign) => {
@@ -188,6 +190,7 @@ export function E2eCampaignsPage() {
   const detailCampaign = detail?.campaign;
   const detailTweet = detail?.tweet;
   const detailStats = detail?.stats;
+  const paymentStatus = paymentStatusQuery.data?.data;
 
   const columns = [
     {
@@ -363,6 +366,7 @@ export function E2eCampaignsPage() {
         </Button>
       ))}
     </Space>
+    <E2ePublishAccessCard />
     <Card title="活动列表" extra={<Space wrap>
       <Input.Search
         allowClear
@@ -409,6 +413,42 @@ export function E2eCampaignsPage() {
               <div style={{ padding: 48, textAlign: "center" }}><Spin /></div>
             ) : detailCampaign ? (
               <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <Card
+                  size="small"
+                  title="充值状态"
+                  extra={<Button
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    loading={paymentStatusQuery.isFetching}
+                    onClick={() => void paymentStatusQuery.refetch()}
+                  >
+                    查询 E2E V2
+                  </Button>}
+                >
+                  {paymentStatusQuery.isError ? (
+                    <Alert
+                      type="error"
+                      showIcon
+                      message="充值状态查询失败"
+                      description={getApiErrorMessage(paymentStatusQuery.error)}
+                    />
+                  ) : paymentStatus ? (
+                    <Descriptions size="small" column={4}>
+                      <Descriptions.Item label="到账">
+                        <Tag color={paymentStatus.paid ? "green" : "gold"}>{paymentStatus.paid ? "已支付" : "待支付"}</Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="资金状态">
+                        <Tag color={paymentStatus.funded ? "green" : "default"}>{paymentStatus.funded ? "已入账" : "未入账"}</Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="订单金额">{paymentStatus.requiredAmount} USDC</Descriptions.Item>
+                      <Descriptions.Item label="余额">{paymentStatus.balance ?? "-"}</Descriptions.Item>
+                      <Descriptions.Item label="查询时间" span={2}>{formatTime(paymentStatus.checkedAt)}</Descriptions.Item>
+                      <Descriptions.Item label="服务返回" span={2}>{paymentStatus.message || "-"}</Descriptions.Item>
+                    </Descriptions>
+                  ) : (
+                    <Typography.Text type="secondary">点击“查询 E2E V2”获取支付订单的实时到账状态。</Typography.Text>
+                  )}
+                </Card>
                 <Descriptions bordered size="small" column={2} title="活动配置">
                   <Descriptions.Item label="活动地址" span={2}>
                     <Typography.Text copyable code style={{ fontSize: 12 }}>{detailCampaign.address}</Typography.Text>

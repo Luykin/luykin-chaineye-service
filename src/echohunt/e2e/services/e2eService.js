@@ -7,6 +7,7 @@ const {
 } = require("./e2ePaymentService");
 const { examineE2eTweet, parseTweetInput } = require("./e2eExamineService");
 const { validateE2eCampaignRewards } = require("./e2eRewardsPolicy");
+const { EVM_ADDRESS_PATTERN } = require("./e2eMoney");
 const {
   getEchohuntTweetDetail,
   verifyEchohuntTwitterFollowTask,
@@ -19,7 +20,6 @@ const {
 const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
 const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
 const MAX_CAMPAIGN_PAGE_SIZE = 100;
-const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
 function toNumber(val, fallback = 0) {
   const num = Number(val);
