@@ -40,6 +40,11 @@ test("default time decay floor is 0.7", () => {
   assert.equal(computeTimeDecayWeight(end, start, end), 0.7);
 });
 
+test("default per-user submission and scoring limits are one reply and one quote", () => {
+  assert.equal(DEFAULT_E2E_SCORING_CONFIG.maxReplies, 1);
+  assert.equal(DEFAULT_E2E_SCORING_CONFIG.maxQuotes, 1);
+});
+
 test("like quality coefficient remains 1.5", () => {
   const detail = scoreSingleInteraction(
     { id: "1", text: "", likes: 2, create_time: "2026-01-01T00:00:00.000Z" },

@@ -74,7 +74,6 @@ export interface E2eTweet {
   };
   explanation: string | null;
   html: string | null;
-  engageData: unknown;
 }
 
 export interface E2eCampaignStats {
@@ -215,22 +214,40 @@ export interface E2eSettlement {
   items: E2eSettlementItem[];
 }
 
-export interface E2eCrawlRun {
+export interface E2eInteractionSubmissionDiagnostic {
   id: string;
+  tweetId: string;
+  tweetUrl: string;
+  type: "reply" | "quote";
   status: string;
-  startedAt: string;
-  finishedAt: string | null;
-  replyCount: number;
-  quoteCount: number;
-  retweeterCount: number;
-  endpointDetails: Record<string, unknown>;
-  error: string | null;
+  userId: string;
+  username: string;
+  name: string;
+  profileImageUrl: string | null;
+  text: string;
+  interactionCreatedAt: string | null;
+  submittedAt: string | null;
+  verifiedAt: string | null;
+  lastRefreshedAt: string | null;
+  lastError: string | null;
+  metrics: { likes: number; replies: number; retweets: number; quotes: number; views: number };
+  counted: boolean;
+  score: number | null;
+  reason: string | null;
 }
 
 export interface E2eDiagnostics {
-  crawlRuns: E2eCrawlRun[];
+  submissionStats: {
+    total: number;
+    verified: number;
+    replies: number;
+    quotes: number;
+    refreshFailed: number;
+    oldestRefreshedAt: string | null;
+    latestRefreshedAt: string | null;
+  };
+  submissions: E2eInteractionSubmissionDiagnostic[];
   scores: E2eCampaignRecord[];
-  interactions: E2eInteractionScore[];
   scoreLogs: Array<{
     userId: string;
     username: string;

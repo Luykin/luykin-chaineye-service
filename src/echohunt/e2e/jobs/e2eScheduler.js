@@ -1,25 +1,8 @@
 const schedule = require("node-schedule");
-const { updateActiveE2eTweetEngages } = require("../services/e2eEngageService");
 const { runE2eScoringCycle } = require("../services/e2eScoreService");
 const { refreshPendingDistributions } = require("../services/e2eSettlementService");
 
-let engageRunning = false;
 let scoreRunning = false;
-
-async function runEngageTaskSafely() {
-  if (engageRunning) return;
-  engageRunning = true;
-  try {
-    const result = await updateActiveE2eTweetEngages();
-    if (result.updatedCount > 0) {
-      console.log(`[EchoHunt E2E] 推文互动抓取完成: 更新了 ${result.updatedCount} 条活跃推文`);
-    }
-  } catch (error) {
-    console.error("[EchoHunt E2E] 推文互动抓取任务异常:", error?.message || error);
-  } finally {
-    engageRunning = false;
-  }
-}
 
 async function runScoringTaskSafely() {
   if (scoreRunning) return;
@@ -45,12 +28,7 @@ function startE2eScheduler() {
     return { enabled: false };
   }
 
-  // 每 5 分钟执行一次活跃 E2E 推文的互动数据抓取（与原 twitter_task_tweet_engage.rs 周期一致）
-  schedule.scheduleJob("*/5 * * * *", () => {
-    void runEngageTaskSafely();
-  });
-
-  // 每 10 分钟执行一次活跃 E2E 任务的算分与到期流转
+  // 每 10 分钟逐条刷新用户已提交的互动，并执行算分与到期流转。
   schedule.scheduleJob("*/10 * * * *", () => {
     void runScoringTaskSafely();
   });
@@ -60,6 +38,5 @@ function startE2eScheduler() {
 
 module.exports = {
   startE2eScheduler,
-  runEngageTaskSafely,
   runScoringTaskSafely,
 };

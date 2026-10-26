@@ -6,7 +6,7 @@ const {
   E2eRecord,
   E2eTweet,
   E2eLog,
-  E2eCrawlRun,
+  E2eInteractionSubmission,
   pgInstance,
 } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
@@ -196,7 +196,6 @@ function serializeTweet(row) {
     },
     explanation: item.explanation || null,
     html: item.html || null,
-    engageData: item.engage_data || null,
   };
 }
 
@@ -573,75 +572,74 @@ router.get("/campaigns/:address/diagnostics", async (req, res) => {
     const address = String(req.params.address || "").trim();
     const campaign = await E2eList.findByPk(address);
     if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
-    const [runs, records, logs, tweet] = await Promise.all([
-      E2eCrawlRun.findAll({ where: { campaign_address: address }, order: [["started_at", "DESC"]], limit: 20 }),
+    const [records, logs, submissions] = await Promise.all([
       E2eRecord.findAll({ where: { address }, order: [["point", "DESC"], ["user_id", "ASC"]], limit: 500 }),
       E2eLog.findAll({
         where: { address },
         order: [["calc_time", "DESC"]],
         limit: 100,
       }),
-      campaign.tweet_id ? E2eTweet.findByPk(String(campaign.tweet_id)) : null,
+      E2eInteractionSubmission.findAll({
+        where: { campaign_address: address },
+        order: [["submitted_at", "DESC"], ["interaction_tweet_id", "ASC"]],
+        limit: 500,
+      }),
     ]);
     const scoreRows = records.map(serializeRecord);
     const scoredInteractions = scoreRows.flatMap((record) => {
       const details = Array.isArray(record.scoreBreakdown?.interactions) ? record.scoreBreakdown.interactions : [];
-      return details.map((item) => ({
-        ...item,
-        userId: record.userId,
-        username: record.username,
-        profileImageUrl: record.profileImageUrl,
-        finalUserPoint: record.point,
-      }));
+      return details.map((item) => [`${record.userId}:${item.id}`, item]);
     });
-    const scoredByKey = new Map(scoredInteractions.map((item) => [`${item.type}:${item.id}`, item]));
-    const participantById = new Map(scoreRows.map((record) => [record.userId, record]));
-    const engageData = tweet?.engage_data && typeof tweet.engage_data === "object" ? tweet.engage_data : {};
-    const rawInteractions = [
-      ...Object.values(engageData.replies || {}).map((item) => ({ ...item, type: "reply" })),
-      ...Object.values(engageData.quotes || {}).map((item) => ({ ...item, type: "quote" })),
-      ...(Array.isArray(engageData.engage_ids?.retweeted_user_ids) ? engageData.engage_ids.retweeted_user_ids : [])
-        .map((userId) => ({ id: `retweet:${userId}`, user_id: String(userId), type: "retweet", text: "", create_time: null })),
-    ];
-    const interactions = rawInteractions.map((raw) => {
-      const scored = scoredByKey.get(`${raw.type}:${raw.id}`);
-      if (scored) return scored;
-      const participant = participantById.get(String(raw.user_id));
+    const scoredByKey = new Map(scoredInteractions);
+    const submissionRows = submissions.map((row) => {
+      const item = row.toJSON();
+      const scored = scoredByKey.get(`${item.user_id}:${item.interaction_tweet_id}`);
       return {
-        id: String(raw.id || ""),
-        type: raw.type,
-        text: raw.text || "",
-        createTime: raw.create_time || null,
+        id: String(item.id),
+        tweetId: String(item.interaction_tweet_id),
+        tweetUrl: item.interaction_url,
+        type: item.interaction_type,
+        status: item.status,
+        userId: String(item.user_id),
+        username: item.username || "",
+        name: item.name || "",
+        profileImageUrl: item.profile_image_url || null,
+        text: item.text || "",
+        interactionCreatedAt: toIso(item.interaction_created_at),
+        submittedAt: toIso(item.submitted_at),
+        verifiedAt: toIso(item.verified_at),
+        lastRefreshedAt: toIso(item.last_refreshed_at),
+        lastError: item.last_error || null,
         metrics: {
-          likes: Number(raw.likes || 0), replies: Number(raw.replies || 0),
-          retweets: Number(raw.retweets || 0), views: Number(raw.views || 0),
+          likes: Number(item.likes || 0),
+          replies: Number(item.replies || 0),
+          retweets: Number(item.retweets || 0),
+          quotes: Number(item.quotes || 0),
+          views: Number(item.views || 0),
         },
-        base: 0, charLength: Array.from(String(raw.text || "")).length,
-        lengthBonus: 0, engagementBonus: 0, timeWeight: 1,
-        scoreBeforeDecay: 0, score: 0, counted: false,
-        reason: raw.type === "retweet" ? "普通转推不计分" : "未报名或不符合活动语言/时间条件",
-        userId: String(raw.user_id || ""),
-        username: raw.username || participant?.username || "",
-        profileImageUrl: raw.profile_image_url || participant?.profileImageUrl || null,
-        finalUserPoint: participant?.point || 0,
+        counted: scored ? Boolean(scored.counted) : false,
+        score: scored ? Number(scored.score || 0) : null,
+        reason: scored?.reason || (item.status === "verified" ? "等待下次算分" : "当前不可用于算分"),
       };
     });
+    const refreshedTimes = submissions
+      .map((item) => item.last_refreshed_at && new Date(item.last_refreshed_at))
+      .filter((item) => item && !Number.isNaN(item.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime());
     return res.json({
       success: true,
       data: {
-        crawlRuns: runs.map((row) => ({
-          id: String(row.id),
-          status: row.status,
-          startedAt: toIso(row.started_at),
-          finishedAt: toIso(row.finished_at),
-          replyCount: Number(row.reply_count || 0),
-          quoteCount: Number(row.quote_count || 0),
-          retweeterCount: Number(row.retweeter_count || 0),
-          endpointDetails: row.endpoint_details || {},
-          error: row.error || null,
-        })),
+        submissionStats: {
+          total: submissions.length,
+          verified: submissions.filter((item) => item.status === "verified").length,
+          replies: submissions.filter((item) => item.interaction_type === "reply").length,
+          quotes: submissions.filter((item) => item.interaction_type === "quote").length,
+          refreshFailed: submissions.filter((item) => Boolean(item.last_error)).length,
+          oldestRefreshedAt: refreshedTimes.length ? refreshedTimes[0].toISOString() : null,
+          latestRefreshedAt: refreshedTimes.length ? refreshedTimes[refreshedTimes.length - 1].toISOString() : null,
+        },
+        submissions: submissionRows,
         scores: scoreRows,
-        interactions,
         scoreLogs: logs.map((row) => ({
           userId: String(row.user_id),
           username: row.username || "",

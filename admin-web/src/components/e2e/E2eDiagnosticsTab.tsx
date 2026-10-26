@@ -1,33 +1,109 @@
-import { Alert, Avatar, Card, Collapse, Empty, Space, Spin, Table, Tag, Typography } from "antd";
+import {
+  Alert,
+  Avatar,
+  Card,
+  Col,
+  Collapse,
+  Empty,
+  Row,
+  Space,
+  Spin,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { getCampaignDiagnostics, type E2eCampaignRecord, type E2eCrawlRun, type E2eInteractionScore } from "@/services/e2e-campaigns";
+import {
+  getCampaignDiagnostics,
+  type E2eCampaignRecord,
+  type E2eInteractionSubmissionDiagnostic,
+} from "@/services/e2e-campaigns";
 
 const formatTime = (value?: string | null) => value ? new Date(value).toLocaleString() : "-";
-const runColor: Record<string, string> = { success: "green", partial: "orange", failed: "red", running: "blue" };
-const typeLabel: Record<string, string> = { reply: "评论", quote: "引用", retweet: "普通转推" };
+const typeLabel: Record<string, string> = { reply: "评论", quote: "引用" };
 
 export function E2eDiagnosticsTab({ address }: { address: string }) {
-  const query = useQuery({ queryKey: ["e2e-campaigns", "diagnostics", address], queryFn: () => getCampaignDiagnostics(address) });
+  const query = useQuery({
+    queryKey: ["e2e-campaigns", "diagnostics", address],
+    queryFn: () => getCampaignDiagnostics(address),
+  });
   if (query.isLoading) return <div style={{ padding: 48, textAlign: "center" }}><Spin /></div>;
   if (!query.data?.data) return <Empty description="暂无诊断数据" />;
   const data = query.data.data;
-  const runColumns = [
-    { title: "开始 / 完成", key: "time", width: 185, render: (_: unknown, row: E2eCrawlRun) => <>{formatTime(row.startedAt)}<br/><Typography.Text type="secondary" style={{ fontSize: 12 }}>{formatTime(row.finishedAt)}</Typography.Text></> },
-    { title: "状态", dataIndex: "status", width: 90, render: (value: string) => <Tag color={runColor[value] || "default"}>{value}</Tag> },
-    { title: "评论", dataIndex: "replyCount", width: 70 },
-    { title: "引用", dataIndex: "quoteCount", width: 70 },
-    { title: "本轮转推抓取", dataIndex: "retweeterCount", width: 105 },
-    { title: "异常", dataIndex: "error", ellipsis: true, render: (value: string | null) => value ? <Typography.Text type="danger">{value}</Typography.Text> : "-" },
-  ];
-  const interactionColumns = [
-    { title: "用户", key: "user", width: 170, render: (_: unknown, row: E2eInteractionScore) => <Space><Avatar size={28} src={row.profileImageUrl || undefined}>{(row.username || "U")[0]?.toUpperCase()}</Avatar><span>@{row.username || row.userId}</span></Space> },
-    { title: "类型", dataIndex: "type", width: 90, render: (value: string) => <Tag color={value === "quote" ? "purple" : value === "reply" ? "blue" : "default"}>{typeLabel[value] || value}</Tag> },
-    { title: "互动内容", dataIndex: "text", width: 260, ellipsis: true, render: (value: string, row: E2eInteractionScore) => value || row.reason || "-" },
-    { title: "互动时间", dataIndex: "createTime", width: 165, render: formatTime },
-    { title: "赞 / 回 / 转 / 浏览", key: "metrics", width: 145, render: (_: unknown, row: E2eInteractionScore) => `${row.metrics.likes} / ${row.metrics.replies} / ${row.metrics.retweets} / ${row.metrics.views}` },
-    { title: "基础+质量", key: "pre", width: 105, render: (_: unknown, row: E2eInteractionScore) => row.scoreBeforeDecay.toFixed(2) },
-    { title: "时间权重", dataIndex: "timeWeight", width: 90, render: (value: number) => value.toFixed(4) },
-    { title: "计入分", dataIndex: "score", width: 80, render: (value: number, row: E2eInteractionScore) => row.counted ? <Typography.Text strong>{value.toFixed(2)}</Typography.Text> : <TooltipReason reason={row.reason} /> },
+
+  const submissionColumns = [
+    {
+      title: "提交用户",
+      key: "user",
+      width: 180,
+      render: (_: unknown, row: E2eInteractionSubmissionDiagnostic) => (
+        <Space>
+          <Avatar size={28} src={row.profileImageUrl || undefined}>{(row.username || "U")[0]?.toUpperCase()}</Avatar>
+          <span>@{row.username || row.userId}</span>
+        </Space>
+      ),
+    },
+    {
+      title: "类型",
+      dataIndex: "type",
+      width: 80,
+      render: (value: string) => <Tag color={value === "quote" ? "purple" : "blue"}>{typeLabel[value] || value}</Tag>,
+    },
+    {
+      title: "验证",
+      dataIndex: "status",
+      width: 90,
+      render: (value: string) => <Tag color={value === "verified" ? "green" : "orange"}>{value === "verified" ? "已验证" : value}</Tag>,
+    },
+    {
+      title: "互动内容",
+      dataIndex: "text",
+      width: 280,
+      ellipsis: true,
+      render: (value: string, row: E2eInteractionSubmissionDiagnostic) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Link href={row.tweetUrl} target="_blank" rel="noreferrer">{value || row.tweetId}</Typography.Link>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{row.tweetId}</Typography.Text>
+        </Space>
+      ),
+    },
+    {
+      title: "提交 / 验证时间",
+      key: "verification",
+      width: 190,
+      render: (_: unknown, row: E2eInteractionSubmissionDiagnostic) => (
+        <>{formatTime(row.submittedAt)}<br/><Typography.Text type="secondary" style={{ fontSize: 12 }}>验证：{formatTime(row.verifiedAt)}</Typography.Text></>
+      ),
+    },
+    { title: "互动时间", dataIndex: "interactionCreatedAt", width: 175, render: formatTime },
+    {
+      title: "赞 / 回 / 转 / 引 / 浏览",
+      key: "metrics",
+      width: 175,
+      render: (_: unknown, row: E2eInteractionSubmissionDiagnostic) => `${row.metrics.likes} / ${row.metrics.replies} / ${row.metrics.retweets} / ${row.metrics.quotes} / ${row.metrics.views}`,
+    },
+    {
+      title: "指标刷新",
+      key: "refresh",
+      width: 210,
+      render: (_: unknown, row: E2eInteractionSubmissionDiagnostic) => (
+        <Space direction="vertical" size={0}>
+          <span>{formatTime(row.lastRefreshedAt)}</span>
+          {row.lastError
+            ? <Typography.Text type="danger" ellipsis={{ tooltip: row.lastError }} style={{ maxWidth: 190 }}>{row.lastError}</Typography.Text>
+            : <Typography.Text type="success">正常</Typography.Text>}
+        </Space>
+      ),
+    },
+    {
+      title: "当前算分",
+      key: "score",
+      width: 150,
+      render: (_: unknown, row: E2eInteractionSubmissionDiagnostic) => row.counted
+        ? <Tag color="green">计入 {Number(row.score || 0).toFixed(2)} 分</Tag>
+        : <ReasonTag reason={row.reason} />,
+    },
   ];
   const scoreColumns = [
     { title: "用户", key: "user", width: 180, render: (_: unknown, row: E2eCampaignRecord) => <Space><Avatar size={28} src={row.profileImageUrl || undefined}>{(row.username || "U")[0]?.toUpperCase()}</Avatar><span>@{row.username || row.userId}</span></Space> },
@@ -39,12 +115,25 @@ export function E2eDiagnosticsTab({ address }: { address: string }) {
   ];
 
   return <Space direction="vertical" size={16} style={{ width: "100%" }}>
-    <Alert type="info" showIcon message="当前评分口径" description="评论和引用参与评分；普通转推固定计 0 分，已停止调用 tweet_retweeters 抓取接口以节省配额，历史或只读库已有的转推数据仅供核对。互动越晚时间权重越低；评论/引用收到的点赞仍按当前配置计入质量分。" />
-    <Card size="small" title="最近抓取过程">
-      <Table rowKey="id" size="small" columns={runColumns} dataSource={data.crawlRuns} scroll={{ x: 760 }} pagination={{ pageSize: 5 }} expandable={{ expandedRowRender: (row) => <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12 }}>{JSON.stringify(row.endpointDetails, null, 2)}</pre> }} />
+    <Alert
+      type="info"
+      showIcon
+      message="当前验证与算分流程"
+      description="只处理用户主动提交且后端验证通过的评论或引用。系统按已知 Tweet ID 定时刷新指标，不再扫描原推文的回复或引用列表；刷新失败时保留上一次快照并展示错误。"
+    />
+    <Card size="small" title="提交与刷新概览">
+      <Row gutter={[16, 16]}>
+        <Col xs={12} md={8} xl={4}><Statistic title="全部提交" value={data.submissionStats.total} /></Col>
+        <Col xs={12} md={8} xl={4}><Statistic title="已验证" value={data.submissionStats.verified} /></Col>
+        <Col xs={12} md={8} xl={4}><Statistic title="评论" value={data.submissionStats.replies} /></Col>
+        <Col xs={12} md={8} xl={4}><Statistic title="引用" value={data.submissionStats.quotes} /></Col>
+        <Col xs={12} md={8} xl={4}><Statistic title="刷新异常" value={data.submissionStats.refreshFailed} valueStyle={data.submissionStats.refreshFailed ? { color: "#cf1322" } : undefined} /></Col>
+        <Col xs={24} md={16} xl={4}><Statistic title="最近刷新" value={formatTime(data.submissionStats.latestRefreshedAt)} /></Col>
+      </Row>
+      <Typography.Text type="secondary">最旧指标快照：{formatTime(data.submissionStats.oldestRefreshedAt)}</Typography.Text>
     </Card>
-    <Card size="small" title={`抓到的互动 (${data.interactions.length})`}>
-      <Table rowKey={(row) => `${row.userId}:${row.type}:${row.id}`} size="small" columns={interactionColumns} dataSource={data.interactions} scroll={{ x: 1220 }} pagination={{ pageSize: 20, showSizeChanger: true }} />
+    <Card size="small" title={`用户提交与验证明细 (${data.submissions.length})`}>
+      <Table rowKey="id" size="small" columns={submissionColumns} dataSource={data.submissions} scroll={{ x: 1660 }} pagination={{ pageSize: 20, showSizeChanger: true }} />
     </Card>
     <Card size="small" title={`用户算分 (${data.scores.length})`}>
       <Table rowKey="userId" size="small" columns={scoreColumns} dataSource={data.scores} scroll={{ x: 850 }} pagination={{ pageSize: 20 }} expandable={{ expandedRowRender: (row) => <Collapse ghost items={[{ key: "details", label: "完整算分明细", children: <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{JSON.stringify(row.scoreBreakdown, null, 2)}</pre> }]} /> }} />
@@ -67,6 +156,6 @@ export function E2eDiagnosticsTab({ address }: { address: string }) {
   </Space>;
 }
 
-function TooltipReason({ reason }: { reason: string | null }) {
+function ReasonTag({ reason }: { reason: string | null }) {
   return <Tag color="default">不计分{reason ? `：${reason}` : ""}</Tag>;
 }

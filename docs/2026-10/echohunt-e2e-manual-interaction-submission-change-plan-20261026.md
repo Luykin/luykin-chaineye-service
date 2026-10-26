@@ -65,7 +65,7 @@
 - 唯一索引：`(campaign_address, interaction_tweet_id)`，同一互动在同一活动只能被认领一次。
 - 查询索引：`(campaign_address, user_id, status)`。
 - 校验约束：`interaction_type IN ('reply', 'quote')`。
-- 每个用户每种类型最多接受 20 条，与当前评分配置允许的 `maxReplies/maxQuotes` 上限一致（`src/echohunt/e2e/services/e2eScoringConfig.js:28-41`）；最终计分条数仍由活动配置决定。
+- 每个用户每种类型的提交上限直接复用活动评分配置 `maxReplies/maxQuotes`，默认评论 1 条、引用 1 条，后端在写入前强制校验；管理员调整这两个参数时会同时改变提交上限和计分上限。
 
 该表按 `campaign_address` 隔离批次，可以避免同一原推文以后重新投放时把旧活动互动错误带入新活动。
 
@@ -266,7 +266,7 @@ EchoHunt 前端修改：
 - 未报名、非 active、活动结束后提交失败。
 - `retro=false` 时早于报名时间的互动失败；晚于活动结束时间失败。
 - 同链接重复提交幂等；两用户并发认领由唯一索引保证只有本人记录成功。
-- 达到每类 20 条硬上限失败；评分仍按活动 `maxReplies/maxQuotes` 取最早的合规互动。
+- 达到活动 `maxReplies/maxQuotes` 配置上限后提交失败；默认每类最多 1 条，评分使用同一上限。
 - 算分周期不再调用 `tweet_replies` / `tweet_quotes`，仅查询已知 tweet ID。
 - 指标刷新失败使用上次快照并留下错误；到期刷新后仍能生成可审核的结算草稿。
 - Admin 只能查看，公共接口只能返回当前用户自己的提交。

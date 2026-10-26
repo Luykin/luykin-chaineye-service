@@ -147,7 +147,7 @@ async function createRevision({ campaign, sourceItems, previous, transaction }) 
       usdcDecimals: 6,
       remainderPolicy: "largest_remainder_then_rank",
       duplicateWalletPolicy: "aggregate_case_insensitive",
-      scorePolicyVersion: 3,
+      scorePolicyVersion: 4,
       scoringConfig: normalizeScoringConfig(campaign.score_config),
     },
     generated_at: new Date(),

@@ -1,7 +1,11 @@
-const { E2eList, E2eRecord, E2eLog, E2eTweet } = require("../../../models/postgres-start");
-const { normalizeDecayFloor, ordinaryRetweetScoreDetail, scoreSingleInteraction } = require("./e2eScoringPolicy");
+const { E2eList, E2eRecord, E2eLog } = require("../../../models/postgres-start");
+const { normalizeDecayFloor, scoreSingleInteraction } = require("./e2eScoringPolicy");
 const { normalizeScoringConfig } = require("./e2eScoringConfig");
-const { updateTweetEngageByTweetId } = require("./e2eEngageService");
+const {
+  listCampaignInteractionSubmissions,
+  refreshCampaignInteractionSubmissions,
+  toScoringInteraction,
+} = require("./e2eInteractionSubmissionService");
 
 function hasChinese(text) {
   return /[\u4e00-\u9fff]/.test(String(text || ""));
@@ -52,7 +56,7 @@ function selectUserInteractions(items, userId, campaign, signup) {
   }).sort(interactionOrder);
 }
 
-function buildUserScoreBreakdown({ signup, campaign, replies, quotes, hasRetweet }) {
+function buildUserScoreBreakdown({ signup, campaign, replies, quotes }) {
   const userId = String(signup.user_id);
   const scoringConfig = normalizeScoringConfig(campaign.score_config);
   const decayFloor = normalizeDecayFloor(scoringConfig.timeDecayFloor);
@@ -75,9 +79,8 @@ function buildUserScoreBreakdown({ signup, campaign, replies, quotes, hasRetweet
     .reduce((sum, item) => sum + item.score, 0);
   const rankMultiplier = computeRankWeight(signup.fan_rank, scoringConfig);
   const point = Number((rawScore * rankMultiplier).toFixed(2));
-  const retweetDetail = hasRetweet ? [ordinaryRetweetScoreDetail(userId)] : [];
   return {
-    version: 3,
+    version: 4,
     policy: {
       ordinaryRetweetPoints: 0,
       ...scoringConfig,
@@ -87,11 +90,11 @@ function buildUserScoreBreakdown({ signup, campaign, replies, quotes, hasRetweet
     rawScore: Number(rawScore.toFixed(2)),
     rankMultiplier,
     point,
-    interactions: [...replyDetails, ...quoteDetails, ...retweetDetail],
+    interactions: [...replyDetails, ...quoteDetails],
     captured: {
       replies: userReplies.length,
       quotes: userQuotes.length,
-      ordinaryRetweet: hasRetweet,
+      ordinaryRetweet: false,
     },
   };
 }
@@ -106,23 +109,18 @@ async function reviewExpiredCampaign(campaign) {
 
 async function calculateCampaignScores(campaign, { skipStatusTransition = false } = {}) {
   if (!campaign || !campaign.address || !campaign.tweet_id) return null;
-  const tweetId = String(campaign.tweet_id);
   const address = String(campaign.address);
-  const campaignExpired = campaign.status === "active" && campaign.end_time && Date.now() >= new Date(campaign.end_time).getTime();
-  if (campaignExpired) {
-    // 结束结算前再抓取一次，避免 5 分钟抓取任务与 10 分钟算分任务的调度间隙漏掉最后一批互动。
-    await updateTweetEngageByTweetId(tweetId, address);
-  }
-  const signups = await E2eRecord.findAll({ where: { address } });
-  const tweetRecord = await E2eTweet.findByPk(tweetId);
-  const engageData = tweetRecord?.engage_data && typeof tweetRecord.engage_data === "object"
-    ? tweetRecord.engage_data
-    : {};
-  const replies = Object.values(engageData.replies || {});
-  const quotes = Object.values(engageData.quotes || {});
-  const retweeters = new Set(Array.isArray(engageData.engage_ids?.retweeted_user_ids)
-    ? engageData.engage_ids.retweeted_user_ids.map(String)
-    : []);
+  const refresh = await refreshCampaignInteractionSubmissions(campaign);
+  const [signups, submissionRecords] = await Promise.all([
+    E2eRecord.findAll({ where: { address } }),
+    listCampaignInteractionSubmissions(address),
+  ]);
+  const verifiedInteractions = submissionRecords
+    .filter((item) => item.status === "verified")
+    .map((item) => ({ type: item.interaction_type, detail: toScoringInteraction(item) }));
+  const replies = verifiedInteractions.filter((item) => item.type === "reply").map((item) => item.detail);
+  const quotes = verifiedInteractions.filter((item) => item.type === "quote").map((item) => item.detail);
+  const tweetId = String(campaign.tweet_id);
   const now = new Date();
   let updatedUsers = 0;
 
@@ -132,7 +130,6 @@ async function calculateCampaignScores(campaign, { skipStatusTransition = false 
       campaign,
       replies,
       quotes,
-      hasRetweet: retweeters.has(String(signup.user_id)),
     });
     const explanation = [
       `Quotes: ${breakdown.captured.quotes}`,
@@ -165,7 +162,7 @@ async function calculateCampaignScores(campaign, { skipStatusTransition = false 
     updatedUsers += 1;
   }
   if (!skipStatusTransition) await reviewExpiredCampaign(campaign);
-  return { address, tweetId, updatedUsers };
+  return { address, tweetId, updatedUsers, refresh };
 }
 
 async function runE2eScoringCycle() {

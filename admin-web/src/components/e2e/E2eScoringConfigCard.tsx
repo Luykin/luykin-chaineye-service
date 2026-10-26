@@ -21,8 +21,8 @@ const defaults: E2eScoringConfig = {
   viewsPerPoint: 200,
   viewBonusCap: 10,
   engagementBonusCap: 30,
-  maxReplies: 3,
-  maxQuotes: 3,
+  maxReplies: 1,
+  maxQuotes: 1,
   rankThreshold1: 1000,
   rankThreshold2: 5000,
   rankThreshold3: 20000,
@@ -51,8 +51,8 @@ const contentFields: FieldDefinition[] = [
   { name: "quoteBase", label: "引用基础分", help: "每条有效引用的起始分", min: 0, max: 100, step: 1, precision: 2 },
   { name: "lengthCharsPerPoint", label: "每加 1 分所需字符", help: "正文长度每达到该字符数增加 1 分", min: 1, max: 1000, step: 1, precision: 0 },
   { name: "lengthBonusCap", label: "长度奖励上限", help: "单条互动的长度奖励封顶", min: 0, max: 200, step: 1, precision: 2 },
-  { name: "maxReplies", label: "最多计分评论数", help: "每位用户按时间顺序最多计入的评论", min: 0, max: 20, step: 1, precision: 0 },
-  { name: "maxQuotes", label: "最多计分引用数", help: "每位用户按时间顺序最多计入的引用", min: 0, max: 20, step: 1, precision: 0 },
+  { name: "maxReplies", label: "最多提交/计分评论数", help: "每位用户最多可提交且按时间顺序计入的评论", min: 0, max: 20, step: 1, precision: 0 },
+  { name: "maxQuotes", label: "最多提交/计分引用数", help: "每位用户最多可提交且按时间顺序计入的引用", min: 0, max: 20, step: 1, precision: 0 },
 ];
 const engagementFields: FieldDefinition[] = [
   { name: "likeMultiplier", label: "获赞系数", help: "评论或引用每收到 1 个赞增加的分数", min: 0, max: 20, step: 0.1, precision: 2 },
@@ -103,10 +103,10 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
     </Typography.Paragraph>
     <Typography.Title level={5}>1. 有效互动筛选</Typography.Title>
     <ul style={{ margin: "0 0 12px", paddingLeft: 20 }}>
-      <li>只计算已经报名用户发布的评论和引用；普通转推原推文会被抓取展示，但固定计 0 分。</li>
+      <li>只计算已经报名用户主动提交并验证通过的评论和引用；普通转推原推文固定计 0 分。</li>
       <li>互动必须符合活动语言要求，且活动结束后的互动不计分。</li>
       <li>关闭 retro 时，只计算用户报名之后的互动；开启 retro 时允许计算报名之前已经存在的互动。</li>
-      <li>每位用户按互动时间从早到晚，最多计入 {config.maxReplies} 条评论和 {config.maxQuotes} 条引用。</li>
+      <li>每位用户最多提交并计入 {config.maxReplies} 条评论和 {config.maxQuotes} 条引用，达到上限后后端拒绝继续提交。</li>
     </ul>
 
     <Typography.Title level={5}>2. 单条评论或引用</Typography.Title>
@@ -150,7 +150,7 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
     <Divider style={{ margin: "16px 0 12px" }} />
     <Typography.Title level={5}>可配置参数</Typography.Title>
     <Typography.Paragraph style={{ marginBottom: 0 }}>
-      管理员可以调整：时间衰减下限、评论/引用基础分、长度换算与封顶、每人计分条数、获赞/回复/被转推/浏览系数、互动质量封顶，以及 XHunt 排名档位和权重。
+      管理员可以调整：时间衰减下限、评论/引用基础分、长度换算与封顶、每人提交和计分条数、获赞/回复/被转推/浏览系数、互动质量封顶，以及 XHunt 排名档位和权重。
       普通转推原推文 0 分、活动结束后互动不计分、最终保留 2 位小数属于固定规则，不能配置。
     </Typography.Paragraph>
   </div>;

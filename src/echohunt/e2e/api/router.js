@@ -15,6 +15,10 @@ const {
   assertE2ePublishAccess,
   getE2ePublishAccessSummary,
 } = require("../services/e2eAccessService");
+const {
+  getMyE2eInteractions,
+  submitE2eInteraction,
+} = require("../services/e2eInteractionSubmissionService");
 
 const router = express.Router();
 const optionalAuth = authenticateAuthCenterToken({ optional: true });
@@ -218,5 +222,38 @@ async function handleRegisterParticipant(req, res) {
 }
 router.post("/register", requiredAuth, express.json(), handleRegisterParticipant);
 router.post("/e2e/register", requiredAuth, express.json(), handleRegisterParticipant);
+
+// 9. 用户主动提交本人发布的评论或引用链接，后端实时验证作者和目标推文关系
+router.post("/tasks/:id/interactions", requiredAuth, express.json(), async (req, res) => {
+  try {
+    const authCtx = extractRequestAuthContext(req);
+    const data = await submitE2eInteraction({
+      address: req.body?.address,
+      campaignTweetId: req.params.id,
+      tweetUrl: req.body?.tweet_url || req.body?.tweetUrl,
+      twitterUserId: authCtx.twitterId,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("[echohunt/e2e] submit interaction failed:", error);
+    return sendE2eRegistrationError(res, error, "E2E_INTERACTION_SUBMIT_FAILED");
+  }
+});
+
+// 10. 仅返回当前登录用户在指定活动批次中的互动提交
+router.get("/tasks/:id/interactions/me", requiredAuth, async (req, res) => {
+  try {
+    const authCtx = extractRequestAuthContext(req);
+    const data = await getMyE2eInteractions({
+      address: req.query?.address,
+      campaignTweetId: req.params.id,
+      twitterUserId: authCtx.twitterId,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("[echohunt/e2e] get my interactions failed:", error);
+    return sendE2eRegistrationError(res, error, "E2E_INTERACTION_LIST_FAILED");
+  }
+});
 
 module.exports = router;

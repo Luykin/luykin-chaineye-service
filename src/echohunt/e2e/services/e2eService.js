@@ -8,6 +8,7 @@ const {
 const { examineE2eTweet, parseTweetInput } = require("./e2eExamineService");
 const { validateE2eCampaignRewards } = require("./e2eRewardsPolicy");
 const { EVM_ADDRESS_PATTERN } = require("./e2eMoney");
+const { normalizeScoringConfig } = require("./e2eScoringConfig");
 const {
   getEchohuntTweetDetail,
   verifyEchohuntTwitterFollowTask,
@@ -29,6 +30,7 @@ function toNumber(val, fallback = 0) {
 function formatCampaignItem(campaign, signups = [], tweetMap = new Map(), currentUserId = null) {
   const raw = typeof campaign.toJSON === "function" ? campaign.toJSON() : campaign;
   const tweetInfo = tweetMap.get(String(raw.tweet_id)) || null;
+  const scoringConfig = normalizeScoringConfig(raw.score_config);
 
   const sortedSignups = [...signups].sort((a, b) => toNumber(b.point) - toNumber(a.point));
   const totalPoints = sortedSignups.reduce((acc, item) => acc + Math.max(0, toNumber(item.point)), 0);
@@ -109,6 +111,8 @@ function formatCampaignItem(campaign, signups = [], tweetMap = new Map(), curren
     type: raw.type || "mindshare",
     lang: raw.lang || "all",
     retro: Boolean(raw.retro ?? true),
+    max_replies: scoringConfig.maxReplies,
+    max_quotes: scoringConfig.maxQuotes,
   };
 
   return {
