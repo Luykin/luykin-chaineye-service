@@ -4,6 +4,17 @@ const DEFAULT_TWITTER_CRAWLER_URL =
   "http://xhuntapi.internal.biteye.info/external/crawler";
 const DEFAULT_TIMEOUT_MS = 18000;
 
+function getLegacyProApiKey() {
+  // 兼容线上既有的 CryptoHunt Pro 配置；新环境仍应优先配置
+  // TWITTER_CRAWLER_API_KEY，避免业务调用方各自复制 key。
+  try {
+    const ghostFollowingRouter = require("../../api/ghost-following");
+    return String(ghostFollowingRouter.PRO_API_CONFIG?.apiKey || "").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
 function getTwitterCrawlerUrl() {
   const fullUrl = String(
     process.env.TWITTER_CRAWLER_URL ||
@@ -31,6 +42,7 @@ function getTwitterCrawlerApiKey() {
     process.env.TWITTER_CRAWLER_API_KEY ||
       process.env.SOCIAL_LISTENING_CRAWLER_API_KEY ||
       process.env.PRO_API_KEY ||
+      getLegacyProApiKey() ||
       ""
   ).trim();
 }
