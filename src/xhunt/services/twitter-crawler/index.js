@@ -4,17 +4,6 @@ const DEFAULT_TWITTER_CRAWLER_URL =
   "http://xhuntapi.internal.biteye.info/external/crawler";
 const DEFAULT_TIMEOUT_MS = 18000;
 
-function getLegacyProApiKey() {
-  // 兼容线上既有的 CryptoHunt Pro 配置；新环境仍应优先配置
-  // TWITTER_CRAWLER_API_KEY，避免业务调用方各自复制 key。
-  try {
-    const ghostFollowingRouter = require("../../api/ghost-following");
-    return String(ghostFollowingRouter.PRO_API_CONFIG?.apiKey || "").trim();
-  } catch (_) {
-    return "";
-  }
-}
-
 function getTwitterCrawlerUrl() {
   const fullUrl = String(
     process.env.TWITTER_CRAWLER_URL ||
@@ -38,13 +27,13 @@ function getTwitterCrawlerUrl() {
 }
 
 function getTwitterCrawlerApiKey() {
-  return String(
-    process.env.TWITTER_CRAWLER_API_KEY ||
-      process.env.SOCIAL_LISTENING_CRAWLER_API_KEY ||
-      process.env.PRO_API_KEY ||
-      getLegacyProApiKey() ||
-      ""
-  ).trim();
+  const apiKey = String(process.env.BITEY_INTERNAL_PRO_API_KEY || "").trim();
+  if (!apiKey) {
+    const error = new Error("BITEY_INTERNAL_PRO_API_KEY is required for Twitter crawler requests");
+    error.code = "BITEY_INTERNAL_PRO_API_KEY_REQUIRED";
+    throw error;
+  }
+  return apiKey;
 }
 
 function getTwitterCrawlerTimeoutMs(override) {
@@ -76,7 +65,7 @@ async function requestTwitterCrawler(endpoint, params = {}, options = {}) {
       timeout: getTwitterCrawlerTimeoutMs(options.timeoutMs),
       headers: {
         "Content-Type": "application/json",
-        ...(apiKey ? { apikey: apiKey } : {}),
+        apikey: apiKey,
       },
     }
   );

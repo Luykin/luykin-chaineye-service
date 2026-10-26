@@ -29,7 +29,7 @@ router.use(
 // 获取同源配置
 const PRO_API_CONFIG = ghostFollowingRouter.PRO_API_CONFIG || {
   baseUrl: process.env.PRO_API_BASE_URL || "http://172.31.0.2:3001",
-  apiKey: process.env.PRO_API_KEY || "bd1cbd94-20e5-42a2-96cd-e4313ea2154d",
+  apiKey: process.env.BITEY_INTERNAL_PRO_API_KEY || "",
 };
 
 const CRAWLER_QUOTA_CONFIG = ghostFollowingRouter.CRAWLER_QUOTA_CONFIG || {

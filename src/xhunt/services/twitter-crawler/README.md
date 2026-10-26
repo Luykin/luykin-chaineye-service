@@ -126,15 +126,15 @@ http://xhuntapi.internal.biteye.info/external/crawler
 | --- | --- |
 | 完整请求地址 | `TWITTER_CRAWLER_URL` → `SOCIAL_LISTENING_CRAWLER_URL` → `TWITTER_CLIENT_URL` → 默认地址 |
 | 基础地址（自动追加 `/crawler`） | `TWITTER_CRAWLER_BASE_URL` → `SOCIAL_LISTENING_CRAWLER_BASE_URL` → `CRYPTOHUNT_CRAWLER_BASE_URL` → `CRAWLER_TWITTER_BASE_URL` |
-| API Key | `TWITTER_CRAWLER_API_KEY` → `SOCIAL_LISTENING_CRAWLER_API_KEY` → `PRO_API_KEY` → 既有 CryptoHunt Pro 配置（兼容回退） |
+| API Key | `BITEY_INTERNAL_PRO_API_KEY`（唯一配置） |
 | 超时 | `TWITTER_CRAWLER_TIMEOUT_MS` → `SOCIAL_LISTENING_CRAWLER_TIMEOUT_MS` → `18000` 毫秒 |
 
-完整请求地址优先于基础地址。旧环境变量暂时保留兼容，新配置应优先使用 `TWITTER_CRAWLER_*` 命名。
-线上旧部署若尚未注入 crawler 专用 key，会复用 `ghost-following` 已有的 CryptoHunt Pro key；该逻辑仅用于兼容，调用方不应自行复制或硬编码 key。
+完整请求地址优先于基础地址。API key 不提供代码默认值或其他环境变量降级；未配置 `BITEY_INTERNAL_PRO_API_KEY` 时，请求会在调用下游服务前失败。
 
 ## 错误约定
 
 - `endpoint` 为空时抛出 `TWITTER_CRAWLER_ENDPOINT_REQUIRED`。
+- `BITEY_INTERNAL_PRO_API_KEY` 未配置时抛出 `BITEY_INTERNAL_PRO_API_KEY_REQUIRED`。
 - 网络错误、超时和非 2xx 响应保持 Axios 原始错误结构并向调用方抛出。
 - 模块不会吞掉错误或返回伪造数据；是否降级、记录诊断信息或转为业务错误由调用方决定。
 - 日志和管理后台不得展示真实 `apikey`。
