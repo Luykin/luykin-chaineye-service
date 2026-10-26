@@ -1,4 +1,3 @@
-const axios = require("axios");
 const { QueryTypes } = require("sequelize");
 const { E2eTweet } = require("../../../models/postgres-start");
 const { structuredChat } = require("../../../lib/llm");
@@ -8,6 +7,7 @@ const {
   isPostgresReadOnlyConfigured,
 } = require("../../../infra/k8s/postgres-readonly");
 const { getEchohuntTweetDetail } = require("../../../xhunt/services/twitter-echohunt");
+const { requestTwitterCrawler } = require("../../../xhunt/services/twitter-crawler");
 
 const EXAMINE_SCHEMA = Object.freeze({
   type: "object",
@@ -63,20 +63,6 @@ function parseTweetInput(rawInput) {
   return { tweetId: null, handle: null };
 }
 
-function getCrawlerUrl() {
-  const fullUrl = String(process.env.SOCIAL_LISTENING_CRAWLER_URL || process.env.TWITTER_CLIENT_URL || "").trim();
-  if (fullUrl) return fullUrl;
-  const baseUrl = String(
-    process.env.SOCIAL_LISTENING_CRAWLER_BASE_URL ||
-      process.env.CRYPTOHUNT_CRAWLER_BASE_URL ||
-      process.env.CRAWLER_TWITTER_BASE_URL ||
-      ""
-  )
-    .trim()
-    .replace(/\/+$/, "");
-  return baseUrl ? `${baseUrl}/crawler` : "";
-}
-
 async function fetchTweetFromReadonlyDb(tweetId) {
   try {
     const status = getPostgresReadOnlyStatus();
@@ -122,20 +108,10 @@ async function fetchTweetFromReadonlyDb(tweetId) {
 }
 
 async function fetchTweetFromCrawler(tweetId) {
-  const crawlerUrl = getCrawlerUrl();
-  if (!crawlerUrl) return null;
   try {
-    const response = await axios.post(
-      crawlerUrl,
-      {
-        endpoint: "tweet_detail",
-        tweet_id: String(tweetId),
-      },
-      {
-        timeout: 18000,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    const response = await requestTwitterCrawler("tweet_detail", {
+      tweet_id: String(tweetId),
+    });
     const body = response.data || {};
     const data = body.data || body;
     const tweet = data?.tweet || (Array.isArray(data?.tweets) ? data.tweets[0] : data);

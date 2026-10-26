@@ -1,5 +1,7 @@
-const axios = require("axios");
 const { QueryTypes } = require("sequelize");
+const {
+  requestTwitterCrawler,
+} = require("../../services/twitter-crawler");
 const {
   getPostgresReadOnlyInstance,
   getPostgresReadOnlyStatus,
@@ -411,18 +413,6 @@ async function searchTweetRowsByText(text, limit = 20) {
   );
 }
 
-function getSocialListeningCrawlerUrl() {
-  const fullUrl = String(process.env.SOCIAL_LISTENING_CRAWLER_URL || "").trim();
-  if (fullUrl) return fullUrl;
-  const baseUrl = String(
-    process.env.SOCIAL_LISTENING_CRAWLER_BASE_URL ||
-      process.env.CRYPTOHUNT_CRAWLER_BASE_URL ||
-      process.env.CRAWLER_TWITTER_BASE_URL ||
-      ""
-  ).trim().replace(/\/+$/, "");
-  return baseUrl ? `${baseUrl}/crawler` : "";
-}
-
 function findCrawlerTweetPayload(value, tweetId) {
   if (!value || typeof value !== "object") return null;
   const id = String(value.id || value.tweet_id || "");
@@ -488,15 +478,10 @@ function buildCrawlerTweetEventSnapshot(tweet = {}, parsed = {}) {
 }
 
 async function fetchTweetSnapshotFromCrawler(tweetId, parsed = {}) {
-  const crawlerUrl = getSocialListeningCrawlerUrl();
-  if (!crawlerUrl) return null;
-  const response = await axios.post(crawlerUrl, {
-    endpoint: "tweet_detail",
+  const response = await requestTwitterCrawler("tweet_detail", {
     tweet_id: String(tweetId),
-  }, {
-    timeout: Number(process.env.SOCIAL_LISTENING_CRAWLER_TIMEOUT_MS || 18000),
-    headers: { "Content-Type": "application/json" },
   });
+  if (!response) return null;
   const body = response.data || {};
   const code = Number(body.code || body.status || 200);
   if (code && code !== 200) return null;

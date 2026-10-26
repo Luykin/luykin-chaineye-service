@@ -1,4 +1,3 @@
-const axios = require("axios");
 const { QueryTypes } = require("sequelize");
 const { E2eList, E2eTweet, E2eCrawlRun } = require("../../../models/postgres-start");
 const {
@@ -6,42 +5,22 @@ const {
   getPostgresReadOnlyStatus,
   isPostgresReadOnlyConfigured,
 } = require("../../../infra/k8s/postgres-readonly");
+const { requestTwitterCrawler } = require("../../../xhunt/services/twitter-crawler");
 
 const MAX_PAGES = 5;
 const PAGE_COUNT = 50;
 const BATCH_SIZE = 5;
 
-function getCrawlerUrl() {
-  const fullUrl = String(process.env.SOCIAL_LISTENING_CRAWLER_URL || process.env.TWITTER_CLIENT_URL || "").trim();
-  if (fullUrl) return fullUrl;
-  const baseUrl = String(
-    process.env.SOCIAL_LISTENING_CRAWLER_BASE_URL ||
-      process.env.CRYPTOHUNT_CRAWLER_BASE_URL ||
-      process.env.CRAWLER_TWITTER_BASE_URL ||
-      ""
-  )
-    .trim()
-    .replace(/\/+$/, "");
-  return baseUrl ? `${baseUrl}/crawler` : "";
-}
-
 async function callCrawlerEndpoint(endpoint, tweetId, cursor = null, diagnostic = null) {
-  const crawlerUrl = getCrawlerUrl();
-  if (!crawlerUrl) {
-    if (diagnostic) diagnostic.error = "未配置抓取服务地址";
-    return null;
-  }
   const startedAt = Date.now();
   try {
     const payload = {
-      endpoint,
       tweet_id: String(tweetId),
       count: PAGE_COUNT,
     };
     if (cursor) payload.cursor = cursor;
-    const response = await axios.post(crawlerUrl, payload, {
-      timeout: 20000,
-      headers: { "Content-Type": "application/json" },
+    const response = await requestTwitterCrawler(endpoint, payload, {
+      timeoutMs: 20000,
     });
     const body = response.data || {};
     if (diagnostic) {

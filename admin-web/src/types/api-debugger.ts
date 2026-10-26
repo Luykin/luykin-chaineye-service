@@ -29,6 +29,7 @@ export interface DebuggerConfigInfo {
   baseUrl: string;
   apiKeyMasked: string;
   crawlerQuotaUrl: string;
+  twitterCrawlerUrl?: string;
 }
 
 export interface DebuggerEndpointsResponse {

@@ -676,7 +676,9 @@ export function ApiDebuggerPage() {
               {endpoint.method}
             </span>
             <span className="api-debugger-endpoint-title">{endpoint.name}</span>
-            <span className="api-debugger-endpoint-url">{endpoint.path}</span>
+            <span className="api-debugger-endpoint-url">
+              {endpoint.path || endpoint.defaultBaseUrl || "未配置目标地址"}
+            </span>
           </div>
           <Space>
             <Button
@@ -1200,13 +1202,14 @@ export function ApiDebuggerPage() {
             <div className="api-debugger-hero-content">
               <span className="api-debugger-eyebrow">DEVELOPER TOOLS / API DEBUGGER</span>
               <Title level={3} className="api-debugger-hero-title">
-                后端接口调试台 (Ghost Following 专区)
+                后端接口调试台
               </Title>
               <Paragraph className="api-debugger-hero-desc">
-                本页面用于快速测试推特抓取分析下游接口（如 <Text code>kol_tweets</Text>、
+                本页面用于快速测试推特抓取分析下游接口（如 <Text code>tweet_detail</Text>、
+                <Text code>kol_tweets</Text>、
                 <Text code>user_tweets</Text>、<Text code>profile_by_userid</Text>、
                 <Text code>social/following</Text> 及配额查询）。请求由管理后台后端以真实内网身份发起，
-                自动沿用配置中的 <Text code>apiKey</Text> 与请求头，管理员仅需填写变动参数即可秒级查看完整返回体。
+                按对应业务调用链自动沿用目标地址、鉴权与请求头，管理员仅需填写变动参数即可秒级查看完整返回体。
                 现已集成 <Text code>Handler 自动转换 Twitter ID</Text> 及全量关注列表导出功能。
               </Paragraph>
             </div>
@@ -1215,10 +1218,15 @@ export function ApiDebuggerPage() {
                 管理后台代理发起
               </Tag>
               <Tag color="green" icon={<CheckCircleOutlined />}>
-                API Key 自动注入
+                原业务请求配置复用
               </Tag>
               {configInfo && (
-                <Tag color="geekblue">BaseURL: {configInfo.baseUrl}</Tag>
+                <>
+                  <Tag color="geekblue">Ghost BaseURL: {configInfo.baseUrl}</Tag>
+                  <Tag color={configInfo.twitterCrawlerUrl ? "purple" : "warning"}>
+                    Twitter Crawler: {configInfo.twitterCrawlerUrl || "未配置"}
+                  </Tag>
+                </>
               )}
             </div>
           </div>

@@ -12,6 +12,10 @@ const express = require("express");
 const axios = require("axios");
 const { createAdminWriteAudit } = require("../services/admin-audit");
 const ghostFollowingRouter = require("../../xhunt/api/ghost-following");
+const {
+  getTwitterCrawlerUrl,
+  requestTwitterCrawler,
+} = require("../../xhunt/services/twitter-crawler");
 
 const router = express.Router();
 
@@ -61,6 +65,35 @@ function cleanUserId(value) {
 
 // 接口注册表
 const ENDPOINTS = [
+  {
+    id: "twitter_crawler_tweet_detail",
+    name: "获取单条推文详情 (tweet_detail)",
+    module: "Twitter Crawler",
+    method: "POST",
+    path: "",
+    defaultBaseUrl: getTwitterCrawlerUrl(),
+    description: "通过公共 Twitter Crawler 客户端调用 tweet_detail，展示未加工的完整响应，用于核对作者、回复/引用关系及互动指标字段。",
+    presetHeaders: {
+      "Content-Type": "application/json",
+    },
+    fixedParams: {
+      endpoint: "tweet_detail",
+    },
+    fields: [
+      {
+        key: "tweet_id",
+        label: "Tweet ID",
+        type: "string",
+        required: true,
+        defaultValue: "1990342951638335613",
+        placeholder: "例如 1990342951638335613",
+        description: "请输入推文链接中 /status/ 后面的纯数字 ID",
+      },
+    ],
+    sampleParams: {
+      tweet_id: "1990342951638335613",
+    },
+  },
   {
     id: "ghost_crawler_quota",
     name: "爬虫额度检查",
@@ -290,6 +323,7 @@ router.get("/endpoints", (req, res) => {
         baseUrl: PRO_API_CONFIG.baseUrl,
         apiKeyMasked: maskSecret(PRO_API_CONFIG.apiKey),
         crawlerQuotaUrl: CRAWLER_QUOTA_CONFIG.url,
+        twitterCrawlerUrl: getTwitterCrawlerUrl(),
       },
     },
   });
@@ -435,6 +469,101 @@ async function executeSingleEndpoint(endpoint, params = {}, options = {}) {
         code: err.code || "NETWORK_ERROR",
         type: "NETWORK_OR_TIMEOUT",
         suggestion: "请确认后端 PRO_API_BASE_URL 配置或内网网络连接正常。",
+      },
+    };
+  }
+}
+
+/**
+ * 原样执行 Social Listening 的 tweet_detail 请求，并保留完整下游响应供管理后台查看。
+ */
+async function executeTwitterCrawlerTweetDetail(params = {}) {
+  const tweetId = String(params.tweet_id || "").trim();
+  const crawlerUrl = getTwitterCrawlerUrl();
+  const requestHeaders = { "Content-Type": "application/json" };
+  const requestBody = { endpoint: "tweet_detail", tweet_id: tweetId };
+
+  if (!crawlerUrl) {
+    return {
+      status: 503,
+      statusText: "Crawler URL Not Configured",
+      durationMs: 0,
+      targetUrl: "",
+      method: "POST",
+      requestHeaders,
+      requestBody,
+      responseHeaders: {},
+      responseData: {
+        error: "TWITTER_CRAWLER_NOT_CONFIGURED",
+        message: "未配置 Twitter Crawler 地址",
+      },
+      isError: true,
+      error: {
+        message: "未配置 Twitter Crawler 地址",
+        code: "TWITTER_CRAWLER_NOT_CONFIGURED",
+        type: "CONFIGURATION_ERROR",
+        suggestion: "请配置 TWITTER_CRAWLER_URL，或配置 crawler base URL 后重试。",
+      },
+    };
+  }
+
+  const startTime = Date.now();
+  try {
+    const axiosResponse = await requestTwitterCrawler("tweet_detail", {
+      tweet_id: tweetId,
+    });
+    const durationMs = Date.now() - startTime;
+    return {
+      status: axiosResponse.status,
+      statusText: axiosResponse.statusText || "OK",
+      durationMs,
+      targetUrl: crawlerUrl,
+      method: "POST",
+      requestHeaders,
+      requestBody,
+      responseHeaders: axiosResponse.headers || {},
+      responseData: axiosResponse.data,
+      isError: false,
+      error: null,
+    };
+  } catch (err) {
+    const durationMs = Date.now() - startTime;
+    if (err.response) {
+      return {
+        status: err.response.status,
+        statusText: err.response.statusText || "Error",
+        durationMs,
+        targetUrl: crawlerUrl,
+        method: "POST",
+        requestHeaders,
+        requestBody,
+        responseHeaders: err.response.headers || {},
+        responseData: err.response.data,
+        isError: true,
+        error: {
+          message: err.message,
+          code: err.code || `HTTP_${err.response.status}`,
+          type: "DOWNSTREAM_HTTP_ERROR",
+        },
+      };
+    }
+
+    return {
+      status: err.code === "ECONNABORTED" ? 504 : 502,
+      statusText: err.code || "Network Error",
+      durationMs,
+      targetUrl: crawlerUrl,
+      method: "POST",
+      requestHeaders,
+      requestBody,
+      responseHeaders: {},
+      responseData: null,
+      isError: true,
+      error: {
+        message: `管理后台无法连通 Twitter Crawler：${err.message}`,
+        code: err.code || "NETWORK_ERROR",
+        type: "NETWORK_OR_TIMEOUT",
+        suggestion: "请确认 Twitter Crawler 地址及内网连接正常。",
       },
     };
   }
@@ -595,6 +724,8 @@ router.post("/execute", async (req, res) => {
     let execution;
     if (endpoint.id === "ghost_full_pipeline") {
       execution = await executeAnalyzePipeline(params, { baseUrlOverride, customHeaders });
+    } else if (endpoint.id === "twitter_crawler_tweet_detail") {
+      execution = await executeTwitterCrawlerTweetDetail(params);
     } else {
       execution = await executeSingleEndpoint(endpoint, params, { customPayload, baseUrlOverride, customHeaders });
     }
