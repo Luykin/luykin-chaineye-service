@@ -45,6 +45,7 @@
     "echohunt:e2e:import": "node src/echohunt/e2e/scripts/importFromDb2.js",
     "release-tags:sync-local": "node scripts/sync-local-release-tags.js",
     "release-tags:sync-local:dry-run": "node scripts/sync-local-release-tags.js --dry-run",
+    "admin:totp:recover": "bash scripts/recover-super-admin-totp.sh",
     "git-hooks:install": "git config core.hooksPath .githooks"
   },
   "dependencies": {
