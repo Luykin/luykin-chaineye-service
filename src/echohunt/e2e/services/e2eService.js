@@ -22,10 +22,25 @@ const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
 const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
 const MAX_CAMPAIGN_PAGE_SIZE = 100;
 const ASIA_SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+const E2E_CAMPAIGN_TYPES = new Set(["mindshare", "equal"]);
+const E2E_CAMPAIGN_LANGUAGES = new Set(["all", "cn", "en"]);
 
 function toNumber(val, fallback = 0) {
   const num = Number(val);
   return Number.isFinite(num) ? num : fallback;
+}
+
+function parseStrictInteger(value) {
+  if (typeof value === "number") return Number.isSafeInteger(value) ? value : null;
+  const text = String(value ?? "").trim();
+  if (!/^-?\d+$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function normalizeIntegerInRange(value, fallback, min, max) {
+  const parsed = parseStrictInteger(value);
+  return parsed !== null && parsed >= min && parsed <= max ? parsed : fallback;
 }
 
 function calculateCampaignEndTime(startTime, durationDays) {
@@ -518,13 +533,17 @@ async function createE2eCampaign(payload = {}, options = {}) {
   }
 
   const tweetData = examineResult.data || {};
-  const parsedDays = parseInt(String(payload.days ?? ""), 10);
-  const days = Math.min(7, Math.max(1, Number.isFinite(parsedDays) ? parsedDays : 1));
-  const target = payload.target !== undefined && payload.target !== null ? Number(payload.target) : 200000;
-  const winners = Math.min(200, Math.max(1, parseInt(String(payload.winners || 20), 10) || 20));
-  const type = String(payload.type || "mindshare").trim() || "mindshare";
-  const lang = String(payload.lang || "all").trim() || "all";
-  const retro = payload.retro !== undefined ? Boolean(payload.retro) : true;
+  const days = normalizeIntegerInRange(payload.days, 1, 1, 7);
+  const parsedTarget = parseStrictInteger(payload.target);
+  const target = parsedTarget === -1 || (parsedTarget !== null && parsedTarget > 0)
+    ? parsedTarget
+    : 200000;
+  const winners = normalizeIntegerInRange(payload.winners, 20, 1, 200);
+  const rawType = String(payload.type || "mindshare").trim();
+  const type = E2E_CAMPAIGN_TYPES.has(rawType) ? rawType : "mindshare";
+  const rawLang = String(payload.lang || "all").trim();
+  const lang = E2E_CAMPAIGN_LANGUAGES.has(rawLang) ? rawLang : "all";
+  const retro = typeof payload.retro === "boolean" ? payload.retro : true;
 
   const { rewards, fees, depositRewards, feePercentage } = calculateDepositAmounts(rewardsNum);
   const creatorCampaignWhere = {

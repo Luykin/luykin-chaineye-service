@@ -107,6 +107,65 @@ test("replaces the creator's pending campaign with the next payment sequence", a
   assert.equal(state.created[0].values.status, "pending");
 });
 
+test("persists every create option and ignores a client-supplied creator id", async () => {
+  state.activeCampaign = null;
+  const createdBefore = state.created.length;
+
+  await createE2eCampaign(
+    {
+      tweet_id: "123",
+      user_id: "attacker-controlled-id",
+      rewards: 500,
+      days: 2,
+      target: 50000,
+      winners: 35,
+      type: "equal",
+      lang: "en",
+      retro: false,
+    },
+    { fallbackOwner: { twitterId: "trusted-user-id" } }
+  );
+
+  const saved = state.created[createdBefore].values;
+  assert.equal(saved.user_id, "trusted-user-id");
+  assert.equal(saved.target, 50000);
+  assert.equal(saved.winners, 35);
+  assert.equal(saved.type, "equal");
+  assert.equal(saved.lang, "en");
+  assert.equal(saved.retro, false);
+});
+
+test("uses safe defaults for malformed create options", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-26T02:00:00.000Z"),
+  });
+  state.activeCampaign = null;
+  const createdBefore = state.created.length;
+
+  await createE2eCampaign(
+    {
+      tweet_id: "123",
+      rewards: 500,
+      days: "2junk",
+      target: "not-a-rank",
+      winners: "20people",
+      type: "unsupported",
+      lang: "unsupported",
+      retro: "false",
+    },
+    { fallbackOwner: { twitterId: "111" } }
+  );
+
+  const saved = state.created[createdBefore].values;
+  assert.equal(saved.end_time.toISOString(), "2026-10-27T15:59:59.999Z");
+  assert.equal(saved.target, 200000);
+  assert.equal(saved.winners, 20);
+  assert.equal(saved.type, "mindshare");
+  assert.equal(saved.lang, "all");
+  assert.equal(saved.retro, true);
+});
+
 test("keeps the old pending campaign when payment order creation fails", async () => {
   const destroyedBefore = state.destroyed.length;
   state.paymentError = new Error("payment unavailable");
