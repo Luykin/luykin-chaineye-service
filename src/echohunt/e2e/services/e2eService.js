@@ -21,10 +21,26 @@ const {
 const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
 const DEFAULT_CAMPAIGN_PAGE_SIZE = 20;
 const MAX_CAMPAIGN_PAGE_SIZE = 100;
+const ASIA_SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 function toNumber(val, fallback = 0) {
   const num = Number(val);
   return Number.isFinite(num) ? num : fallback;
+}
+
+function calculateCampaignEndTime(startTime, durationDays) {
+  const start = startTime instanceof Date ? startTime : new Date(startTime);
+  const shanghaiTime = new Date(start.getTime() + ASIA_SHANGHAI_OFFSET_MS);
+  const endOfTargetDayUtc = Date.UTC(
+    shanghaiTime.getUTCFullYear(),
+    shanghaiTime.getUTCMonth(),
+    shanghaiTime.getUTCDate() + durationDays,
+    23,
+    59,
+    59,
+    999
+  );
+  return new Date(endOfTargetDayUtc - ASIA_SHANGHAI_OFFSET_MS);
 }
 
 function formatCampaignItem(campaign, signups = [], tweetMap = new Map(), currentUserId = null) {
@@ -502,7 +518,8 @@ async function createE2eCampaign(payload = {}, options = {}) {
   }
 
   const tweetData = examineResult.data || {};
-  const days = Math.min(7, Math.max(1, parseInt(String(payload.days || 2), 10) || 2));
+  const parsedDays = parseInt(String(payload.days ?? ""), 10);
+  const days = Math.min(7, Math.max(1, Number.isFinite(parsedDays) ? parsedDays : 1));
   const target = payload.target !== undefined && payload.target !== null ? Number(payload.target) : 200000;
   const winners = Math.min(200, Math.max(1, parseInt(String(payload.winners || 20), 10) || 20));
   const type = String(payload.type || "mindshare").trim() || "mindshare";
@@ -536,8 +553,7 @@ async function createE2eCampaign(payload = {}, options = {}) {
   }
 
   const now = new Date();
-  const endTime = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-  endTime.setUTCHours(23, 59, 59, 999);
+  const endTime = calculateCampaignEndTime(now, days);
 
   await pgInstance.transaction(async (transaction) => {
     await E2eList.destroy({
@@ -628,21 +644,13 @@ async function activateE2eCampaignInternal(payload = {}, { skipPaymentVerificati
     }
   }
 
-  // 根据原预设起止时间差重新计算激活后的正式 start_time / end_time
+  // 投放时已经按所选自然日生成截止时间；支付激活不能再次延长截止日期。
   const now = new Date();
-  const origStart = campaign.start_time ? new Date(campaign.start_time).getTime() : now.getTime();
-  const origEnd = campaign.end_time
-    ? new Date(campaign.end_time).getTime()
-    : now.getTime() + 2 * 24 * 60 * 60 * 1000;
-  const durationMs = Math.max(24 * 60 * 60 * 1000, origEnd - origStart);
-  const nextEnd = new Date(now.getTime() + durationMs);
-  nextEnd.setUTCHours(23, 59, 59, 999);
 
   const [updatedCount] = await E2eList.update(
     {
       status: "active",
       start_time: now,
-      end_time: nextEnd,
     },
     {
       where: { address, status: "pending" },

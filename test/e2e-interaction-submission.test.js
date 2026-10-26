@@ -20,6 +20,7 @@ const campaign = {
   status: "active",
   end_time: "2099-01-02T00:00:00.000Z",
   retro: true,
+  lang: "all",
   score_config: { maxReplies: 1, maxQuotes: 1 },
 };
 const signup = { user_id: "user-1", create_time: "2026-01-01T00:00:00.000Z" };
@@ -40,7 +41,8 @@ const E2eInteractionSubmission = {
   ) || null,
   findAll: async ({ where }) => state.submissions.filter((item) =>
     item.campaign_address === where.campaign_address &&
-    (!where.user_id || item.user_id === where.user_id)
+    (!where.user_id || item.user_id === where.user_id) &&
+    (!where.interaction_type || item.interaction_type === where.interaction_type)
   ),
   count: async ({ where }) => state.submissions.filter((item) =>
     item.campaign_address === where.campaign_address &&
@@ -84,6 +86,7 @@ beforeEach(() => {
   campaign.status = "active";
   campaign.end_time = "2099-01-02T00:00:00.000Z";
   campaign.retro = true;
+  campaign.lang = "all";
   campaign.score_config = { maxReplies: 1, maxQuotes: 1 };
   signup.create_time = "2026-01-01T00:00:00.000Z";
   signup.score_breakdown = null;
@@ -186,6 +189,8 @@ test("uses the latest submission limit inside the write transaction", async () =
     interaction_tweet_id: "9000000000000000003",
     interaction_type: "reply",
     user_id: "user-1",
+    text: "A prior English reply",
+    status: "verified",
   }));
   state.afterCrawler = () => { campaign.score_config = { maxReplies: 1, maxQuotes: 1 }; };
   await assert.rejects(
@@ -234,6 +239,8 @@ test("uses maxReplies as the backend submission limit", async () => {
     interaction_tweet_id: "9000000000000000003",
     interaction_type: "reply",
     user_id: "user-1",
+    text: "A prior English reply",
+    status: "verified",
   }));
   await assert.rejects(
     submitE2eInteraction({
@@ -244,6 +251,53 @@ test("uses maxReplies as the backend submission limit", async () => {
     }),
     { code: "E2E_INTERACTION_LIMIT_REACHED" }
   );
+});
+
+test("keeps a language-ineligible reply without consuming the submission limit", async () => {
+  campaign.lang = "en";
+  state.crawlerTweet.text = "这是一条中文评论";
+
+  const ineligible = await submitE2eInteraction({
+    address: campaign.address,
+    campaignTweetId: campaign.tweet_id,
+    tweetUrl: "https://x.com/alice/status/9000000000000000002",
+    twitterUserId: "user-1",
+  });
+
+  assert.equal(ineligible.countsTowardLimit, false);
+  assert.equal(ineligible.reason, "活动仅统计英文互动");
+
+  state.crawlerTweet = {
+    ...state.crawlerTweet,
+    id: "9000000000000000004",
+    text: "A valid English replacement reply",
+  };
+  const eligible = await submitE2eInteraction({
+    address: campaign.address,
+    campaignTweetId: campaign.tweet_id,
+    tweetUrl: "https://x.com/alice/status/9000000000000000004",
+    twitterUserId: "user-1",
+  });
+
+  assert.equal(eligible.countsTowardLimit, true);
+  assert.equal(eligible.reason, null);
+  assert.equal(state.submissions.length, 2);
+
+  state.crawlerTweet = {
+    ...state.crawlerTweet,
+    id: "9000000000000000005",
+    text: "Another valid English reply",
+  };
+  await assert.rejects(
+    submitE2eInteraction({
+      address: campaign.address,
+      campaignTweetId: campaign.tweet_id,
+      tweetUrl: "https://x.com/alice/status/9000000000000000005",
+      twitterUserId: "user-1",
+    }),
+    { code: "E2E_INTERACTION_LIMIT_REACHED" }
+  );
+  assert.equal(state.submissions.length, 2);
 });
 
 test("keeps the last verified metrics when a refresh fails", async () => {

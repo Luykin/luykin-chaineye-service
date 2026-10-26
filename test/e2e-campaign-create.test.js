@@ -18,6 +18,7 @@ const state = {
   destroyed: [],
   paymentCalls: [],
   paymentError: null,
+  campaignByPk: null,
 };
 
 const E2eList = {
@@ -31,6 +32,12 @@ const E2eList = {
   create: async (values, options) => {
     state.created.push({ values, options });
     return values;
+  },
+  findByPk: async () => state.campaignByPk,
+  update: async (values) => {
+    if (!state.campaignByPk) return [0];
+    Object.assign(state.campaignByPk, values);
+    return [1];
   },
 };
 
@@ -72,7 +79,7 @@ mockModule("src/xhunt/services/campaignRegistrationService.js", {
   rankResultMeetsThreshold: () => false,
 });
 
-const { createE2eCampaign } = require(servicePath);
+const { activateE2eCampaign, createE2eCampaign } = require(servicePath);
 
 after(() => {
   delete require.cache[servicePath];
@@ -128,4 +135,103 @@ test("still blocks creation while the tweet has an active campaign", async () =>
   assert.equal(result.status, false);
   assert.match(result.message, /进行中/);
   assert.equal(state.paymentCalls.length, paymentCallsBefore);
+});
+
+test("one-day campaigns end at 23:59:59 on the next Asia/Shanghai calendar day", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-26T02:00:00.000Z"), // 2026-10-26 10:00:00 Asia/Shanghai
+  });
+  state.activeCampaign = null;
+  const createdBefore = state.created.length;
+
+  await createE2eCampaign(
+    { tweet_id: "123", rewards: 500, days: 1 },
+    { fallbackOwner: { twitterId: "111" } }
+  );
+
+  assert.equal(
+    state.created[createdBefore].values.end_time.toISOString(),
+    "2026-10-27T15:59:59.999Z"
+  );
+});
+
+test("one-day campaigns created in the afternoon use the same next-day deadline", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-26T09:00:00.000Z"), // 2026-10-26 17:00:00 Asia/Shanghai
+  });
+  state.activeCampaign = null;
+  const createdBefore = state.created.length;
+
+  await createE2eCampaign(
+    { tweet_id: "123", rewards: 500, days: 1 },
+    { fallbackOwner: { twitterId: "111" } }
+  );
+
+  assert.equal(
+    state.created[createdBefore].values.end_time.toISOString(),
+    "2026-10-27T15:59:59.999Z"
+  );
+});
+
+test("two-day campaigns end at 23:59:59 two Asia/Shanghai calendar days later", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-26T09:00:00.000Z"),
+  });
+  state.activeCampaign = null;
+  const createdBefore = state.created.length;
+
+  await createE2eCampaign(
+    { tweet_id: "123", rewards: 500, days: 2 },
+    { fallbackOwner: { twitterId: "111" } }
+  );
+
+  assert.equal(
+    state.created[createdBefore].values.end_time.toISOString(),
+    "2026-10-28T15:59:59.999Z"
+  );
+});
+
+test("missing duration defaults to one calendar day", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-26T02:00:00.000Z"),
+  });
+  state.activeCampaign = null;
+  const createdBefore = state.created.length;
+
+  await createE2eCampaign(
+    { tweet_id: "123", rewards: 500 },
+    { fallbackOwner: { twitterId: "111" } }
+  );
+
+  assert.equal(
+    state.created[createdBefore].values.end_time.toISOString(),
+    "2026-10-27T15:59:59.999Z"
+  );
+});
+
+test("activation keeps the calendar-day deadline selected at creation", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-26T03:00:00.000Z"),
+  });
+  state.activeCampaign = null;
+  state.campaignByPk = {
+    address: "0x1111111111111111111111111111111111111111",
+    status: "pending",
+    rewards: 500,
+    fees: 100,
+    start_time: new Date("2026-10-26T02:00:00.000Z"),
+    end_time: new Date("2026-10-27T15:59:59.999Z"),
+    toJSON() { return { ...this }; },
+  };
+
+  const result = await activateE2eCampaign({ address: state.campaignByPk.address });
+
+  assert.equal(result.status, true);
+  assert.equal(state.campaignByPk.start_time.toISOString(), "2026-10-26T03:00:00.000Z");
+  assert.equal(state.campaignByPk.end_time.toISOString(), "2026-10-27T15:59:59.999Z");
 });

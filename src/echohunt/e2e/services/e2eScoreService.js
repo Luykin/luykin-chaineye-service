@@ -1,24 +1,12 @@
 const { E2eList, E2eRecord, E2eLog } = require("../../../models/postgres-start");
 const { normalizeDecayFloor, scoreSingleInteraction } = require("./e2eScoringPolicy");
 const { normalizeScoringConfig } = require("./e2eScoringConfig");
+const { getLanguageExclusionReason, matchesLanguage } = require("./e2eInteractionEligibility");
 const {
   listCampaignInteractionSubmissions,
   refreshCampaignInteractionSubmissions,
   toScoringInteraction,
 } = require("./e2eInteractionSubmissionService");
-
-function hasChinese(text) {
-  return /[\u4e00-\u9fff]/.test(String(text || ""));
-}
-
-function matchesLanguage(text, lang) {
-  const normalizedLang = String(lang || "all").toLowerCase();
-  if (!normalizedLang || normalizedLang === "all") return true;
-  const isCn = hasChinese(text);
-  if (normalizedLang === "cn" || normalizedLang === "zh") return isCn;
-  if (normalizedLang === "en") return !isCn && /[a-zA-Z]/.test(String(text || ""));
-  return true;
-}
 
 function computeRankWeight(fanRank, scoringConfig = {}) {
   const config = normalizeScoringConfig(scoringConfig);
@@ -49,10 +37,8 @@ function getInteractionExclusionReason(item, campaign, signup) {
   if (item.status === "unavailable") {
     return "互动已删除或不存在";
   }
-  const langRequirement = String(campaign.lang || "all").toLowerCase();
-  if (!matchesLanguage(item.text, langRequirement)) {
-    return langRequirement === "en" ? "活动仅统计英文互动" : "活动仅统计中文互动";
-  }
+  const languageReason = getLanguageExclusionReason(item.text, campaign.lang);
+  if (languageReason) return languageReason;
   const itemTime = new Date(item.create_time || 0).getTime();
   const campaignEndTime = campaign.end_time ? new Date(campaign.end_time).getTime() : 0;
   if (campaignEndTime > 0 && itemTime > campaignEndTime) {

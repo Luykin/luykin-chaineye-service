@@ -7,6 +7,7 @@ const {
 } = require("../../../models/postgres-start");
 const { requestTwitterCrawler } = require("../../../xhunt/services/twitter-crawler");
 const { normalizeScoringConfig } = require("./e2eScoringConfig");
+const { getLanguageExclusionReason } = require("./e2eInteractionEligibility");
 
 const REFRESH_BATCH_SIZE = 5;
 
@@ -151,8 +152,14 @@ function resolveInteractionType(detail, campaignTweetId) {
   );
 }
 
-function serializeInteractionSubmission(record, scoreDetail = null) {
+function countsTowardSubmissionLimit(record, campaign) {
   const item = record?.toJSON ? record.toJSON() : record;
+  return item?.status === "verified" && !getLanguageExclusionReason(item.text, campaign?.lang);
+}
+
+function serializeInteractionSubmission(record, scoreDetail = null, campaign = null) {
+  const item = record?.toJSON ? record.toJSON() : record;
+  const languageReason = getLanguageExclusionReason(item.text, campaign?.lang);
   return {
     id: String(item.id),
     campaignAddress: String(item.campaign_address),
@@ -178,9 +185,10 @@ function serializeInteractionSubmission(record, scoreDetail = null) {
     lastRefreshedAt: item.last_refreshed_at || null,
     lastError: item.last_error || null,
     submittedAt: item.submitted_at || null,
+    countsTowardLimit: countsTowardSubmissionLimit(item, campaign),
     counted: scoreDetail ? Boolean(scoreDetail.counted) : false,
     score: scoreDetail ? Number(scoreDetail.score || 0) : null,
-    reason: scoreDetail?.reason || null,
+    reason: scoreDetail?.reason || languageReason || null,
   };
 }
 
@@ -277,13 +285,14 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
         }
         return serializeInteractionSubmission(
           existing,
-          findSubmissionScoreDetail(lockedSignup, detail.tweetId)
+          findSubmissionScoreDetail(lockedSignup, detail.tweetId),
+          lockedCampaign
         );
       }
 
       const scoringConfig = normalizeScoringConfig(lockedCampaign.score_config);
       const limit = interactionType === "reply" ? scoringConfig.maxReplies : scoringConfig.maxQuotes;
-      const submittedCount = await E2eInteractionSubmission.count({
+      const submitted = await E2eInteractionSubmission.findAll({
         where: {
           campaign_address: String(lockedCampaign.address),
           user_id: userId,
@@ -291,7 +300,8 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
         },
         transaction,
       });
-      if (submittedCount >= limit) {
+      const eligibleCount = submitted.filter((item) => countsTowardSubmissionLimit(item, lockedCampaign)).length;
+      if (eligibleCount >= limit) {
         throw interactionError(
           "E2E_INTERACTION_LIMIT_REACHED",
           409,
@@ -320,7 +330,7 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
         submitted_at: now,
         updated_at: now,
       }, { transaction });
-      return serializeInteractionSubmission(created);
+      return serializeInteractionSubmission(created, null, lockedCampaign);
     });
   } catch (error) {
     if (error?.name !== "SequelizeUniqueConstraintError") throw error;
@@ -336,7 +346,8 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
       });
       return serializeInteractionSubmission(
         existing,
-        findSubmissionScoreDetail(currentSignup, detail.tweetId)
+        findSubmissionScoreDetail(currentSignup, detail.tweetId),
+        campaign
       );
     }
     throw interactionError("E2E_INTERACTION_ALREADY_CLAIMED", 409, "该互动已被其他用户提交");
@@ -356,7 +367,8 @@ async function getMyE2eInteractions({ address, campaignTweetId, twitterUserId } 
   ]);
   return submissions.map((item) => serializeInteractionSubmission(
     item,
-    findSubmissionScoreDetail(signup, item.interaction_tweet_id)
+    findSubmissionScoreDetail(signup, item.interaction_tweet_id),
+    campaign
   ));
 }
 
