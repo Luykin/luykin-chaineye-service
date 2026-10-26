@@ -108,6 +108,22 @@ export interface E2ePublishAccess {
   updatedAt: string | null;
 }
 
+export type E2ePublishAccessMode = "allowlist" | "all";
+
+export interface E2ePublishAccessModeResult {
+  mode: E2ePublishAccessMode;
+  changed?: boolean;
+  access: E2ePublishAccess | null;
+}
+
+export interface E2ePublishAccessBulkResult {
+  source: "vip" | "internal_test";
+  total: number;
+  created: number;
+  existing: number;
+  failed: number;
+}
+
 export interface E2eCampaignDetail {
   campaign: E2eCampaign;
   tweet: E2eTweet | null;
@@ -183,7 +199,7 @@ export interface E2eSettlementItem {
   interactions: E2eInteractionScore[];
 }
 
-export type E2eSettlementStatus = "draft" | "approved" | "submitting" | "submitted" | "confirmed" | "failed" | "superseded";
+export type E2eSettlementStatus = "draft" | "approved" | "submitting" | "submitted" | "confirmed" | "completed_no_payout" | "failed" | "superseded";
 
 export interface E2eSettlement {
   id: string;
@@ -320,10 +336,25 @@ export const listE2ePublishAccesses = (status: "active" | "revoked" = "active") 
     `${base}/publish-accesses?status=${encodeURIComponent(status)}`
   );
 
+export const getE2ePublishAccessMode = () =>
+  apiRequest<{ success: boolean; data: E2ePublishAccessModeResult }>(`${base}/publish-access-mode`);
+
+export const updateE2ePublishAccessMode = (mode: E2ePublishAccessMode) =>
+  apiRequest<{ success: boolean; data: E2ePublishAccessModeResult }>(
+    `${base}/publish-access-mode`,
+    { method: "PUT", body: { mode } }
+  );
+
 export const grantE2ePublishAccess = (twitterHandle: string) =>
   apiRequest<{ success: boolean; data: { access: E2ePublishAccess; created: boolean } }>(
     `${base}/publish-accesses`,
     { method: "POST", body: { twitterHandle } }
+  );
+
+export const bulkGrantE2ePublishAccess = (source: "vip" | "internal_test") =>
+  apiRequest<{ success: boolean; data: E2ePublishAccessBulkResult }>(
+    `${base}/publish-accesses/bulk`,
+    { method: "POST", body: { source } }
   );
 
 export const revokeE2ePublishAccess = (accessId: string) =>

@@ -13,10 +13,13 @@ const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
 const { forceActivateE2eCampaign } = require("../../echohunt/e2e/services/e2eService");
 const { verifyExternalPayment } = require("../../echohunt/e2e/services/e2ePaymentService");
 const {
+  getE2ePublishAccessMode,
   grantE2ePublishAccess,
+  grantE2ePublishAccessGroup,
   listE2ePublishAccesses,
   revokeE2ePublishAccess,
   serializeE2ePublishAccess,
+  setE2ePublishAccessMode,
 } = require("../../echohunt/e2e/services/e2eAccessService");
 const { calculateCampaignScores } = require("../../echohunt/e2e/services/e2eScoreService");
 const { normalizeScoringConfig, validateScoringConfig } = require("../../echohunt/e2e/services/e2eScoringConfig");
@@ -58,6 +61,41 @@ router.get("/publish-accesses", async (req, res) => {
   }
 });
 
+router.get("/publish-access-mode", async (req, res) => {
+  try {
+    return res.json({ success: true, data: await getE2ePublishAccessMode() });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.put("/publish-access-mode", async (req, res) => {
+  try {
+    const mode = text(req.body?.mode, 32);
+    const result = await setE2ePublishAccessMode(mode, req.adminUser?.id || null);
+    await logAdminAction(req, {
+      action: "e2e_publish_access_mode_update",
+      success: true,
+      message: `mode=${result.mode};changed=${result.changed}`,
+    });
+    return res.json({
+      success: true,
+      data: {
+        mode: result.mode,
+        changed: result.changed,
+        access: result.access ? serializeE2ePublishAccess(result.access) : null,
+      },
+    });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "e2e_publish_access_mode_update",
+      success: false,
+      message: error.message || "failed",
+    }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
 router.post("/publish-accesses", async (req, res) => {
   try {
     const result = await grantE2ePublishAccess(req.body || {}, req.adminUser?.id || null);
@@ -73,6 +111,26 @@ router.post("/publish-accesses", async (req, res) => {
   } catch (error) {
     await logAdminAction(req, {
       action: "e2e_publish_access_grant",
+      success: false,
+      message: error.message || "failed",
+    }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
+router.post("/publish-accesses/bulk", async (req, res) => {
+  try {
+    const source = text(req.body?.source, 32);
+    const result = await grantE2ePublishAccessGroup(source, req.adminUser?.id || null);
+    await logAdminAction(req, {
+      action: "e2e_publish_access_bulk_grant",
+      success: true,
+      message: `source=${result.source};total=${result.total};created=${result.created};existing=${result.existing};failed=${result.failed}`,
+    });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "e2e_publish_access_bulk_grant",
       success: false,
       message: error.message || "failed",
     }).catch(() => {});
@@ -536,8 +594,8 @@ router.patch("/campaigns/:address/settlement/items/:itemId/exclusion", async (re
 router.post("/campaigns/:address/settlement/approve", async (req, res) => {
   const address = String(req.params.address || "").trim();
   try {
-    await approveSettlement(address, req.adminUser);
-    await logAdminAction(req, { action: "e2e_settlement_approve", success: true, message: `address=${address}` });
+    const settlement = await approveSettlement(address, req.adminUser);
+    await logAdminAction(req, { action: "e2e_settlement_approve", success: true, message: `address=${address};status=${settlement.status}` });
     return res.json({ success: true, data: await loadSettlementResponse(address) });
   } catch (error) {
     await logAdminAction(req, { action: "e2e_settlement_approve", success: false, message: `address=${address};${error.message}` }).catch(() => {});

@@ -4,12 +4,16 @@ const {
   AuthCenterXhuntIdentity,
   AuthCenterXhuntUser,
   EchohuntFeatureAccess,
+  XhuntVipTestUser,
 } = require("../../../models/postgres-start");
 
 const E2E_PUBLISH_FEATURE_KEY = "e2e-publish";
 const GLOBAL_RESOURCE_ID = "global";
+const GLOBAL_ACCESS_HANDLE = "__all_users__:*";
 const ACTIVE = "active";
 const REVOKED = "revoked";
+const ACCESS_MODES = new Set(["allowlist", "all"]);
+const BULK_ACCESS_SOURCES = new Set(["vip", "internal_test"]);
 
 function accessError(code, status, message) {
   const error = new Error(message);
@@ -51,6 +55,15 @@ function serializeE2ePublishAccess(record) {
   };
 }
 
+function globalAccessWhere(status = ACTIVE) {
+  return {
+    featureKey: E2E_PUBLISH_FEATURE_KEY,
+    resourceId: GLOBAL_RESOURCE_ID,
+    twitterHandle: GLOBAL_ACCESS_HANDLE,
+    ...(status ? { status } : {}),
+  };
+}
+
 function getTwitterIdentity(authCenter) {
   const identity = (authCenter?.identities || []).find((item) => item.provider === "twitter");
   if (!identity) return null;
@@ -70,11 +83,14 @@ function buildAccessWhere(authCenter) {
   if (!identities.length) {
     throw accessError("E2E_PUBLISH_TWITTER_REQUIRED", 403, "请先使用 X 登录 EchoHunt");
   }
+  const accessSubjects = twitter?.twitterId || twitter?.twitterHandle
+    ? [{ twitterHandle: GLOBAL_ACCESS_HANDLE }, ...identities]
+    : identities;
   return {
     featureKey: E2E_PUBLISH_FEATURE_KEY,
     resourceId: GLOBAL_RESOURCE_ID,
     status: ACTIVE,
-    [Op.or]: identities,
+    [Op.or]: accessSubjects,
   };
 }
 
@@ -84,7 +100,7 @@ async function getE2ePublishAccessSummary(authCenter) {
     order: [["updatedAt", "DESC"]],
   });
   const twitter = getTwitterIdentity(authCenter);
-  if (access && !access.authCenterUserId && authCenter?.user?.id) {
+  if (access && access.twitterHandle !== GLOBAL_ACCESS_HANDLE && !access.authCenterUserId && authCenter?.user?.id) {
     access.update({
       authCenterUserId: authCenter.user.id,
       twitterId: access.twitterId || twitter?.twitterId || null,
@@ -126,7 +142,10 @@ async function grantE2ePublishAccess(input = {}, adminId = null) {
     revokedByAdminId: null,
     grantedAt: new Date(),
     revokedAt: null,
-    metadata: { source: "admin", matchedIdentityId: identity?.id || null },
+    metadata: {
+      source: String(input.source || "admin"),
+      matchedIdentityId: identity?.id || null,
+    },
   };
   return pgInstance.transaction(async (transaction) => {
     const existing = await EchohuntFeatureAccess.findOne({
@@ -149,6 +168,7 @@ async function listE2ePublishAccesses({ status = ACTIVE } = {}) {
   const where = {
     featureKey: E2E_PUBLISH_FEATURE_KEY,
     resourceId: GLOBAL_RESOURCE_ID,
+    twitterHandle: { [Op.ne]: GLOBAL_ACCESS_HANDLE },
     ...(status ? { status } : {}),
   };
   const records = await EchohuntFeatureAccess.findAll({
@@ -156,6 +176,77 @@ async function listE2ePublishAccesses({ status = ACTIVE } = {}) {
     order: [["updatedAt", "DESC"], ["id", "DESC"]],
   });
   return records.map(serializeE2ePublishAccess);
+}
+
+async function getE2ePublishAccessMode() {
+  const access = await EchohuntFeatureAccess.findOne({
+    where: globalAccessWhere(),
+    order: [["updatedAt", "DESC"]],
+  });
+  return { mode: access ? "all" : "allowlist", access: access ? serializeE2ePublishAccess(access) : null };
+}
+
+async function setE2ePublishAccessMode(mode, adminId = null) {
+  if (!ACCESS_MODES.has(mode)) {
+    throw accessError("E2E_PUBLISH_ACCESS_MODE_INVALID", 400, "投放权限范围只能是指定用户或全部用户");
+  }
+
+  return pgInstance.transaction(async (transaction) => {
+    const activeAccess = await EchohuntFeatureAccess.findOne({
+      where: globalAccessWhere(),
+      transaction,
+      lock: true,
+    });
+
+    if (mode === "all") {
+      if (activeAccess) return { mode, changed: false, access: activeAccess };
+      const access = await EchohuntFeatureAccess.create({
+        featureKey: E2E_PUBLISH_FEATURE_KEY,
+        resourceId: GLOBAL_RESOURCE_ID,
+        twitterHandle: GLOBAL_ACCESS_HANDLE,
+        status: ACTIVE,
+        grantedByAdminId: adminId,
+        grantedAt: new Date(),
+        metadata: { source: "admin", accessScope: "all" },
+      }, { transaction });
+      return { mode, changed: true, access };
+    }
+
+    if (!activeAccess) return { mode, changed: false, access: null };
+    await activeAccess.update({
+      status: REVOKED,
+      revokedAt: new Date(),
+      revokedByAdminId: adminId,
+    }, { transaction });
+    return { mode, changed: true, access: null };
+  });
+}
+
+async function grantE2ePublishAccessGroup(source, adminId = null) {
+  if (!BULK_ACCESS_SOURCES.has(source)) {
+    throw accessError("E2E_PUBLISH_ACCESS_SOURCE_INVALID", 400, "批量授权来源只能是 VIP 用户或内测用户");
+  }
+  const users = await XhuntVipTestUser.findAll({
+    where: { listType: source },
+    attributes: ["id", "username", "twitterId"],
+    order: [["id", "ASC"]],
+    raw: true,
+  });
+  const result = { source, total: users.length, created: 0, existing: 0, failed: 0 };
+  for (const user of users) {
+    try {
+      const granted = await grantE2ePublishAccess({
+        twitterHandle: user.username,
+        twitterId: user.twitterId,
+        source: `admin_bulk_${source}`,
+      }, adminId);
+      if (granted.created) result.created += 1;
+      else result.existing += 1;
+    } catch (_) {
+      result.failed += 1;
+    }
+  }
+  return result;
 }
 
 async function revokeE2ePublishAccess(accessId, adminId = null) {
@@ -175,11 +266,15 @@ async function revokeE2ePublishAccess(accessId, adminId = null) {
 
 module.exports = {
   E2E_PUBLISH_FEATURE_KEY,
+  GLOBAL_ACCESS_HANDLE,
   assertE2ePublishAccess,
+  getE2ePublishAccessMode,
   getE2ePublishAccessSummary,
   grantE2ePublishAccess,
+  grantE2ePublishAccessGroup,
   listE2ePublishAccesses,
   normalizeTwitterHandle,
   revokeE2ePublishAccess,
   serializeE2ePublishAccess,
+  setE2ePublishAccessMode,
 };

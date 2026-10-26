@@ -286,6 +286,26 @@ async function approveSettlement(address, admin) {
       throw serviceError("E2E_SETTLEMENT_ALREADY_APPROVED", 409, "当前结算版本已确认");
     }
     const items = await E2eSettlementItem.findAll({ where: { settlement_id: settlement.id }, transaction });
+    const hasWinners = items.some(
+      (item) => item.is_winner && !item.excluded && Number(item.reward_amount || 0) > 0
+    );
+    if (!hasWinners) {
+      const completedAt = new Date();
+      await settlement.update({
+        status: "completed_no_payout",
+        approved_by: admin?.id || null,
+        approved_by_email: admin?.email || null,
+        approved_at: completedAt,
+        distribution_recipients: [],
+        unique_recipient_count: 0,
+        distribution_status: "not_required",
+        confirmed_at: completedAt,
+        last_error: null,
+        updated_at: completedAt,
+      }, { transaction });
+      await campaign.update({ status: "complete", complete_tx: null }, { transaction });
+      return settlement;
+    }
     const recipients = buildDistributionRecipients(settlement, items);
     await settlement.update({
       status: "approved",

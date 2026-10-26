@@ -19,6 +19,7 @@ const statusMeta: Record<string, { text: string; color: string }> = {
   submitting: { text: "提交中", color: "processing" },
   submitted: { text: "链上确认中", color: "processing" },
   confirmed: { text: "已发放", color: "green" },
+  completed_no_payout: { text: "无需发奖，已完成", color: "green" },
   failed: { text: "交易失败", color: "red" },
 };
 
@@ -42,7 +43,15 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
     onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
   });
   const recalculate = useMutation({ mutationFn: () => recalculateCampaignSettlement(address), ...mutationOptions("已生成新的结算版本") });
-  const approve = useMutation({ mutationFn: () => approveCampaignSettlement(address), ...mutationOptions("获奖名单已确认并锁定") });
+  const approve = useMutation({
+    mutationFn: () => approveCampaignSettlement(address),
+    onSuccess: (response) => {
+      const noPayout = response.data.status === "completed_no_payout";
+      messageApi.success(noPayout ? "当前没有可发奖用户，活动已直接完成" : "获奖名单已确认并锁定");
+      refreshQueries(response.data);
+    },
+    onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
+  });
   const distribute = useMutation({ mutationFn: () => distributeCampaignSettlement(address), ...mutationOptions("分发请求已提交") });
   const refresh = useMutation({ mutationFn: () => refreshCampaignSettlement(address), ...mutationOptions("交易状态已刷新") });
   const exclusion = useMutation({
@@ -66,6 +75,8 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
     walletCounts.set(key, (walletCounts.get(key) || 0) + 1);
   });
   const locked = settlement.status !== "draft";
+  const noPayout = settlement.status === "completed_no_payout";
+  const hasWinners = settlement.items.some((item) => item.isWinner && !item.excluded && Number(item.rewardAmount || 0) > 0);
   const step = settlement.status === "draft" ? 0 : settlement.status === "approved" ? 1 : ["submitting", "submitted", "failed"].includes(settlement.status) ? 2 : 3;
   const meta = statusMeta[settlement.status] || { text: settlement.status, color: "default" };
   const columns = [
@@ -91,14 +102,15 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
   return <Space direction="vertical" size={16} style={{ width: "100%" }}>
     {contextHolder}
     {settlement.lastError && <Alert type="error" showIcon message="最近一次分发失败" description={settlement.lastError} />}
-    {new Date(settlement.payoutDueAt).getTime() < Date.now() && settlement.status !== "confirmed" && <Alert type="warning" showIcon message="已超过计划发奖截止时间" description={`截止时间：${formatTime(settlement.payoutDueAt)}`} />}
+    {settlement.status === "draft" && !hasWinners && <Alert type="info" showIcon message="当前没有可发奖用户" description="管理员确认后，活动将直接标记为完成，不会调用链上分发接口。" />}
+    {new Date(settlement.payoutDueAt).getTime() < Date.now() && !["confirmed", "completed_no_payout"].includes(settlement.status) && <Alert type="warning" showIcon message="已超过计划发奖截止时间" description={`截止时间：${formatTime(settlement.payoutDueAt)}`} />}
     <Card size="small" title={<Space><span>结算版本 R{settlement.revision}</span><Tag color={meta.color}>{meta.text}</Tag></Space>} extra={<Space wrap>
       <Popconfirm title="将按当前抓取数据重新算分并创建不可变的新版本，确认继续？" onConfirm={() => recalculate.mutate()}><Button icon={<ReloadOutlined />} loading={recalculate.isPending} disabled={locked}>重新计算</Button></Popconfirm>
-      <Popconfirm title="确认后名单与金额将锁定，不能再排除或重新计算。确认名单无误？" onConfirm={() => approve.mutate()}><Button type="primary" icon={<CheckCircleOutlined />} loading={approve.isPending} disabled={locked}>确认获奖名单</Button></Popconfirm>
+      <Popconfirm title={hasWinners ? "确认后名单与金额将锁定，不能再排除或重新计算。确认名单无误？" : "当前没有可发奖用户。确认后活动将直接完成，且不会触发链上分发。确认继续？"} onConfirm={() => approve.mutate()}><Button type="primary" icon={<CheckCircleOutlined />} loading={approve.isPending} disabled={locked}>{hasWinners ? "确认获奖名单" : "确认无需发奖并完成"}</Button></Popconfirm>
       <Popconfirm title="将调用 E2E V2 /distribution 提交链上发奖，确认继续？" onConfirm={() => distribute.mutate()}><Button type="primary" danger icon={<SendOutlined />} loading={distribute.isPending} disabled={settlement.status !== "approved"}>触发分发</Button></Popconfirm>
       <Button loading={refresh.isPending} disabled={!['submitting','submitted','failed','confirmed'].includes(settlement.status)} onClick={() => refresh.mutate()}>刷新交易状态</Button>
     </Space>}>
-      <Steps size="small" current={step} status={settlement.status === "failed" ? "error" : settlement.status === "confirmed" ? "finish" : "process"} items={[{ title: "结算草稿" }, { title: "管理员确认" }, { title: "链上分发" }, { title: "发放完成" }]} />
+      <Steps size="small" current={step} status={settlement.status === "failed" ? "error" : ["confirmed", "completed_no_payout"].includes(settlement.status) ? "finish" : "process"} items={[{ title: "结算草稿" }, { title: "管理员确认" }, { title: noPayout ? "无需分发" : "链上分发" }, { title: noPayout ? "活动完成" : "发放完成" }]} />
     </Card>
     <Row gutter={[12, 12]}>
       <Col xs={12} md={6}><Card size="small"><Statistic title="奖池 USDC" value={settlement.rewardPool} /></Card></Col>
@@ -111,11 +123,11 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
       <Descriptions.Item label="发奖截止">{formatTime(settlement.payoutDueAt)}</Descriptions.Item>
       <Descriptions.Item label="审核人">{settlement.approvedByEmail || "-"}</Descriptions.Item>
       <Descriptions.Item label="确认时间">{formatTime(settlement.approvedAt)}</Descriptions.Item>
-      <Descriptions.Item label="唯一收款地址">{settlement.uniqueRecipientCount || "确认名单时生成"}</Descriptions.Item>
-      <Descriptions.Item label="交易状态"><Tag color={settlement.distributionStatus === "confirmed" ? "green" : settlement.distributionStatus === "failed" ? "red" : "blue"}>{settlement.distributionStatus}</Tag></Descriptions.Item>
+      <Descriptions.Item label="唯一收款地址">{settlement.status === "draft" ? "确认名单时生成" : settlement.uniqueRecipientCount}</Descriptions.Item>
+      <Descriptions.Item label="交易状态"><Tag color={["confirmed", "not_required"].includes(settlement.distributionStatus) ? "green" : settlement.distributionStatus === "failed" ? "red" : "blue"}>{settlement.distributionStatus === "not_required" ? "无需分发" : settlement.distributionStatus}</Tag></Descriptions.Item>
       <Descriptions.Item label="交易哈希" span={2}>{settlement.txHash ? <Typography.Text copyable code>{settlement.txHash}</Typography.Text> : "-"}</Descriptions.Item>
     </Descriptions>
-    <Table rowKey="id" size="small" columns={columns} dataSource={settlement.items} scroll={{ x: 1020 }} pagination={{ pageSize: 20, showSizeChanger: true }} expandable={{ expandedRowRender: (row) => <Typography.Paragraph style={{ margin: 0, fontSize: 12 }}>原始分 {row.scoreBreakdown?.rawScore ?? 0} × 排名权重 {row.scoreBreakdown?.rankMultiplier ?? 1} = {row.point}；抓取评论 {row.scoreBreakdown?.captured.replies ?? 0}、引用 {row.scoreBreakdown?.captured.quotes ?? 0}、普通转推 {row.scoreBreakdown?.captured.ordinaryRetweet ? "有（不计分）" : "无"}</Typography.Paragraph> }} />
+    <Table rowKey="id" size="small" columns={columns} dataSource={settlement.items} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无报名或可发奖用户" /> }} scroll={{ x: 1020 }} pagination={{ pageSize: 20, showSizeChanger: true }} expandable={{ expandedRowRender: (row) => <Typography.Paragraph style={{ margin: 0, fontSize: 12 }}>原始分 {row.scoreBreakdown?.rawScore ?? 0} × 排名权重 {row.scoreBreakdown?.rankMultiplier ?? 1} = {row.point}；抓取评论 {row.scoreBreakdown?.captured.replies ?? 0}、引用 {row.scoreBreakdown?.captured.quotes ?? 0}、普通转推 {row.scoreBreakdown?.captured.ordinaryRetweet ? "有（不计分）" : "无"}</Typography.Paragraph> }} />
     <Modal open={Boolean(exclusionItem)} title={`排除异常用户 @${exclusionItem?.username || "-"}`} okText="排除并生成新版本" okButtonProps={{ danger: true, disabled: !reason.trim() }} confirmLoading={exclusion.isPending} onCancel={() => setExclusionItem(null)} onOk={() => exclusionItem && exclusion.mutate({ item: exclusionItem, nextExcluded: true, exclusionReason: reason.trim() })}>
       <Alert type="warning" showIcon message="此操作不会修改当前版本" description="系统会复制当前快照、记录审核人与原因，并生成新的结算版本后重新排名和分配尾差。" style={{ marginBottom: 12 }} />
       <Input.TextArea rows={4} maxLength={500} showCount value={reason} onChange={(event) => setReason(event.target.value)} placeholder="必填：异常依据，例如机器人行为、批量同源账号等" />
