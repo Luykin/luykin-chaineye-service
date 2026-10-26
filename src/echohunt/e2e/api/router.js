@@ -19,6 +19,9 @@ const {
   getMyE2eInteractions,
   submitE2eInteraction,
 } = require("../services/e2eInteractionSubmissionService");
+const {
+  enforceE2eInteractionSubmitCooldown,
+} = require("../services/e2eInteractionRateLimit");
 
 const router = express.Router();
 const optionalAuth = authenticateAuthCenterToken({ optional: true });
@@ -173,11 +176,18 @@ router.post("/e2e/activate", requiredAuth, express.json(), handleActivateCampaig
 
 function sendE2eRegistrationError(res, error, fallbackCode) {
   const code = error.code || (error.status ? error.message : null) || fallbackCode;
-  return res.status(error.status || 500).json({
+  const response = res.status(error.status || 500);
+  if (Number(error.retryAfterSeconds) > 0) {
+    response.set("Retry-After", String(Math.ceil(Number(error.retryAfterSeconds))));
+  }
+  return response.json({
     success: false,
     error: code,
     code,
     message: error.publicMessage || (error.status ? error.message : "Failed to process registration"),
+    ...(Number(error.retryAfterSeconds) > 0
+      ? { retryAfterSeconds: Math.ceil(Number(error.retryAfterSeconds)) }
+      : {}),
   });
 }
 
@@ -227,6 +237,7 @@ router.post("/e2e/register", requiredAuth, express.json(), handleRegisterPartici
 router.post("/tasks/:id/interactions", requiredAuth, express.json(), async (req, res) => {
   try {
     const authCtx = extractRequestAuthContext(req);
+    await enforceE2eInteractionSubmitCooldown(req.redisClient, authCtx.twitterId);
     const data = await submitE2eInteraction({
       address: req.body?.address,
       campaignTweetId: req.params.id,
