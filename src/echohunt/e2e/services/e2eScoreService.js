@@ -1,5 +1,5 @@
 const { E2eList, E2eRecord, E2eLog } = require("../../../models/postgres-start");
-const { normalizeDecayFloor, scoreSingleInteraction } = require("./e2eScoringPolicy");
+const { buildScoreExplanation, normalizeDecayFloor, scoreSingleInteraction } = require("./e2eScoringPolicy");
 const { normalizeScoringConfig } = require("./e2eScoringConfig");
 const { getLanguageExclusionReason, matchesLanguage } = require("./e2eInteractionEligibility");
 const {
@@ -140,13 +140,7 @@ async function calculateCampaignScores(campaign, { skipStatusTransition = false 
       replies,
       quotes,
     });
-    const explanation = [
-      `Quotes: ${breakdown.captured.quotes}`,
-      `Replies: ${breakdown.captured.replies}`,
-      "Retweet points: 0",
-      `Time decay floor: ${breakdown.policy.timeDecayFloor}`,
-      `Rank weight: x${breakdown.rankMultiplier}`,
-    ].join(", ");
+    const explanation = buildScoreExplanation(breakdown);
     const changed = Number(signup.point || 0) !== breakdown.point ||
       signup.explaination !== explanation ||
       JSON.stringify(signup.score_breakdown || null) !== JSON.stringify(breakdown);

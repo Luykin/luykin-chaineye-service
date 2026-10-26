@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  buildScoreExplanation,
   computeTimeDecayWeight,
   ordinaryRetweetScoreDetail,
   scoreSingleInteraction,
@@ -69,6 +70,40 @@ test("campaign scoring coefficients are configurable", () => {
   assert.equal(detail.lengthBonus, 2);
   assert.equal(detail.engagementBonus, 4);
   assert.equal(detail.score, 26);
+});
+
+test("score explanation shows the complete calculation and actual time weight", () => {
+  const explanation = buildScoreExplanation({
+    rawScore: 14.05,
+    rankMultiplier: 1,
+    point: 14.05,
+    policy: {
+      timeDecayFloor: 0.7,
+      lengthCharsPerPoint: 10,
+      lengthBonusCap: 10,
+      likeMultiplier: 1.5,
+      replyMultiplier: 1,
+      retweetReceivedMultiplier: 1,
+      viewsPerPoint: 2000,
+      viewBonusCap: 5,
+      engagementBonusCap: 20,
+    },
+    interactions: [{
+      type: "reply",
+      base: 10,
+      charLength: 40,
+      lengthBonus: 4,
+      engagementBonus: 0.05,
+      timeWeight: 1,
+      score: 14.05,
+      counted: true,
+      metrics: { likes: 0, replies: 0, retweets: 0, views: 100 },
+    }],
+  });
+  assert.equal(
+    explanation,
+    "最终积分 14.05 = 互动原始分 14.05 × 排名权重 1；评论1：(基础 10 + 长度 4 + 互动 0.05) × 实际时间权重 1 = 14.05〔长度：40 字，每 10 字 +1，上限 10；互动：赞 0×1.5，回复 0×1，被转发 0×1，浏览 min(100÷2000, 5)，互动总上限 20〕；时间衰减最低权重 0.7"
+  );
 });
 
 test("scoring config rejects out-of-range values", () => {

@@ -18,10 +18,60 @@ import {
   getCampaignDiagnostics,
   type E2eCampaignRecord,
   type E2eInteractionSubmissionDiagnostic,
+  type E2eScoreBreakdown,
 } from "@/services/e2e-campaigns";
 
 const formatTime = (value?: string | null) => value ? new Date(value).toLocaleString() : "-";
 const typeLabel: Record<string, string> = { reply: "评论", quote: "引用" };
+const formatScoreNumber = (value: number | null | undefined, maximumFractionDigits = 6) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? String(Number(parsed.toFixed(maximumFractionDigits))) : "0";
+};
+const policyNumber = (breakdown: E2eScoreBreakdown, key: string) =>
+  formatScoreNumber(Number(breakdown.policy[key]));
+
+function ScoreExplanation({ breakdown, fallback }: { breakdown: E2eScoreBreakdown | null; fallback?: string | null }) {
+  if (!breakdown) return <Typography.Text type="secondary">{fallback || "暂无算分明细"}</Typography.Text>;
+  const counted = breakdown.interactions.filter((item) => item.counted);
+  const excluded = breakdown.interactions.filter((item) => !item.counted);
+  const typeIndexes: Record<string, number> = {};
+  return (
+    <Space direction="vertical" size={2} style={{ width: "100%" }}>
+      <Typography.Text strong>
+        最终积分 {formatScoreNumber(breakdown.point, 2)} = 互动原始分 {formatScoreNumber(breakdown.rawScore, 2)} × 排名权重 {formatScoreNumber(breakdown.rankMultiplier)}
+      </Typography.Text>
+      {counted.map((item) => {
+        typeIndexes[item.type] = (typeIndexes[item.type] || 0) + 1;
+        return (
+          <div key={item.id}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {typeLabel[item.type] || item.type}{typeIndexes[item.type]}：
+              （基础 {formatScoreNumber(item.base)} + 长度 {formatScoreNumber(item.lengthBonus)} + 互动 {formatScoreNumber(item.engagementBonus)}）
+              × 实际时间权重 {formatScoreNumber(item.timeWeight)} = {formatScoreNumber(item.score, 2)}
+            </Typography.Text>
+            <br />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              长度：{item.charLength} 字，每 {policyNumber(breakdown, "lengthCharsPerPoint")} 字 +1，上限 {policyNumber(breakdown, "lengthBonusCap")}；
+              互动：赞 {item.metrics.likes}×{policyNumber(breakdown, "likeMultiplier")}、
+              回复 {item.metrics.replies}×{policyNumber(breakdown, "replyMultiplier")}、
+              被转发 {item.metrics.retweets}×{policyNumber(breakdown, "retweetReceivedMultiplier")}、
+              浏览 min({item.metrics.views}÷{policyNumber(breakdown, "viewsPerPoint")}，{policyNumber(breakdown, "viewBonusCap")}），
+              互动总上限 {policyNumber(breakdown, "engagementBonusCap")}
+            </Typography.Text>
+          </div>
+        );
+      })}
+      {excluded.length > 0 && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          另有 {excluded.length} 条互动未计分：{excluded.map((item) => item.reason || "不符合计分条件").join("；")}
+        </Typography.Text>
+      )}
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        时间权重按发布时间线性衰减，最低为 {formatScoreNumber(Number(breakdown.policy.timeDecayFloor))}
+      </Typography.Text>
+    </Space>
+  );
+}
 
 export function E2eDiagnosticsTab({ address }: { address: string }) {
   const query = useQuery({
@@ -111,7 +161,14 @@ export function E2eDiagnosticsTab({ address }: { address: string }) {
     { title: "原始互动分", key: "raw", width: 105, render: (_: unknown, row: E2eCampaignRecord) => row.scoreBreakdown?.rawScore ?? 0 },
     { title: "排名权重", key: "weight", width: 90, render: (_: unknown, row: E2eCampaignRecord) => `×${row.scoreBreakdown?.rankMultiplier ?? 1}` },
     { title: "最终积分", dataIndex: "point", width: 90 },
-    { title: "说明", dataIndex: "explanation", ellipsis: true },
+    {
+      title: "算分明细",
+      key: "explanation",
+      width: 640,
+      render: (_: unknown, row: E2eCampaignRecord) => (
+        <ScoreExplanation breakdown={row.scoreBreakdown} fallback={row.explanation} />
+      ),
+    },
   ];
 
   return <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -136,20 +193,27 @@ export function E2eDiagnosticsTab({ address }: { address: string }) {
       <Table rowKey="id" size="small" columns={submissionColumns} dataSource={data.submissions} scroll={{ x: 1660 }} pagination={{ pageSize: 20, showSizeChanger: true }} />
     </Card>
     <Card size="small" title={`用户算分 (${data.scores.length})`}>
-      <Table rowKey="userId" size="small" columns={scoreColumns} dataSource={data.scores} scroll={{ x: 850 }} pagination={{ pageSize: 20 }} expandable={{ expandedRowRender: (row) => <Collapse ghost items={[{ key: "details", label: "完整算分明细", children: <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{JSON.stringify(row.scoreBreakdown, null, 2)}</pre> }]} /> }} />
+      <Table rowKey="userId" size="small" columns={scoreColumns} dataSource={data.scores} scroll={{ x: 1240 }} pagination={{ pageSize: 20 }} expandable={{ expandedRowRender: (row) => <Collapse ghost items={[{ key: "details", label: "原始算分数据", children: <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{JSON.stringify(row.scoreBreakdown, null, 2)}</pre> }]} /> }} />
     </Card>
     <Card size="small" title={`最近算分变更记录 (${data.scoreLogs.length})`}>
       <Table
         rowKey={(row) => `${row.userId}:${row.calculatedAt}`}
         size="small"
         dataSource={data.scoreLogs}
-        scroll={{ x: 720 }}
+        scroll={{ x: 1220 }}
         pagination={{ pageSize: 10 }}
         columns={[
           { title: "计算时间", dataIndex: "calculatedAt", width: 180, render: formatTime },
           { title: "用户", dataIndex: "username", width: 160, render: (value: string, row) => `@${value || row.userId}` },
           { title: "积分", dataIndex: "point", width: 90 },
-          { title: "说明", dataIndex: "explanation", ellipsis: true },
+          {
+            title: "算分明细",
+            key: "explanation",
+            width: 760,
+            render: (_: unknown, row) => (
+              <ScoreExplanation breakdown={row.scoreBreakdown} fallback={row.explanation} />
+            ),
+          },
         ]}
       />
     </Card>

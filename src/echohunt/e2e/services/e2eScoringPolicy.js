@@ -59,6 +59,45 @@ function scoreSingleInteraction(item, type, campaignStart, campaignEnd, scoringC
   };
 }
 
+function formatScoreNumber(value, maximumFractionDigits = 6) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "0";
+  return String(Number(parsed.toFixed(maximumFractionDigits)));
+}
+
+function buildScoreExplanation(breakdown = {}) {
+  const interactions = Array.isArray(breakdown.interactions) ? breakdown.interactions : [];
+  const counted = interactions.filter((item) => item?.counted);
+  const policy = breakdown.policy || {};
+  const typeIndexes = { reply: 0, quote: 0 };
+  const interactionParts = counted.map((item) => {
+    const type = item.type === "quote" ? "引用" : "评论";
+    const metrics = item.metrics || {};
+    typeIndexes[item.type] = (typeIndexes[item.type] || 0) + 1;
+    return `${type}${typeIndexes[item.type]}：` +
+      `(基础 ${formatScoreNumber(item.base)} + 长度 ${formatScoreNumber(item.lengthBonus)} + ` +
+      `互动 ${formatScoreNumber(item.engagementBonus)}) × 实际时间权重 ${formatScoreNumber(item.timeWeight)} ` +
+      `= ${formatScoreNumber(item.score, 2)}` +
+      `〔长度：${formatScoreNumber(item.charLength, 0)} 字，每 ${formatScoreNumber(policy.lengthCharsPerPoint, 0)} 字 +1，` +
+      `上限 ${formatScoreNumber(policy.lengthBonusCap)}；互动：赞 ${formatScoreNumber(metrics.likes, 0)}×${formatScoreNumber(policy.likeMultiplier)}，` +
+      `回复 ${formatScoreNumber(metrics.replies, 0)}×${formatScoreNumber(policy.replyMultiplier)}，` +
+      `被转发 ${formatScoreNumber(metrics.retweets, 0)}×${formatScoreNumber(policy.retweetReceivedMultiplier)}，` +
+      `浏览 min(${formatScoreNumber(metrics.views, 0)}÷${formatScoreNumber(policy.viewsPerPoint, 0)}, ${formatScoreNumber(policy.viewBonusCap)})，` +
+      `互动总上限 ${formatScoreNumber(policy.engagementBonusCap)}〕`;
+  });
+  const excludedCount = interactions.length - counted.length;
+  const rankMultiplier = formatScoreNumber(breakdown.rankMultiplier);
+  const rawScore = formatScoreNumber(breakdown.rawScore, 2);
+  const point = formatScoreNumber(breakdown.point, 2);
+  const floor = formatScoreNumber(policy.timeDecayFloor);
+  return [
+    `最终积分 ${point} = 互动原始分 ${rawScore} × 排名权重 ${rankMultiplier}`,
+    ...interactionParts,
+    ...(excludedCount > 0 ? [`另有 ${excludedCount} 条互动未计分`] : []),
+    `时间衰减最低权重 ${floor}`,
+  ].join("；");
+}
+
 function ordinaryRetweetScoreDetail(userId) {
   return {
     id: `retweet:${userId}`,
@@ -80,6 +119,7 @@ function ordinaryRetweetScoreDetail(userId) {
 
 module.exports = {
   DEFAULT_TIME_DECAY_FLOOR,
+  buildScoreExplanation,
   normalizeDecayFloor,
   computeTimeDecayWeight,
   ordinaryRetweetScoreDetail,
