@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Avatar, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
-import { LinkOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, LinkOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -11,6 +11,7 @@ import { E2ePublishAccessCard } from "@/components/e2e/E2ePublishAccessCard";
 import { getApiErrorMessage } from "@/services/apiClient";
 import {
   forceActivateCampaign,
+  deleteCampaign,
   getCampaign,
   getCampaignPaymentStatus,
   listCampaignRecords,
@@ -84,6 +85,8 @@ export function E2eCampaignsPage() {
 
   const [editing, setEditing] = useState<E2eCampaign | null>(null);
   const [activating, setActivating] = useState<E2eCampaign | null>(null);
+  const [deleting, setDeleting] = useState<E2eCampaign | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [editForm] = Form.useForm();
 
   const query = useQuery({
@@ -142,6 +145,28 @@ export function E2eCampaignsPage() {
     },
     onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
   });
+
+  const remove = useMutation({
+    mutationFn: ({ address, confirmation }: { address: string; confirmation: string }) =>
+      deleteCampaign(address, confirmation),
+    onSuccess: (_, variables) => {
+      messageApi.success("E2E 任务已删除");
+      if (detailAddress === variables.address) setDetailAddress(null);
+      if (editing?.address === variables.address) setEditing(null);
+      if (activating?.address === variables.address) setActivating(null);
+      setDeleting(null);
+      setDeleteConfirmation("");
+      queryClient.removeQueries({ queryKey: ["e2e-campaigns", "detail", variables.address] });
+      if (campaigns.length === 1 && page > 1) setPage((current) => Math.max(1, current - 1));
+      invalidateAll();
+    },
+    onError: (error: Error) => messageApi.error(getApiErrorMessage(error)),
+  });
+
+  const openDelete = (row: E2eCampaign) => {
+    setDeleting(row);
+    setDeleteConfirmation("");
+  };
 
   const openDetail = (row: E2eCampaign) => {
     setDetailAddress(row.address);
@@ -263,7 +288,7 @@ export function E2eCampaignsPage() {
       ),
     },
     {
-      title: "操作", width: 270, fixed: "right" as const,
+      title: "操作", width: 330, fixed: "right" as const,
       render: (_: unknown, row: E2eCampaign) => (
         <Space size={8}>
           <Button size="small" type="link" style={{ padding: 0 }} onClick={() => openDetail(row)}>
@@ -282,6 +307,16 @@ export function E2eCampaignsPage() {
               审核发奖
             </Button>
           )}
+          <Button
+            size="small"
+            type="link"
+            danger
+            icon={<DeleteOutlined />}
+            style={{ padding: 0 }}
+            onClick={() => openDelete(row)}
+          >
+            删除
+          </Button>
         </Space>
       ),
     },
@@ -692,6 +727,66 @@ export function E2eCampaignsPage() {
           </Descriptions.Item>
           <Descriptions.Item label="应付总额">{formatAmount(activating.depositRewards)}</Descriptions.Item>
         </Descriptions>
+      )}
+    </Modal>
+
+    <Modal
+      open={Boolean(deleting)}
+      title="永久删除 E2E 任务"
+      width={600}
+      onCancel={() => {
+        if (remove.isPending) return;
+        setDeleting(null);
+        setDeleteConfirmation("");
+      }}
+      onOk={() => deleting && remove.mutate({
+        address: deleting.address,
+        confirmation: deleteConfirmation,
+      })}
+      confirmLoading={remove.isPending}
+      okText="永久删除"
+      okButtonProps={{
+        danger: true,
+        disabled: !deleting || deleteConfirmation !== deleting.address,
+      }}
+      cancelButtonProps={{ disabled: remove.isPending }}
+      cancelText="取消"
+      closable={!remove.isPending}
+      maskClosable={false}
+      destroyOnClose
+    >
+      <Alert
+        type="error"
+        showIcon
+        message="此操作不可恢复"
+        description="将永久删除该任务及其报名、互动、抓取、算分和结算数据。推文审核缓存会保留；E2E V2 外部支付订单、已支付资金和链上记录不会被删除或退款。"
+        style={{ marginBottom: 16 }}
+      />
+      {deleting && (
+        <>
+          <Descriptions bordered size="small" column={1} style={{ marginBottom: 16 }}>
+            <Descriptions.Item label="推文作者">@{deleting.ownerHandle || "-"}</Descriptions.Item>
+            <Descriptions.Item label="任务状态">
+              <Tag color={STATUS_TAG[deleting.status || ""]?.color}>
+                {STATUS_TAG[deleting.status || ""]?.text || deleting.status || "-"}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="活动地址">
+              <Typography.Text copyable code style={{ fontSize: 12 }}>{deleting.address}</Typography.Text>
+            </Descriptions.Item>
+          </Descriptions>
+          <Typography.Paragraph style={{ marginBottom: 8 }}>
+            请输入完整活动地址以确认删除：
+          </Typography.Paragraph>
+          <Input
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            placeholder={deleting.address}
+            disabled={remove.isPending}
+            status={deleteConfirmation && deleteConfirmation !== deleting.address ? "error" : undefined}
+            autoComplete="off"
+          />
+        </>
       )}
     </Modal>
 

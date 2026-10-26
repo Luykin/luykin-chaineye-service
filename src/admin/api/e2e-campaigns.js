@@ -7,6 +7,9 @@ const {
   E2eTweet,
   E2eLog,
   E2eInteractionSubmission,
+  E2eSettlement,
+  E2eSettlementItem,
+  E2eCrawlRun,
   pgInstance,
 } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
@@ -802,6 +805,53 @@ router.put("/campaigns/:address", async (req, res) => {
     return res.json({ success: true, data: detail });
   } catch (error) {
     await logAdminAction(req, { action: "e2e_campaign_update", success: false, message: `address=${address};${error.message}` }).catch(() => {});
+    return sendError(res, error);
+  }
+});
+
+router.delete("/campaigns/:address", async (req, res) => {
+  const address = String(req.params.address || "").trim();
+  try {
+    const confirmation = text(req.body?.confirmation, 256);
+    if (!confirmation || confirmation !== address) {
+      throw publicError("请输入完整活动地址确认删除", 400, "E2E_CAMPAIGN_DELETE_CONFIRMATION_INVALID");
+    }
+    const result = await pgInstance.transaction(async (transaction) => {
+      const campaign = await E2eList.findByPk(address, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
+      const deleted = {
+        settlementItems: await E2eSettlementItem.destroy({ where: { campaign_address: address }, transaction }),
+        settlements: await E2eSettlement.destroy({ where: { campaign_address: address }, transaction }),
+        interactions: await E2eInteractionSubmission.destroy({ where: { campaign_address: address }, transaction }),
+        crawlRuns: await E2eCrawlRun.destroy({ where: { campaign_address: address }, transaction }),
+        records: await E2eRecord.destroy({ where: { address }, transaction }),
+        scoreLogs: await E2eLog.destroy({ where: { address }, transaction }),
+      };
+      await campaign.destroy({ transaction });
+      return {
+        address,
+        tweetId: campaign.tweet_id ? String(campaign.tweet_id) : null,
+        status: String(campaign.status || "").toLowerCase() || null,
+        deleted,
+        tweetCacheDeleted: false,
+        externalPaymentOrderDeleted: false,
+      };
+    });
+    await logAdminAction(req, {
+      action: "e2e_campaign_delete",
+      success: true,
+      message: `address=${address};status=${result.status};deleted=${JSON.stringify(result.deleted)}`,
+    });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "e2e_campaign_delete",
+      success: false,
+      message: `address=${address};${error.message}`,
+    }).catch(() => {});
     return sendError(res, error);
   }
 });

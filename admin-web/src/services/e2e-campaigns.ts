@@ -312,6 +312,22 @@ export interface E2eCampaignUpdatePayload {
   endTime?: string;
 }
 
+export interface E2eCampaignDeleteResult {
+  address: string;
+  tweetId: string | null;
+  status: string | null;
+  deleted: {
+    settlementItems: number;
+    settlements: number;
+    interactions: number;
+    crawlRuns: number;
+    records: number;
+    scoreLogs: number;
+  };
+  tweetCacheDeleted: false;
+  externalPaymentOrderDeleted: false;
+}
+
 const base = "/api/admin/e2e-campaigns";
 
 export const listCampaigns = (params: { page: number; pageSize: number; status?: string; keyword?: string }) => {
@@ -376,6 +392,12 @@ export const updateCampaign = (address: string, body: E2eCampaignUpdatePayload) 
   apiRequest<{ success: boolean; data: E2eCampaignDetail }>(
     `${base}/campaigns/${encodeURIComponent(address)}`,
     { method: "PUT", body: { ...body } }
+  );
+
+export const deleteCampaign = (address: string, confirmation: string) =>
+  apiRequest<{ success: boolean; data: E2eCampaignDeleteResult }>(
+    `${base}/campaigns/${encodeURIComponent(address)}`,
+    { method: "DELETE", body: { confirmation } }
   );
 
 export const forceActivateCampaign = (address: string) =>
