@@ -4,6 +4,7 @@ const { after, beforeEach, test } = require("node:test");
 
 const rootDir = path.resolve(__dirname, "..");
 const servicePath = path.join(rootDir, "src/echohunt/e2e/services/e2eInteractionSubmissionService.js");
+const scoreServicePath = path.join(rootDir, "src/echohunt/e2e/services/e2eScoreService.js");
 const modelsPath = require.resolve(path.join(rootDir, "src/models/postgres-start.js"));
 const crawlerPath = require.resolve(path.join(rootDir, "src/xhunt/services/twitter-crawler"));
 const previousModules = new Map();
@@ -21,8 +22,8 @@ const campaign = {
   retro: true,
   score_config: { maxReplies: 1, maxQuotes: 1 },
 };
-const signup = { create_time: "2026-01-01T00:00:00.000Z" };
-const state = { submissions: [], crawlerTweet: null, crawlerError: null };
+const signup = { user_id: "user-1", create_time: "2026-01-01T00:00:00.000Z" };
+const state = { submissions: [], crawlerTweet: null, crawlerError: null, afterCrawler: null };
 
 function record(values) {
   return {
@@ -55,7 +56,7 @@ const E2eInteractionSubmission = {
 
 mockModule(modelsPath, {
   E2eInteractionSubmission,
-  E2eList: { findByPk: async (address) => address === campaign.address ? campaign : null },
+  E2eList: { findByPk: async (address) => address === campaign.address ? { ...campaign } : null },
   E2eRecord: { findOne: async () => signup },
   pgInstance: {
     transaction: async (callback) => callback({ LOCK: { UPDATE: "UPDATE" } }),
@@ -64,6 +65,7 @@ mockModule(modelsPath, {
 mockModule(crawlerPath, {
   requestTwitterCrawler: async () => {
     if (state.crawlerError) throw state.crawlerError;
+    if (state.afterCrawler) await state.afterCrawler();
     return { data: state.crawlerTweet };
   },
 });
@@ -73,10 +75,18 @@ const {
   refreshCampaignInteractionSubmissions,
   submitE2eInteraction,
 } = require(servicePath);
+const { buildUserScoreBreakdown } = require(scoreServicePath);
 
 beforeEach(() => {
   state.submissions = [];
   state.crawlerError = null;
+  state.afterCrawler = null;
+  campaign.status = "active";
+  campaign.end_time = "2099-01-02T00:00:00.000Z";
+  campaign.retro = true;
+  campaign.score_config = { maxReplies: 1, maxQuotes: 1 };
+  signup.create_time = "2026-01-01T00:00:00.000Z";
+  signup.score_breakdown = null;
   state.crawlerTweet = {
     id: "9000000000000000002",
     text: "A direct reply",
@@ -91,6 +101,7 @@ beforeEach(() => {
 
 after(() => {
   delete require.cache[servicePath];
+  delete require.cache[scoreServicePath];
   for (const [filename, previous] of previousModules) {
     if (previous) require.cache[filename] = previous;
     else delete require.cache[filename];
@@ -128,9 +139,64 @@ test("verifies a quote and keeps duplicate submission idempotent", async () => {
     twitterUserId: "user-1",
   };
   const first = await submitE2eInteraction(input);
+  signup.score_breakdown = {
+    interactions: [{ id: first.tweetId, counted: true, score: 42.5, reason: null }],
+  };
   const duplicate = await submitE2eInteraction(input);
   assert.equal(first.type, "quote");
   assert.equal(duplicate.id, first.id);
+  assert.equal(duplicate.counted, true);
+  assert.equal(duplicate.score, 42.5);
+  assert.equal(state.submissions.length, 1);
+});
+
+test("rejects crawler responses without a real creation time", async () => {
+  delete state.crawlerTweet.created_at;
+  await assert.rejects(
+    submitE2eInteraction({
+      address: campaign.address,
+      campaignTweetId: campaign.tweet_id,
+      tweetUrl: "https://x.com/alice/status/9000000000000000002",
+      twitterUserId: "user-1",
+    }),
+    { code: "E2E_INTERACTION_INVALID_RESPONSE" }
+  );
+});
+
+test("rechecks campaign status inside the write transaction", async () => {
+  state.afterCrawler = () => { campaign.status = "review"; };
+  await assert.rejects(
+    submitE2eInteraction({
+      address: campaign.address,
+      campaignTweetId: campaign.tweet_id,
+      tweetUrl: "https://x.com/alice/status/9000000000000000002",
+      twitterUserId: "user-1",
+    }),
+    { code: "E2E_INTERACTION_SUBMISSION_CLOSED" }
+  );
+  assert.equal(state.submissions.length, 0);
+});
+
+test("uses the latest submission limit inside the write transaction", async () => {
+  campaign.score_config = { maxReplies: 2, maxQuotes: 1 };
+  state.submissions.push(record({
+    id: "existing",
+    campaign_address: campaign.address,
+    campaign_tweet_id: campaign.tweet_id,
+    interaction_tweet_id: "9000000000000000003",
+    interaction_type: "reply",
+    user_id: "user-1",
+  }));
+  state.afterCrawler = () => { campaign.score_config = { maxReplies: 1, maxQuotes: 1 }; };
+  await assert.rejects(
+    submitE2eInteraction({
+      address: campaign.address,
+      campaignTweetId: campaign.tweet_id,
+      tweetUrl: "https://x.com/alice/status/9000000000000000002",
+      twitterUserId: "user-1",
+    }),
+    { code: "E2E_INTERACTION_LIMIT_REACHED" }
+  );
   assert.equal(state.submissions.length, 1);
 });
 
@@ -197,4 +263,47 @@ test("keeps the last verified metrics when a refresh fails", async () => {
   assert.equal(result.failed, 1);
   assert.equal(existing.likes, 7);
   assert.match(existing.last_error, /E2E_INTERACTION_NOT_FOUND/);
+});
+
+test("keeps language-ineligible interactions with an explicit non-scoring reason", () => {
+  const breakdown = buildUserScoreBreakdown({
+    signup,
+    campaign: {
+      ...campaign,
+      lang: "cn",
+      start_time: "2026-01-01T00:00:00.000Z",
+      end_time: "2026-01-02T00:00:00.000Z",
+    },
+    replies: [
+      {
+        id: "english-reply",
+        user_id: "user-1",
+        text: "An English reply",
+        create_time: "2026-01-01T01:00:00.000Z",
+        likes: 10,
+        replies: 2,
+        retweets: 1,
+        views: 100,
+      },
+      {
+        id: "chinese-reply",
+        user_id: "user-1",
+        text: "这是一条中文评论",
+        create_time: "2026-01-01T02:00:00.000Z",
+        likes: 0,
+        replies: 0,
+        retweets: 0,
+        views: 0,
+      },
+    ],
+    quotes: [],
+  });
+  const details = new Map(breakdown.interactions.map((item) => [item.id, item]));
+  assert.equal(breakdown.captured.replies, 1);
+  assert.equal(breakdown.interactions.length, 2);
+  assert.equal(details.get("english-reply").counted, false);
+  assert.equal(details.get("english-reply").score, 0);
+  assert.equal(details.get("english-reply").reason, "活动仅统计中文互动");
+  assert.equal(details.get("chinese-reply").counted, true);
+  assert.ok(breakdown.point > 0);
 });

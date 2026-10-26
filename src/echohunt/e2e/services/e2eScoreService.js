@@ -39,41 +39,62 @@ function interactionOrder(a, b) {
   return String(a?.id || "").localeCompare(String(b?.id || ""));
 }
 
-function selectUserInteractions(items, userId, campaign, signup) {
-  const allowRetro = campaign.retro !== false;
-  const langRequirement = campaign.lang || "all";
-  const signupTime = signup.create_time ? new Date(signup.create_time).getTime() : 0;
+function selectUserInteractions(items, userId) {
+  return items
+    .filter((item) => String(item.user_id) === userId)
+    .sort(interactionOrder);
+}
+
+function getInteractionExclusionReason(item, campaign, signup) {
+  const langRequirement = String(campaign.lang || "all").toLowerCase();
+  if (!matchesLanguage(item.text, langRequirement)) {
+    return langRequirement === "en" ? "活动仅统计英文互动" : "活动仅统计中文互动";
+  }
+  const itemTime = new Date(item.create_time || 0).getTime();
   const campaignEndTime = campaign.end_time ? new Date(campaign.end_time).getTime() : 0;
-  return items.filter((item) => {
-    if (String(item.user_id) !== userId) return false;
-    if (!matchesLanguage(item.text, langRequirement)) return false;
-    const itemTime = new Date(item.create_time || 0).getTime();
-    if (campaignEndTime > 0 && itemTime > campaignEndTime) return false;
-    if (!allowRetro && signupTime > 0) {
-      if (itemTime > 0 && itemTime < signupTime) return false;
-    }
-    return true;
-  }).sort(interactionOrder);
+  if (campaignEndTime > 0 && itemTime > campaignEndTime) {
+    return "互动发布时间晚于活动结束时间";
+  }
+  const signupTime = signup.create_time ? new Date(signup.create_time).getTime() : 0;
+  if (campaign.retro === false && signupTime > 0 && itemTime > 0 && itemTime < signupTime) {
+    return "该任务仅统计报名后发布的互动";
+  }
+  return null;
 }
 
 function buildUserScoreBreakdown({ signup, campaign, replies, quotes }) {
   const userId = String(signup.user_id);
   const scoringConfig = normalizeScoringConfig(campaign.score_config);
   const decayFloor = normalizeDecayFloor(scoringConfig.timeDecayFloor);
-  const userReplies = selectUserInteractions(replies, userId, campaign, signup);
-  const userQuotes = selectUserInteractions(quotes, userId, campaign, signup);
-  const scoreGroup = (items, type) => items.map((item, index) => {
-    const detail = scoreSingleInteraction(item, type, campaign.start_time, campaign.end_time, scoringConfig);
+  const userReplies = selectUserInteractions(replies, userId);
+  const userQuotes = selectUserInteractions(quotes, userId);
+  const scoreGroup = (items, type) => {
     const maximum = type === "quote" ? scoringConfig.maxQuotes : scoringConfig.maxReplies;
-    if (index >= maximum) {
-      detail.counted = false;
-      detail.reason = `每位用户最多计入 ${maximum} 条${type === "quote" ? "引用" : "评论"}`;
-      detail.score = 0;
-    }
-    return detail;
-  });
-  const replyDetails = scoreGroup(userReplies, "reply");
-  const quoteDetails = scoreGroup(userQuotes, "quote");
+    let eligibleCount = 0;
+    const details = items.map((item) => {
+      const detail = scoreSingleInteraction(item, type, campaign.start_time, campaign.end_time, scoringConfig);
+      const exclusionReason = getInteractionExclusionReason(item, campaign, signup);
+      if (exclusionReason) {
+        detail.counted = false;
+        detail.reason = exclusionReason;
+        detail.score = 0;
+        return detail;
+      }
+      const eligibleIndex = eligibleCount;
+      eligibleCount += 1;
+      if (eligibleIndex >= maximum) {
+        detail.counted = false;
+        detail.reason = `每位用户最多计入 ${maximum} 条${type === "quote" ? "引用" : "评论"}`;
+        detail.score = 0;
+      }
+      return detail;
+    });
+    return { details, eligibleCount };
+  };
+  const replyGroup = scoreGroup(userReplies, "reply");
+  const quoteGroup = scoreGroup(userQuotes, "quote");
+  const replyDetails = replyGroup.details;
+  const quoteDetails = quoteGroup.details;
   const rawScore = [...replyDetails, ...quoteDetails]
     .filter((item) => item.counted)
     .reduce((sum, item) => sum + item.score, 0);
@@ -92,8 +113,8 @@ function buildUserScoreBreakdown({ signup, campaign, replies, quotes }) {
     point,
     interactions: [...replyDetails, ...quoteDetails],
     captured: {
-      replies: userReplies.length,
-      quotes: userQuotes.length,
+      replies: replyGroup.eligibleCount,
+      quotes: quoteGroup.eligibleCount,
       ordinaryRetweet: false,
     },
   };

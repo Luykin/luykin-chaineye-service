@@ -68,7 +68,11 @@ function metric(value) {
 function normalizeTweetDetail(raw, fallbackTweetId) {
   const profile = raw?.user_profile && typeof raw.user_profile === "object" ? raw.user_profile : {};
   const tweetId = String(raw?.id || raw?.tweet_id || fallbackTweetId || "");
-  const createdAt = new Date(raw?.time_parsed || raw?.created_at || raw?.create_time || 0);
+  const rawCreatedAt = raw?.time_parsed || raw?.created_at || raw?.create_time;
+  const parsedCreatedAt = rawCreatedAt ? new Date(rawCreatedAt) : null;
+  const createdAt = parsedCreatedAt && Number.isFinite(parsedCreatedAt.getTime())
+    ? parsedCreatedAt
+    : null;
   return {
     tweetId,
     text: String(raw?.text || ""),
@@ -76,7 +80,7 @@ function normalizeTweetDetail(raw, fallbackTweetId) {
     username: String(profile.username || raw?.username || "").replace(/^@+/, "") || null,
     name: profile.name || raw?.name || null,
     profileImageUrl: profile.profile_image_url || raw?.profile_image_url || null,
-    createdAt: Number.isNaN(createdAt.getTime()) ? null : createdAt,
+    createdAt,
     permanentUrl: raw?.permanent_url || null,
     replyTargetId: String(
       raw?.in_reply_to_status_id || raw?.in_reply_to_tweet_id || raw?.reply_id || ""
@@ -168,12 +172,48 @@ function serializeInteractionSubmission(record, scoreDetail = null) {
   };
 }
 
-async function findCampaign(address, tweetId, transaction = null) {
-  const campaign = await E2eList.findByPk(String(address || "").trim(), { transaction });
+function findSubmissionScoreDetail(signup, tweetId) {
+  const scoreDetails = Array.isArray(signup?.score_breakdown?.interactions)
+    ? signup.score_breakdown.interactions
+    : [];
+  return scoreDetails.find((item) => String(item.id) === String(tweetId)) || null;
+}
+
+async function findCampaign(address, tweetId, { transaction = null, lock = false } = {}) {
+  const campaign = await E2eList.findByPk(String(address || "").trim(), {
+    transaction,
+    ...(transaction && lock ? { lock: transaction.LOCK.UPDATE } : {}),
+  });
   if (!campaign || String(campaign.tweet_id) !== String(tweetId)) {
     throw interactionError("E2E_CAMPAIGN_NOT_FOUND", 404, "互动任务不存在");
   }
   return campaign;
+}
+
+function assertCampaignAcceptingInteractions(campaign) {
+  const endTime = campaign.end_time ? new Date(campaign.end_time) : null;
+  if (
+    String(campaign.status) !== "active" ||
+    !endTime ||
+    !Number.isFinite(endTime.getTime()) ||
+    Date.now() >= endTime.getTime()
+  ) {
+    throw interactionError("E2E_INTERACTION_SUBMISSION_CLOSED", 409, "当前任务已停止提交互动");
+  }
+  return endTime;
+}
+
+function assertInteractionTiming(detail, campaign, signup, endTime) {
+  if (detail.createdAt.getTime() > endTime.getTime()) {
+    throw interactionError("E2E_INTERACTION_AFTER_CAMPAIGN", 400, "活动结束后的互动不能提交");
+  }
+  if (
+    campaign.retro === false &&
+    signup.create_time &&
+    detail.createdAt.getTime() < new Date(signup.create_time).getTime()
+  ) {
+    throw interactionError("E2E_INTERACTION_BEFORE_REGISTRATION", 400, "该任务仅统计报名后发布的互动");
+  }
 }
 
 async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitterUserId } = {}) {
@@ -183,10 +223,7 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
   }
   const parsed = parseInteractionTweetUrl(tweetUrl);
   const campaign = await findCampaign(address, campaignTweetId);
-  const endTime = campaign.end_time ? new Date(campaign.end_time) : null;
-  if (String(campaign.status) !== "active" || !endTime || Date.now() >= endTime.getTime()) {
-    throw interactionError("E2E_INTERACTION_SUBMISSION_CLOSED", 409, "当前任务已停止提交互动");
-  }
+  const endTime = assertCampaignAcceptingInteractions(campaign);
   const signup = await E2eRecord.findOne({
     where: { address: String(campaign.address), user_id: userId },
   });
@@ -199,23 +236,25 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
     throw interactionError("E2E_INTERACTION_AUTHOR_MISMATCH", 403, "该链接不是当前登录 X 账号发布的内容");
   }
   const interactionType = resolveInteractionType(detail, campaign.tweet_id);
-  if (detail.createdAt.getTime() > endTime.getTime()) {
-    throw interactionError("E2E_INTERACTION_AFTER_CAMPAIGN", 400, "活动结束后的互动不能提交");
-  }
-  if (campaign.retro === false && signup.create_time && detail.createdAt.getTime() < new Date(signup.create_time).getTime()) {
-    throw interactionError("E2E_INTERACTION_BEFORE_REGISTRATION", 400, "该任务仅统计报名后发布的互动");
-  }
+  assertInteractionTiming(detail, campaign, signup, endTime);
 
   try {
     return await pgInstance.transaction(async (transaction) => {
-      await E2eRecord.findOne({
-        where: { address: String(campaign.address), user_id: userId },
+      const lockedCampaign = await findCampaign(address, campaignTweetId, { transaction, lock: true });
+      const lockedEndTime = assertCampaignAcceptingInteractions(lockedCampaign);
+      const lockedSignup = await E2eRecord.findOne({
+        where: { address: String(lockedCampaign.address), user_id: userId },
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
+      if (!lockedSignup) {
+        throw interactionError("E2E_REGISTRATION_REQUIRED", 403, "请先报名该任务再提交互动");
+      }
+      assertInteractionTiming(detail, lockedCampaign, lockedSignup, lockedEndTime);
+
       const existing = await E2eInteractionSubmission.findOne({
         where: {
-          campaign_address: String(campaign.address),
+          campaign_address: String(lockedCampaign.address),
           interaction_tweet_id: detail.tweetId,
         },
         transaction,
@@ -224,14 +263,17 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
         if (String(existing.user_id) !== userId) {
           throw interactionError("E2E_INTERACTION_ALREADY_CLAIMED", 409, "该互动已被其他用户提交");
         }
-        return serializeInteractionSubmission(existing);
+        return serializeInteractionSubmission(
+          existing,
+          findSubmissionScoreDetail(lockedSignup, detail.tweetId)
+        );
       }
 
-      const scoringConfig = normalizeScoringConfig(campaign.score_config);
+      const scoringConfig = normalizeScoringConfig(lockedCampaign.score_config);
       const limit = interactionType === "reply" ? scoringConfig.maxReplies : scoringConfig.maxQuotes;
       const submittedCount = await E2eInteractionSubmission.count({
         where: {
-          campaign_address: String(campaign.address),
+          campaign_address: String(lockedCampaign.address),
           user_id: userId,
           interaction_type: interactionType,
         },
@@ -247,8 +289,8 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
 
       const now = new Date();
       const created = await E2eInteractionSubmission.create({
-        campaign_address: String(campaign.address),
-        campaign_tweet_id: String(campaign.tweet_id),
+        campaign_address: String(lockedCampaign.address),
+        campaign_tweet_id: String(lockedCampaign.tweet_id),
         interaction_tweet_id: detail.tweetId,
         interaction_type: interactionType,
         interaction_url: detail.permanentUrl || `https://x.com/${detail.username || parsed.handle || "i/web"}/status/${detail.tweetId}`,
@@ -276,7 +318,15 @@ async function submitE2eInteraction({ address, campaignTweetId, tweetUrl, twitte
         interaction_tweet_id: detail.tweetId,
       },
     });
-    if (existing && String(existing.user_id) === userId) return serializeInteractionSubmission(existing);
+    if (existing && String(existing.user_id) === userId) {
+      const currentSignup = await E2eRecord.findOne({
+        where: { address: String(campaign.address), user_id: userId },
+      });
+      return serializeInteractionSubmission(
+        existing,
+        findSubmissionScoreDetail(currentSignup, detail.tweetId)
+      );
+    }
     throw interactionError("E2E_INTERACTION_ALREADY_CLAIMED", 409, "该互动已被其他用户提交");
   }
 }
@@ -292,13 +342,9 @@ async function getMyE2eInteractions({ address, campaignTweetId, twitterUserId } 
     }),
     E2eRecord.findOne({ where: { address: String(campaign.address), user_id: userId } }),
   ]);
-  const scoreDetails = Array.isArray(signup?.score_breakdown?.interactions)
-    ? signup.score_breakdown.interactions
-    : [];
-  const scoreById = new Map(scoreDetails.map((item) => [String(item.id), item]));
   return submissions.map((item) => serializeInteractionSubmission(
     item,
-    scoreById.get(String(item.interaction_tweet_id)) || null
+    findSubmissionScoreDetail(signup, item.interaction_tweet_id)
   ));
 }
 
