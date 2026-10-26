@@ -262,7 +262,67 @@ test("keeps the last verified metrics when a refresh fails", async () => {
   const result = await refreshCampaignInteractionSubmissions(campaign);
   assert.equal(result.failed, 1);
   assert.equal(existing.likes, 7);
+  assert.equal(existing.status, "verified");
   assert.match(existing.last_error, /E2E_INTERACTION_NOT_FOUND/);
+});
+
+test("marks an explicitly missing interaction unavailable and keeps its snapshot", async () => {
+  const existing = record({
+    id: "deleted-reply",
+    campaign_address: campaign.address,
+    campaign_tweet_id: campaign.tweet_id,
+    interaction_tweet_id: "9000000000000000002",
+    interaction_type: "reply",
+    interaction_url: "https://x.com/alice/status/9000000000000000002",
+    user_id: "user-1",
+    username: "alice",
+    text: "Original snapshot",
+    interaction_created_at: "2026-01-01T01:00:00.000Z",
+    likes: 8,
+    replies: 1,
+    retweets: 0,
+    quotes: 0,
+    views: 321,
+    status: "verified",
+  });
+  state.submissions.push(existing);
+  state.crawlerTweet = {
+    code: 200,
+    message: "get data success",
+    data: { errMsg: "NotFound" },
+  };
+
+  const result = await refreshCampaignInteractionSubmissions(campaign);
+
+  assert.deepEqual(result, { total: 1, refreshed: 0, failed: 0, unavailable: 1 });
+  assert.equal(existing.status, "unavailable");
+  assert.equal(existing.text, "Original snapshot");
+  assert.equal(existing.likes, 8);
+  assert.equal(existing.views, 321);
+  assert.match(existing.last_error, /E2E_INTERACTION_DELETED/);
+});
+
+test("keeps a deleted interaction in the score breakdown with zero points", () => {
+  const breakdown = buildUserScoreBreakdown({
+    signup,
+    campaign,
+    replies: [{
+      id: "deleted-reply",
+      user_id: "user-1",
+      text: "Original snapshot",
+      create_time: "2026-01-01T01:00:00.000Z",
+      likes: 8,
+      replies: 1,
+      views: 321,
+      status: "unavailable",
+    }],
+    quotes: [],
+  });
+
+  assert.equal(breakdown.point, 0);
+  assert.equal(breakdown.interactions[0].counted, false);
+  assert.equal(breakdown.interactions[0].score, 0);
+  assert.equal(breakdown.interactions[0].reason, "互动已删除或不存在");
 });
 
 test("keeps language-ineligible interactions with an explicit non-scoring reason", () => {

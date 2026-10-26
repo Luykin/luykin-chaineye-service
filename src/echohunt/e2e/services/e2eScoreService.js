@@ -46,6 +46,9 @@ function selectUserInteractions(items, userId) {
 }
 
 function getInteractionExclusionReason(item, campaign, signup) {
+  if (item.status === "unavailable") {
+    return "互动已删除或不存在";
+  }
   const langRequirement = String(campaign.lang || "all").toLowerCase();
   if (!matchesLanguage(item.text, langRequirement)) {
     return langRequirement === "en" ? "活动仅统计英文互动" : "活动仅统计中文互动";
@@ -136,11 +139,10 @@ async function calculateCampaignScores(campaign, { skipStatusTransition = false 
     E2eRecord.findAll({ where: { address } }),
     listCampaignInteractionSubmissions(address),
   ]);
-  const verifiedInteractions = submissionRecords
-    .filter((item) => item.status === "verified")
+  const scoringInteractions = submissionRecords
     .map((item) => ({ type: item.interaction_type, detail: toScoringInteraction(item) }));
-  const replies = verifiedInteractions.filter((item) => item.type === "reply").map((item) => item.detail);
-  const quotes = verifiedInteractions.filter((item) => item.type === "quote").map((item) => item.detail);
+  const replies = scoringInteractions.filter((item) => item.type === "reply").map((item) => item.detail);
+  const quotes = scoringInteractions.filter((item) => item.type === "quote").map((item) => item.detail);
   const tweetId = String(campaign.tweet_id);
   const now = new Date();
   let updatedUsers = 0;

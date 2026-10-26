@@ -60,6 +60,11 @@ function findTweetPayload(value, tweetId) {
   return null;
 }
 
+function isTweetNotFoundResponse(body) {
+  const errMsg = body?.data?.errMsg ?? body?.errMsg;
+  return String(errMsg || "").trim().toLowerCase() === "notfound";
+}
+
 function metric(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
@@ -110,6 +115,13 @@ async function fetchInteractionTweet(tweetId) {
     );
   }
   const body = response?.data || {};
+  if (isTweetNotFoundResponse(body)) {
+    throw interactionError(
+      "E2E_INTERACTION_DELETED",
+      404,
+      "该评论或引用已删除或不存在"
+    );
+  }
   const tweet = findTweetPayload(body.data ?? body, tweetId);
   if (!tweet) {
     throw interactionError("E2E_INTERACTION_NOT_FOUND", 404, "未找到该评论或引用，请检查链接");
@@ -372,11 +384,20 @@ async function refreshOneSubmission(submission) {
     });
     return { refreshed: true, failed: false };
   } catch (error) {
+    if (error?.code === "E2E_INTERACTION_DELETED") {
+      await submission.update({
+        status: "unavailable",
+        last_refreshed_at: new Date(),
+        last_error: `${error.code}: ${error.message}`,
+        updated_at: new Date(),
+      });
+      return { refreshed: false, failed: false, unavailable: true };
+    }
     await submission.update({
       last_error: `${error.code || "E2E_INTERACTION_REFRESH_FAILED"}: ${error.message || "刷新失败"}`,
       updated_at: new Date(),
     }).catch(() => {});
-    return { refreshed: false, failed: true };
+    return { refreshed: false, failed: true, unavailable: false };
   }
 }
 
@@ -397,6 +418,7 @@ async function refreshCampaignInteractionSubmissions(campaignOrAddress) {
     total: submissions.length,
     refreshed: results.filter((item) => item.refreshed).length,
     failed: results.filter((item) => item.failed).length,
+    unavailable: results.filter((item) => item.unavailable).length,
   };
 }
 
@@ -421,6 +443,7 @@ function toScoringInteraction(record) {
     retweets: metric(item.retweets),
     quotes: metric(item.quotes),
     views: metric(item.views),
+    status: item.status,
   };
 }
 
