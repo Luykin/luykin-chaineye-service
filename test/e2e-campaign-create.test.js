@@ -166,6 +166,23 @@ test("uses safe defaults for malformed create options", async (t) => {
   assert.equal(saved.retro, true);
 });
 
+test("only accepts the published E2E rank threshold options", async () => {
+  state.activeCampaign = null;
+  const createdBefore = state.created.length;
+
+  await createE2eCampaign(
+    { tweet_id: "123", rewards: 500, target: 12345 },
+    { fallbackOwner: { twitterId: "111" } }
+  );
+  await createE2eCampaign(
+    { tweet_id: "123", rewards: 500, target: -1 },
+    { fallbackOwner: { twitterId: "111" } }
+  );
+
+  assert.equal(state.created[createdBefore].values.target, 200000);
+  assert.equal(state.created[createdBefore + 1].values.target, -1);
+});
+
 test("keeps the old pending campaign when payment order creation fails", async () => {
   const destroyedBefore = state.destroyed.length;
   state.paymentError = new Error("payment unavailable");

@@ -7,6 +7,7 @@ const {
 } = require("./e2ePaymentService");
 const { examineE2eTweet, parseTweetInput } = require("./e2eExamineService");
 const { validateE2eCampaignRewards } = require("./e2eRewardsPolicy");
+const { normalizeE2eCampaignTarget } = require("./e2eCampaignPolicy");
 const { EVM_ADDRESS_PATTERN, ZERO_ADDRESS } = require("./e2eMoney");
 const { normalizeScoringConfig } = require("./e2eScoringConfig");
 const {
@@ -615,10 +616,7 @@ async function createE2eCampaign(payload = {}, options = {}) {
 
   const tweetData = examineResult.data || {};
   const days = normalizeIntegerInRange(payload.days, 1, 1, 7);
-  const parsedTarget = parseStrictInteger(payload.target);
-  const target = parsedTarget === -1 || (parsedTarget !== null && parsedTarget > 0)
-    ? parsedTarget
-    : 200000;
+  const target = normalizeE2eCampaignTarget(payload.target);
   const winners = normalizeIntegerInRange(payload.winners, 20, 1, 200);
   const rawType = String(payload.type || "mindshare").trim();
   const type = E2E_CAMPAIGN_TYPES.has(rawType) ? rawType : "mindshare";

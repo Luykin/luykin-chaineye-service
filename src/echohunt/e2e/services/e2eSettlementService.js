@@ -15,6 +15,7 @@ const {
   toUsdcMicros,
 } = require("./e2eMoney");
 const {
+  getExternalDistributionExecutionInfo,
   getExternalDistributionStatus,
   submitExternalDistribution,
 } = require("./e2ePaymentService");
@@ -320,29 +321,62 @@ async function approveSettlement(address, admin) {
   });
 }
 
-function distributionStatusToSettlementStatus(status) {
-  if (status === "confirmed") return "confirmed";
-  if (status === "failed") return "failed";
+function distributionStatusToSettlementStatus(status, executionPhase) {
+  if (executionPhase === "executed") return "confirmed";
+  if (executionPhase === "submission_failed" || status === "failed") return "failed";
   return "submitted";
 }
 
 async function applyProviderStatus(settlement, providerData) {
   const status = String(providerData.distribution_status || "pending").toLowerCase();
-  const settlementStatus = distributionStatusToSettlementStatus(status);
+  const txHash = providerData.tx_hash || settlement.tx_hash || null;
+  const observedExecution = txHash
+    ? await getExternalDistributionExecutionInfo(txHash)
+    : null;
+  const storedExecution = settlement.provider_response?.distribution_execution || null;
+  const execution = observedExecution?.phase === "executed"
+    ? observedExecution
+    : storedExecution?.phase === "executed"
+      ? storedExecution
+      : observedExecution;
+  const executionPhase = String(execution?.phase || "").toLowerCase() || null;
+  const settlementStatus = distributionStatusToSettlementStatus(status, executionPhase);
+  const isExecuted = settlementStatus === "confirmed";
+  const isKnownNotExecuted = [
+    "submission_pending",
+    "submission_failed",
+    "waiting",
+    "executable",
+    "unknown",
+  ].includes(executionPhase)
+    || status === "failed"
+    || (status === "confirmed" && executionPhase !== "executed");
   await pgInstance.transaction(async (transaction) => {
     await settlement.update({
       status: settlementStatus,
       distribution_status: status,
-      tx_hash: providerData.tx_hash || settlement.tx_hash || null,
-      confirmed_at: status === "confirmed" ? new Date() : settlement.confirmed_at,
-      last_error: status === "failed" ? "E2E V2 distribution transaction failed" : null,
-      provider_response: providerData,
+      tx_hash: txHash,
+      confirmed_at: isExecuted
+        ? settlement.confirmed_at || new Date()
+        : isKnownNotExecuted
+          ? null
+          : settlement.confirmed_at,
+      last_error: settlementStatus === "failed" ? "E2E distribution transaction failed" : null,
+      provider_response: {
+        ...providerData,
+        distribution_execution: execution,
+      },
       updated_at: new Date(),
     }, { transaction });
-    if (status === "confirmed") {
+    if (isExecuted) {
       await E2eList.update(
-        { status: "complete", complete_tx: providerData.tx_hash || settlement.tx_hash || null },
+        { status: "complete", complete_tx: txHash },
         { where: { address: settlement.campaign_address }, transaction }
+      );
+    } else if (isKnownNotExecuted) {
+      await E2eList.update(
+        { status: "review", complete_tx: null },
+        { where: { address: settlement.campaign_address, status: "complete" }, transaction }
       );
     }
   });

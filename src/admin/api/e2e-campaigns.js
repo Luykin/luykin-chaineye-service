@@ -30,6 +30,10 @@ const {
 const { calculateCampaignScores } = require("../../echohunt/e2e/services/e2eScoreService");
 const { normalizeScoringConfig, validateScoringConfig } = require("../../echohunt/e2e/services/e2eScoringConfig");
 const {
+  getDisallowedE2eCampaignUpdateFields,
+  normalizeE2eCampaignTarget,
+} = require("../../echohunt/e2e/services/e2eCampaignPolicy");
+const {
   approveSettlement,
   generateSettlementDraft,
   getSettlementDetail,
@@ -46,7 +50,6 @@ const CAMPAIGN_LANGS = new Set(["all", "zh", "cn", "en"]);
 const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/;
 const MAX_PAGE_SIZE = 100;
 const MAX_AMOUNT = 1000000000;
-const MAX_TARGET = 1000000000000;
 const MAX_WINNERS = 200;
 
 router.use(express.json({ limit: "1mb" }));
@@ -771,7 +774,17 @@ router.put("/campaigns/:address", async (req, res) => {
     const updates = {};
     if (has("rewards")) updates.rewards = parseAmount(body.rewards, "奖池金额");
     if (has("fees")) updates.fees = parseAmount(body.fees, "服务费", { allowZero: true });
-    if (has("target")) updates.target = parseInteger(body.target, "排名门槛", 1, MAX_TARGET, "E2E_INVALID_TARGET");
+    if (has("target")) {
+      const target = normalizeE2eCampaignTarget(body.target, null);
+      if (target === null) {
+        throw publicError(
+          "参与门槛只能是 Top 50K、Top 100K、Top 200K 或 Top 200K + 认证创作者",
+          400,
+          "E2E_INVALID_TARGET"
+        );
+      }
+      updates.target = target;
+    }
     if (has("winners")) updates.winners = parseInteger(body.winners, "获奖人数", 1, MAX_WINNERS, "E2E_INVALID_WINNERS");
     if (has("type")) {
       const value = text(body.type, 32);
@@ -794,8 +807,14 @@ router.put("/campaigns/:address", async (req, res) => {
       const campaign = await E2eList.findByPk(address, { transaction, lock: transaction.LOCK.UPDATE });
       if (!campaign) throw publicError("E2E 活动不存在", 404, "E2E_CAMPAIGN_NOT_FOUND");
       const status = String(campaign.status || "").toLowerCase();
-      if ((updates.rewards !== undefined || updates.fees !== undefined) && status !== "pending") {
-        throw publicError("仅待支付（pending）状态的活动可以修改奖池金额或服务费", 409, "E2E_CAMPAIGN_NOT_PENDING");
+      const disallowedFields = getDisallowedE2eCampaignUpdateFields(status, Object.keys(updates));
+      if (disallowedFields.length) {
+        const message = status === "pending"
+          ? "支付订单创建后，奖池金额、服务费和开始时间已锁定"
+          : status === "active"
+            ? "进行中活动仅允许修改结束时间，其余活动配置已锁定"
+            : "待发奖或已结束活动的配置已锁定，不能修改";
+        throw publicError(message, 409, "E2E_CAMPAIGN_FIELDS_LOCKED");
       }
       const finalStart = updates.start_time || campaign.start_time;
       const finalEnd = updates.end_time || campaign.end_time;

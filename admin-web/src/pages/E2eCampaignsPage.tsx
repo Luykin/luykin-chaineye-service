@@ -46,10 +46,15 @@ const LANG_OPTIONS = [
   { value: "cn", label: "中文 (cn)" },
   { value: "en", label: "English" },
 ];
+const TARGET_OPTIONS = [
+  { value: 50000, label: "Top 50K" },
+  { value: 100000, label: "Top 100K" },
+  { value: 200000, label: "Top 200K" },
+  { value: -1, label: "Top 200K + 认证创作者" },
+];
 const TYPE_LABEL: Record<string, string> = { mindshare: "Mindshare", equal: "Equal" };
 const LANG_LABEL: Record<string, string> = { all: "全部", zh: "中文 (zh)", cn: "中文 (cn)", en: "English" };
 const FLAG_LABEL: Record<string, string> = { political: "政治", sexual: "色情", violence: "暴力", abusive: "辱骂" };
-const AMOUNT_PATTERN = /^\d{1,10}(?:\.\d{1,6})?$/;
 
 const toLocalInput = (value?: string | null) => {
   if (!value) return "";
@@ -61,6 +66,10 @@ const toLocalInput = (value?: string | null) => {
 
 const formatTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "-");
 const formatAmount = (value?: number | null) => (value === undefined || value === null ? "-" : String(value));
+const formatTarget = (value?: number | null) => {
+  if (value === undefined || value === null) return "-";
+  return TARGET_OPTIONS.find((option) => option.value === value)?.label || `Top ${value.toLocaleString()}`;
+};
 const shortAddress = (value?: string | null) =>
   value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "-";
 const tweetLink = (tweetId?: string | null, ownerHandle?: string | null) => {
@@ -175,6 +184,7 @@ export function E2eCampaignsPage() {
   };
 
   const openEdit = (row: E2eCampaign) => {
+    if (row.status !== "pending" && row.status !== "active") return;
     setEditing(row);
     editForm.setFieldsValue({
       rewards: row.rewards ?? undefined,
@@ -191,19 +201,14 @@ export function E2eCampaignsPage() {
 
   const submitEdit = (values: Record<string, unknown>) => {
     if (!editing) return;
-    const payload: E2eCampaignUpdatePayload = {
-      target: values.target as number,
-      winners: values.winners as number,
-      type: values.type as E2eCampaignUpdatePayload["type"],
-      lang: values.lang as E2eCampaignUpdatePayload["lang"],
-      retro: Boolean(values.retro),
-    };
-    // 后端 startTime/endTime 不接受空值，留空时不提交该字段
-    if (values.startTime) payload.startTime = new Date(String(values.startTime)).toISOString();
+    const payload: E2eCampaignUpdatePayload = {};
     if (values.endTime) payload.endTime = new Date(String(values.endTime)).toISOString();
     if (editing.status === "pending") {
-      if (values.rewards !== undefined && values.rewards !== null && values.rewards !== "") payload.rewards = String(values.rewards);
-      if (values.fees !== undefined && values.fees !== null && values.fees !== "") payload.fees = String(values.fees);
+      payload.target = values.target as number;
+      payload.winners = values.winners as number;
+      payload.type = values.type as E2eCampaignUpdatePayload["type"];
+      payload.lang = values.lang as E2eCampaignUpdatePayload["lang"];
+      payload.retro = Boolean(values.retro);
     }
     update.mutate({ address: editing.address, body: payload });
   };
@@ -267,7 +272,7 @@ export function E2eCampaignsPage() {
     },
     {
       title: "门槛 / 获奖人数", key: "rules", width: 110,
-      render: (_: unknown, row: E2eCampaign) => `${row.target ? `Top ${row.target}` : "-"} / ${row.winners ?? "-"}`,
+      render: (_: unknown, row: E2eCampaign) => `${formatTarget(row.target)} / ${row.winners ?? "-"}`,
     },
     {
       title: "时间", key: "time", width: 175,
@@ -294,9 +299,11 @@ export function E2eCampaignsPage() {
           <Button size="small" type="link" style={{ padding: 0 }} onClick={() => openDetail(row)}>
             详情
           </Button>
-          <Button size="small" onClick={() => openEdit(row)}>
-            编辑
-          </Button>
+          {(row.status === "pending" || row.status === "active") && (
+            <Button size="small" onClick={() => openEdit(row)}>
+              {row.status === "active" ? "调整结束时间" : "编辑"}
+            </Button>
+          )}
           {row.status === "pending" && (
             <Button size="small" type="primary" ghost onClick={() => setActivating(row)}>
               确认已支付
@@ -401,8 +408,7 @@ export function E2eCampaignsPage() {
         </Button>
       ))}
     </Space>
-    <E2ePublishAccessCard />
-    <Card title="活动列表" extra={<Space wrap>
+    <Card title="活动列表" style={{ marginBottom: 12 }} extra={<Space wrap>
       <Input.Search
         allowClear
         placeholder="搜索地址 / 作者 / 推文内容"
@@ -422,6 +428,7 @@ export function E2eCampaignsPage() {
         onChange: (nextPage, nextPageSize) => { setPage(nextPage); setPageSize(nextPageSize); },
       }} />}
     </Card>
+    <E2ePublishAccessCard />
 
     <Drawer
       open={Boolean(detailAddress)}
@@ -499,12 +506,12 @@ export function E2eCampaignsPage() {
                   <Descriptions.Item label="奖池">{formatAmount(detailCampaign.rewards)}</Descriptions.Item>
                   <Descriptions.Item label="服务费">{formatAmount(detailCampaign.fees)}</Descriptions.Item>
                   <Descriptions.Item label="应付总额 (depositRewards)">{formatAmount(detailCampaign.depositRewards)}</Descriptions.Item>
-                  <Descriptions.Item label="参与门槛（XHunt 排名）">{detailCampaign.target ? `Top ${detailCampaign.target}` : "-"}</Descriptions.Item>
+                  <Descriptions.Item label="参与门槛（XHunt 排名）">{formatTarget(detailCampaign.target)}</Descriptions.Item>
                   <Descriptions.Item label="获奖人数">{detailCampaign.winners ?? "-"}</Descriptions.Item>
                   <Descriptions.Item label="参与人数">{detailCampaign.participantCount ?? 0}</Descriptions.Item>
                   <Descriptions.Item label="开始时间">{formatTime(detailCampaign.startTime)}</Descriptions.Item>
                   <Descriptions.Item label="结束时间">{formatTime(detailCampaign.endTime)}</Descriptions.Item>
-                  <Descriptions.Item label="结算交易 (completeTx)" span={2}>
+                  <Descriptions.Item label="发放名单提交交易 (completeTx)" span={2}>
                     {detailCampaign.completeTx ? (
                       <Typography.Text copyable code style={{ fontSize: 12 }}>{detailCampaign.completeTx}</Typography.Text>
                     ) : "-"}
@@ -617,7 +624,7 @@ export function E2eCampaignsPage() {
 
     <Modal
       open={Boolean(editing)}
-      title="编辑活动"
+      title={editing?.status === "active" ? "调整活动结束时间" : "编辑活动"}
       width={640}
       onCancel={() => setEditing(null)}
       onOk={() => editForm.submit()}
@@ -627,77 +634,81 @@ export function E2eCampaignsPage() {
       destroyOnClose
     >
       <Form form={editForm} layout="vertical" onFinish={submitEdit} size="middle">
-        {editing && editing.status !== "pending" && (
-          <div style={{ marginBottom: 12, padding: "8px 12px", background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: 6, fontSize: 12, color: "#d48806" }}>
-            当前活动状态为「{STATUS_TAG[editing.status || ""]?.text || editing.status}」，奖池与服务费已锁定（仅待支付状态可修改），本次保存不会提交这两项。
-          </div>
+        {editing?.status === "active" && (
+          <>
+            <Alert
+              type="info"
+              showIcon
+              message="活动已开始，核心配置已锁定"
+              description="为避免改变已报名用户的参与与奖励规则，当前仅允许延长或调整结束时间。"
+              style={{ marginBottom: 16 }}
+            />
+            <Descriptions bordered size="small" column={2} title="已锁定配置" style={{ marginBottom: 16 }}>
+              <Descriptions.Item label="奖池">{formatAmount(editing.rewards)}</Descriptions.Item>
+              <Descriptions.Item label="服务费">{formatAmount(editing.fees)}</Descriptions.Item>
+              <Descriptions.Item label="参与门槛">{formatTarget(editing.target)}</Descriptions.Item>
+              <Descriptions.Item label="获奖人数">{editing.winners ?? "-"}</Descriptions.Item>
+              <Descriptions.Item label="分配方式">{TYPE_LABEL[editing.type || ""] || editing.type || "-"}</Descriptions.Item>
+              <Descriptions.Item label="语言">{LANG_LABEL[editing.lang || ""] || editing.lang || "-"}</Descriptions.Item>
+              <Descriptions.Item label="追溯历史数据">{editing.retro ? "开启" : "关闭"}</Descriptions.Item>
+              <Descriptions.Item label="开始时间">{formatTime(editing.startTime)}</Descriptions.Item>
+            </Descriptions>
+          </>
         )}
-        <Space.Compact block>
-          <Form.Item
-            name="rewards"
-            label="奖池金额"
-            rules={editing?.status === "pending" ? [
-              { required: true, message: "必填" },
-              { pattern: AMOUNT_PATTERN, message: "最多 10 位整数、6 位小数" },
-            ] : []}
-            style={{ width: "50%", marginRight: 8 }}
-          >
-            <Input placeholder="如 1000" disabled={editing?.status !== "pending"} />
-          </Form.Item>
-          <Form.Item
-            name="fees"
-            label="服务费"
-            rules={editing?.status === "pending" ? [
-              { required: true, message: "必填" },
-              { pattern: AMOUNT_PATTERN, message: "最多 10 位整数、6 位小数，可为 0" },
-            ] : []}
-            style={{ width: "50%" }}
-          >
-            <Input placeholder="如 50，可为 0" disabled={editing?.status !== "pending"} />
-          </Form.Item>
-        </Space.Compact>
-        <Space.Compact block>
-          <Form.Item name="target" label="参与门槛（XHunt 排名）" rules={[{ required: true, message: "必填" }]} style={{ width: "50%", marginRight: 8 }}>
-            <InputNumber min={1} precision={0} style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.Item name="winners" label="获奖人数" rules={[{ required: true, message: "必填" }]} style={{ width: "50%" }}>
-            <InputNumber min={1} max={200} precision={0} style={{ width: "100%" }} />
-          </Form.Item>
-        </Space.Compact>
-        <Space.Compact block>
-          <Form.Item name="type" label="分配方式" rules={[{ required: true, message: "必选" }]} style={{ width: "50%", marginRight: 8 }}>
-            <Select options={TYPE_OPTIONS} />
-          </Form.Item>
-          <Form.Item name="lang" label="语言范围" rules={[{ required: true, message: "必选" }]} style={{ width: "50%" }}>
-            <Select options={LANG_OPTIONS} />
-          </Form.Item>
-        </Space.Compact>
-        <Form.Item name="retro" label="追溯历史数据（retro）" valuePropName="checked">
-          <Switch />
+        {editing?.status === "pending" && (
+          <>
+            <Alert
+              type="warning"
+              showIcon
+              message="支付订单已创建，金额与开始时间已锁定"
+              description="奖池和服务费必须与外部支付订单一致；开始时间将在支付确认并激活时自动生成。活动开始后，其他参与规则也会锁定。"
+              style={{ marginBottom: 16 }}
+            />
+            <Descriptions bordered size="small" column={2} title="已锁定配置" style={{ marginBottom: 16 }}>
+              <Descriptions.Item label="奖池">{formatAmount(editing.rewards)}</Descriptions.Item>
+              <Descriptions.Item label="服务费">{formatAmount(editing.fees)}</Descriptions.Item>
+              <Descriptions.Item label="应付总额">{formatAmount(editing.depositRewards)}</Descriptions.Item>
+              <Descriptions.Item label="开始时间">支付确认后自动生成</Descriptions.Item>
+            </Descriptions>
+            <Space.Compact block>
+              <Form.Item name="target" label="参与门槛（XHunt 排名）" rules={[{ required: true, message: "必选" }]} style={{ width: "50%", marginRight: 8 }}>
+                <Select options={TARGET_OPTIONS} placeholder="请选择参与门槛" />
+              </Form.Item>
+              <Form.Item name="winners" label="获奖人数" rules={[{ required: true, message: "必填" }]} style={{ width: "50%" }}>
+                <InputNumber min={1} max={200} precision={0} style={{ width: "100%" }} />
+              </Form.Item>
+            </Space.Compact>
+            <Space.Compact block>
+              <Form.Item name="type" label="分配方式" rules={[{ required: true, message: "必选" }]} style={{ width: "50%", marginRight: 8 }}>
+                <Select options={TYPE_OPTIONS} />
+              </Form.Item>
+              <Form.Item name="lang" label="语言范围" rules={[{ required: true, message: "必选" }]} style={{ width: "50%" }}>
+                <Select options={LANG_OPTIONS} />
+              </Form.Item>
+            </Space.Compact>
+            <Form.Item name="retro" label="追溯历史数据（retro）" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </>
+        )}
+        <Form.Item
+          name="endTime"
+          label="结束时间"
+          dependencies={["startTime"]}
+          rules={[
+            { required: true, message: "请选择结束时间" },
+            ({ getFieldValue }) => ({
+              validator: async (_, value) => {
+                const start = getFieldValue("startTime") || toLocalInput(editing?.startTime);
+                if (value && start && new Date(String(value)).getTime() <= new Date(String(start)).getTime()) {
+                  throw new Error("结束时间必须晚于开始时间");
+                }
+              },
+            }),
+          ]}
+        >
+          <Input type="datetime-local" />
         </Form.Item>
-        <Space.Compact block>
-          <Form.Item name="startTime" label="开始时间（留空则不修改）" style={{ width: "50%", marginRight: 8 }}>
-            <Input type="datetime-local" />
-          </Form.Item>
-          <Form.Item
-            name="endTime"
-            label="结束时间（留空则不修改）"
-            style={{ width: "50%" }}
-            dependencies={["startTime"]}
-            rules={[
-              ({ getFieldValue }) => ({
-                validator: async (_, value) => {
-                  const start = getFieldValue("startTime") || toLocalInput(editing?.startTime);
-                  if (value && start && new Date(String(value)).getTime() <= new Date(String(start)).getTime()) {
-                    throw new Error("结束时间必须晚于开始时间");
-                  }
-                },
-              }),
-            ]}
-          >
-            <Input type="datetime-local" />
-          </Form.Item>
-        </Space.Compact>
       </Form>
     </Modal>
 

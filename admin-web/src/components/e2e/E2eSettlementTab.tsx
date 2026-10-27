@@ -18,7 +18,7 @@ const statusMeta: Record<string, { text: string; color: string }> = {
   approved: { text: "名单已确认", color: "blue" },
   submitting: { text: "提交中", color: "processing" },
   submitted: { text: "链上确认中", color: "processing" },
-  confirmed: { text: "名单提交已确认", color: "blue" },
+  confirmed: { text: "已实际发放", color: "green" },
   completed_no_payout: { text: "无需发奖，已完成", color: "green" },
   failed: { text: "交易失败", color: "red" },
 };
@@ -84,18 +84,19 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
   const hasWinners = settlement.items.some((item) => item.isWinner && !item.excluded && Number(item.rewardAmount || 0) > 0);
   const execution = settlement.distributionExecution;
   const payoutExecuted = execution?.phase === "executed";
+  const payoutCompleted = payoutExecuted || (settlement.status === "confirmed" && !execution);
   const payoutWaiting = execution?.phase === "waiting";
   const payoutExecutable = execution?.phase === "executable";
   const step = settlement.status === "draft"
     ? 0
     : settlement.status === "approved"
       ? 1
-      : noPayout || payoutExecuted
+      : noPayout || payoutCompleted
         ? 3
         : 2;
   const meta = noPayout
     ? statusMeta.completed_no_payout
-    : payoutExecuted
+    : payoutCompleted
       ? { text: "已实际发放", color: "green" }
       : payoutExecutable
         ? { text: "已到执行时间", color: "orange" }
@@ -142,15 +143,15 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
     {payoutWaiting && <Alert type="info" showIcon message="发放名单已上链，正在等待执行窗口" description={<>当前交易只提交了待发放名单，USDC 尚未转出。最早可执行实际分发时间：<Typography.Text strong>{formatTime(execution?.earliestExecuteAt)}</Typography.Text></>} />}
     {payoutExecutable && <Alert type="warning" showIcon message="已到最早执行时间，等待实际分发" description="发放名单已经过合约等待期，但链上尚未执行实际 USDC 转账。" />}
     {payoutExecuted && <Alert type="success" showIcon message="实际分发已执行" description="链上合约已执行发放名单。" />}
-    {settlement.status === "confirmed" && !execution && <Alert type="info" showIcon message="名单提交交易已确认" description="暂时无法取得合约执行状态，不能据此判断用户已经到账。" />}
-    {new Date(settlement.payoutDueAt).getTime() < Date.now() && !noPayout && !payoutExecuted && <Alert type="warning" showIcon message="已超过计划发奖截止时间" description={`截止时间：${formatTime(settlement.payoutDueAt)}`} />}
+    {settlement.status === "confirmed" && !execution && <Alert type="success" showIcon message="实际分发已确认" description="系统此前已确认链上合约完成实际发放；当前暂时无法重新读取链上执行状态。" />}
+    {new Date(settlement.payoutDueAt).getTime() < Date.now() && !noPayout && !payoutCompleted && <Alert type="warning" showIcon message="已超过计划发奖截止时间" description={`截止时间：${formatTime(settlement.payoutDueAt)}`} />}
     <Card size="small" title={<Space><span>结算版本 R{settlement.revision}</span><Tag color={meta.color}>{meta.text}</Tag></Space>} extra={<Space wrap>
       <Popconfirm title="将按当前抓取数据重新算分并创建不可变的新版本，确认继续？" onConfirm={() => recalculate.mutate()}><Button icon={<ReloadOutlined />} loading={recalculate.isPending} disabled={locked}>重新计算</Button></Popconfirm>
       <Popconfirm title={hasWinners ? "确认后名单与金额将锁定，不能再排除或重新计算。确认名单无误？" : "当前没有可发奖用户。确认后活动将直接完成，且不会触发链上分发。确认继续？"} onConfirm={() => approve.mutate()}><Button type="primary" icon={<CheckCircleOutlined />} loading={approve.isPending} disabled={locked}>{hasWinners ? "确认获奖名单" : "确认无需发奖并完成"}</Button></Popconfirm>
       <Popconfirm title="将调用 E2E V2 /distribution 提交链上发奖，确认继续？" onConfirm={() => distribute.mutate()}><Button type="primary" danger icon={<SendOutlined />} loading={distribute.isPending} disabled={settlement.status !== "approved"}>触发分发</Button></Popconfirm>
       <Button loading={refresh.isPending} disabled={!['submitting','submitted','failed','confirmed'].includes(settlement.status)} onClick={() => refresh.mutate()}>刷新交易状态</Button>
     </Space>}>
-      <Steps size="small" current={step} status={settlement.status === "failed" ? "error" : noPayout || payoutExecuted ? "finish" : "process"} items={[{ title: "结算草稿" }, { title: "管理员确认" }, { title: noPayout ? "无需分发" : "提交发放名单" }, { title: noPayout ? "活动完成" : "实际发放完成" }]} />
+      <Steps size="small" current={step} status={settlement.status === "failed" ? "error" : noPayout || payoutCompleted ? "finish" : "process"} items={[{ title: "结算草稿" }, { title: "管理员确认" }, { title: noPayout ? "无需分发" : "提交发放名单" }, { title: noPayout ? "活动完成" : "实际发放完成" }]} />
     </Card>
     <Row gutter={[12, 12]}>
       <Col xs={12} md={6}><Card size="small"><Statistic title="奖池 USDC" value={settlement.rewardPool} /></Card></Col>
@@ -165,12 +166,12 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
       <Descriptions.Item label="确认时间">{formatTime(settlement.approvedAt)}</Descriptions.Item>
       <Descriptions.Item label="唯一收款地址">{settlement.status === "draft" ? "确认名单时生成" : settlement.uniqueRecipientCount}</Descriptions.Item>
       <Descriptions.Item label="名单提交状态"><Tag color={settlement.distributionStatus === "failed" ? "red" : settlement.distributionStatus === "confirmed" ? "blue" : "processing"}>{settlement.distributionStatus === "not_required" ? "无需分发" : settlement.distributionStatus === "confirmed" ? "提交交易已确认" : settlement.distributionStatus}</Tag></Descriptions.Item>
-      <Descriptions.Item label="实际分发状态"><Tag color={payoutExecuted ? "green" : payoutExecutable ? "orange" : payoutWaiting ? "processing" : "default"}>{payoutExecuted ? "已执行" : payoutExecutable ? "可执行，等待链上调用" : payoutWaiting ? "等待执行窗口" : noPayout ? "无需分发" : "待确认"}</Tag></Descriptions.Item>
+      <Descriptions.Item label="实际分发状态"><Tag color={payoutCompleted ? "green" : payoutExecutable ? "orange" : payoutWaiting ? "processing" : "default"}>{payoutCompleted ? "已执行" : payoutExecutable ? "可执行，等待链上调用" : payoutWaiting ? "等待执行窗口" : noPayout ? "无需分发" : "待确认"}</Tag></Descriptions.Item>
       <Descriptions.Item label="最早可执行实际分发">{formatTime(execution?.earliestExecuteAt)}</Descriptions.Item>
       <Descriptions.Item label="合约等待期">{execution?.waitTimeSeconds ? `${execution.waitTimeSeconds / 3600} 小时` : "-"}</Descriptions.Item>
       <Descriptions.Item label="名单提交交易哈希" span={2}>{settlement.txHash ? <Typography.Text copyable code>{settlement.txHash}</Typography.Text> : "-"}</Descriptions.Item>
     </Descriptions>
-    {distributionRows.length > 0 && <Card size="small" title={payoutExecuted ? "发放名单" : "待发放名单"} extra={<Space><Tag color={execution?.recipients?.length ? "blue" : "default"}>{execution?.recipients?.length ? "链上名单" : "已确认名单"}</Tag><Typography.Text type="secondary">共 {distributionRows.length} 个地址 / {settlement.depositAmount} USDC</Typography.Text></Space>}>
+    {distributionRows.length > 0 && <Card size="small" title={payoutCompleted ? "发放名单" : "待发放名单"} extra={<Space><Tag color={execution?.recipients?.length ? "blue" : "default"}>{execution?.recipients?.length ? "链上名单" : "已确认名单"}</Tag><Typography.Text type="secondary">共 {distributionRows.length} 个地址 / {settlement.depositAmount} USDC</Typography.Text></Space>}>
       <Table
         rowKey="key"
         size="small"
@@ -181,7 +182,7 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
           { title: "用户", dataIndex: "users", render: (users: string[], row) => row.type === "fee" ? <Typography.Text type="secondary">平台服务费</Typography.Text> : users.join("、") || "-" },
           { title: "收款地址", dataIndex: "address", width: 360, render: (value: string) => <Typography.Text copyable={{ text: value }} code>{value}</Typography.Text> },
           { title: "计划发放 USDC", dataIndex: "amount", width: 160, align: "right" as const, render: (value: string) => <Typography.Text strong>{Number(value).toFixed(6)}</Typography.Text> },
-          { title: "状态", key: "status", width: 150, render: () => <Tag color={payoutExecuted ? "green" : payoutExecutable ? "orange" : "processing"}>{payoutExecuted ? "已执行" : payoutExecutable ? "等待执行" : "待发放"}</Tag> },
+          { title: "状态", key: "status", width: 150, render: () => <Tag color={payoutCompleted ? "green" : payoutExecutable ? "orange" : "processing"}>{payoutCompleted ? "已执行" : payoutExecutable ? "等待执行" : "待发放"}</Tag> },
         ]}
         scroll={{ x: 980 }}
       />
