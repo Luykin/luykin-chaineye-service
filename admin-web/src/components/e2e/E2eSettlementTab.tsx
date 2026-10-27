@@ -25,6 +25,10 @@ const statusMeta: Record<string, { text: string; color: string }> = {
 
 const formatTime = (value?: string | null) => value ? new Date(value).toLocaleString() : "-";
 const shortAddress = (value?: string | null) => value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "-";
+const addHours = (value: string | null, hours: number) => {
+  const timestamp = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(timestamp) ? new Date(timestamp + hours * 60 * 60 * 1000).toISOString() : null;
+};
 
 export function E2eSettlementTab({ address, campaignStatus }: { address: string; campaignStatus?: string | null }) {
   const [messageApi, contextHolder] = message.useMessage();
@@ -84,7 +88,11 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
   const hasWinners = settlement.items.some((item) => item.isWinner && !item.excluded && Number(item.rewardAmount || 0) > 0);
   const execution = settlement.distributionExecution;
   const payoutExecuted = execution?.phase === "executed";
-  const payoutCompleted = payoutExecuted || (settlement.status === "confirmed" && !execution);
+  const chainVerifiedCompleted = payoutExecuted || settlement.completionSource === "chain_executed";
+  const timeoutCompleted = settlement.status === "confirmed" && settlement.completionSource === "timeout_72h" && !chainVerifiedCompleted;
+  const legacyCompleted = settlement.status === "confirmed" && !timeoutCompleted && !chainVerifiedCompleted;
+  const payoutCompleted = timeoutCompleted || chainVerifiedCompleted || legacyCompleted;
+  const distributionPollingEndsAt = addHours(settlement.submittedAt, 72);
   const payoutWaiting = execution?.phase === "waiting";
   const payoutExecutable = execution?.phase === "executable";
   const step = settlement.status === "draft"
@@ -96,8 +104,12 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
         : 2;
   const meta = noPayout
     ? statusMeta.completed_no_payout
-    : payoutCompleted
+    : timeoutCompleted
+      ? { text: "超过 3 天，自动完成", color: "orange" }
+      : chainVerifiedCompleted
       ? { text: "已实际发放", color: "green" }
+      : legacyCompleted
+        ? { text: "已完成，待核验", color: "blue" }
       : payoutExecutable
         ? { text: "已到执行时间", color: "orange" }
         : payoutWaiting
@@ -140,10 +152,11 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
     {contextHolder}
     {settlement.lastError && <Alert type="error" showIcon message="最近一次分发失败" description={settlement.lastError} />}
     {settlement.status === "draft" && !hasWinners && <Alert type="info" showIcon message="当前没有可发奖用户" description="管理员确认后，活动将直接标记为完成，不会调用链上分发接口。" />}
-    {payoutWaiting && <Alert type="info" showIcon message="发放名单已上链，正在等待执行窗口" description={<>当前交易只提交了待发放名单，USDC 尚未转出。最早可执行实际分发时间：<Typography.Text strong>{formatTime(execution?.earliestExecuteAt)}</Typography.Text></>} />}
-    {payoutExecutable && <Alert type="warning" showIcon message="已到最早执行时间，等待实际分发" description="发放名单已经过合约等待期，但链上尚未执行实际 USDC 转账。" />}
-    {payoutExecuted && <Alert type="success" showIcon message="实际分发已执行" description="链上合约已执行发放名单。" />}
-    {settlement.status === "confirmed" && !execution && <Alert type="success" showIcon message="实际分发已确认" description="系统此前已确认链上合约完成实际发放；当前暂时无法重新读取链上执行状态。" />}
+    {payoutWaiting && !payoutCompleted && <Alert type="info" showIcon message="发放名单已上链，正在等待执行窗口" description={<>当前交易只提交了待发放名单，USDC 尚未转出。最早可执行实际分发时间：<Typography.Text strong>{formatTime(execution?.earliestExecuteAt)}</Typography.Text></>} />}
+    {payoutExecutable && !payoutCompleted && <Alert type="warning" showIcon message="已到最早执行时间，等待实际分发" description="发放名单已经过合约等待期，但链上尚未执行实际 USDC 转账。" />}
+    {chainVerifiedCompleted && <Alert type="success" showIcon message="实际分发已执行" description="系统已取得链上合约执行发放名单的记录。" />}
+    {timeoutCompleted && <Alert type="warning" showIcon message="超过 72 小时，系统已自动完成" description="系统在三天检查窗口内未确认链上实际分发，现已停止自动检查。此状态不代表 USDC 转账已经过链上验证，可通过“刷新交易状态”再次人工核验。" />}
+    {legacyCompleted && <Alert type="info" showIcon message="历史完成记录待核验" description="该记录没有保存完成来源，不能仅凭当前状态确认 USDC 已实际转出。" />}
     {new Date(settlement.payoutDueAt).getTime() < Date.now() && !noPayout && !payoutCompleted && <Alert type="warning" showIcon message="已超过计划发奖截止时间" description={`截止时间：${formatTime(settlement.payoutDueAt)}`} />}
     <Card size="small" title={<Space><span>结算版本 R{settlement.revision}</span><Tag color={meta.color}>{meta.text}</Tag></Space>} extra={<Space wrap>
       <Popconfirm title="将按当前抓取数据重新算分并创建不可变的新版本，确认继续？" onConfirm={() => recalculate.mutate()}><Button icon={<ReloadOutlined />} loading={recalculate.isPending} disabled={locked}>重新计算</Button></Popconfirm>
@@ -151,7 +164,7 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
       <Popconfirm title="将调用 E2E V2 /distribution 提交链上发奖，确认继续？" onConfirm={() => distribute.mutate()}><Button type="primary" danger icon={<SendOutlined />} loading={distribute.isPending} disabled={settlement.status !== "approved"}>触发分发</Button></Popconfirm>
       <Button loading={refresh.isPending} disabled={!['submitting','submitted','failed','confirmed'].includes(settlement.status)} onClick={() => refresh.mutate()}>刷新交易状态</Button>
     </Space>}>
-      <Steps size="small" current={step} status={settlement.status === "failed" ? "error" : noPayout || payoutCompleted ? "finish" : "process"} items={[{ title: "结算草稿" }, { title: "管理员确认" }, { title: noPayout ? "无需分发" : "提交发放名单" }, { title: noPayout ? "活动完成" : "实际发放完成" }]} />
+      <Steps size="small" current={step} status={settlement.status === "failed" ? "error" : noPayout || payoutCompleted ? "finish" : "process"} items={[{ title: "结算草稿" }, { title: "管理员确认" }, { title: noPayout ? "无需分发" : "提交发放名单" }, { title: noPayout ? "活动完成" : timeoutCompleted ? "超时自动完成" : "实际发放完成" }]} />
     </Card>
     <Row gutter={[12, 12]}>
       <Col xs={12} md={6}><Card size="small"><Statistic title="奖池 USDC" value={settlement.rewardPool} /></Card></Col>
@@ -166,12 +179,14 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
       <Descriptions.Item label="确认时间">{formatTime(settlement.approvedAt)}</Descriptions.Item>
       <Descriptions.Item label="唯一收款地址">{settlement.status === "draft" ? "确认名单时生成" : settlement.uniqueRecipientCount}</Descriptions.Item>
       <Descriptions.Item label="名单提交状态"><Tag color={settlement.distributionStatus === "failed" ? "red" : settlement.distributionStatus === "confirmed" ? "blue" : "processing"}>{settlement.distributionStatus === "not_required" ? "无需分发" : settlement.distributionStatus === "confirmed" ? "提交交易已确认" : settlement.distributionStatus}</Tag></Descriptions.Item>
-      <Descriptions.Item label="实际分发状态"><Tag color={payoutCompleted ? "green" : payoutExecutable ? "orange" : payoutWaiting ? "processing" : "default"}>{payoutCompleted ? "已执行" : payoutExecutable ? "可执行，等待链上调用" : payoutWaiting ? "等待执行窗口" : noPayout ? "无需分发" : "待确认"}</Tag></Descriptions.Item>
+      <Descriptions.Item label="实际分发状态"><Tag color={timeoutCompleted ? "orange" : chainVerifiedCompleted ? "green" : legacyCompleted ? "blue" : payoutExecutable ? "orange" : payoutWaiting ? "processing" : "default"}>{timeoutCompleted ? "超时完成，未验证" : chainVerifiedCompleted ? "已执行（链上已验证）" : legacyCompleted ? "已完成，待核验" : payoutExecutable ? "可执行，等待链上调用" : payoutWaiting ? "等待执行窗口" : noPayout ? "无需分发" : "待确认"}</Tag></Descriptions.Item>
       <Descriptions.Item label="最早可执行实际分发">{formatTime(execution?.earliestExecuteAt)}</Descriptions.Item>
       <Descriptions.Item label="合约等待期">{execution?.waitTimeSeconds ? `${execution.waitTimeSeconds / 3600} 小时` : "-"}</Descriptions.Item>
+      <Descriptions.Item label="自动检查频率">每小时一次，最多 72 小时</Descriptions.Item>
+      <Descriptions.Item label="自动检查截止">{formatTime(distributionPollingEndsAt)}</Descriptions.Item>
       <Descriptions.Item label="名单提交交易哈希" span={2}>{settlement.txHash ? <Typography.Text copyable code>{settlement.txHash}</Typography.Text> : "-"}</Descriptions.Item>
     </Descriptions>
-    {distributionRows.length > 0 && <Card size="small" title={payoutCompleted ? "发放名单" : "待发放名单"} extra={<Space><Tag color={execution?.recipients?.length ? "blue" : "default"}>{execution?.recipients?.length ? "链上名单" : "已确认名单"}</Tag><Typography.Text type="secondary">共 {distributionRows.length} 个地址 / {settlement.depositAmount} USDC</Typography.Text></Space>}>
+    {distributionRows.length > 0 && <Card size="small" title={chainVerifiedCompleted ? "发放名单" : timeoutCompleted || legacyCompleted ? "计划发放名单（未验证）" : "待发放名单"} extra={<Space><Tag color={execution?.recipients?.length ? "blue" : "default"}>{execution?.recipients?.length ? "链上名单" : "已确认名单"}</Tag><Typography.Text type="secondary">共 {distributionRows.length} 个地址 / {settlement.depositAmount} USDC</Typography.Text></Space>}>
       <Table
         rowKey="key"
         size="small"
@@ -182,7 +197,7 @@ export function E2eSettlementTab({ address, campaignStatus }: { address: string;
           { title: "用户", dataIndex: "users", render: (users: string[], row) => row.type === "fee" ? <Typography.Text type="secondary">平台服务费</Typography.Text> : users.join("、") || "-" },
           { title: "收款地址", dataIndex: "address", width: 360, render: (value: string) => <Typography.Text copyable={{ text: value }} code>{value}</Typography.Text> },
           { title: "计划发放 USDC", dataIndex: "amount", width: 160, align: "right" as const, render: (value: string) => <Typography.Text strong>{Number(value).toFixed(6)}</Typography.Text> },
-          { title: "状态", key: "status", width: 150, render: () => <Tag color={payoutCompleted ? "green" : payoutExecutable ? "orange" : "processing"}>{payoutCompleted ? "已执行" : payoutExecutable ? "等待执行" : "待发放"}</Tag> },
+          { title: "状态", key: "status", width: 150, render: () => <Tag color={timeoutCompleted ? "orange" : chainVerifiedCompleted ? "green" : legacyCompleted ? "blue" : payoutExecutable ? "orange" : "processing"}>{timeoutCompleted ? "超时完成，未验证" : chainVerifiedCompleted ? "已执行" : legacyCompleted ? "已完成，待核验" : payoutExecutable ? "等待执行" : "待发放"}</Tag> },
         ]}
         scroll={{ x: 980 }}
       />

@@ -23,6 +23,9 @@ const { normalizeScoringConfig } = require("./e2eScoringConfig");
 
 const MUTABLE_DRAFT_STATUS = "draft";
 const PAYOUT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const DISTRIBUTION_POLLING_WINDOW_MS = 72 * 60 * 60 * 1000;
+const DISTRIBUTION_REFRESH_BATCH_SIZE = 20;
+const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/;
 
 function serviceError(code, status, message) {
   const error = new Error(message);
@@ -340,7 +343,11 @@ async function applyProviderStatus(settlement, providerData) {
       ? storedExecution
       : observedExecution;
   const executionPhase = String(execution?.phase || "").toLowerCase() || null;
-  const settlementStatus = distributionStatusToSettlementStatus(status, executionPhase);
+  const existingCompletionSource = settlement.provider_response?.completion_source || null;
+  const preservesTimeoutCompletion = existingCompletionSource === "timeout_72h" && executionPhase !== "executed";
+  const settlementStatus = preservesTimeoutCompletion
+    ? "confirmed"
+    : distributionStatusToSettlementStatus(status, executionPhase);
   const isExecuted = settlementStatus === "confirmed";
   const isKnownNotExecuted = [
     "submission_pending",
@@ -363,8 +370,14 @@ async function applyProviderStatus(settlement, providerData) {
           : settlement.confirmed_at,
       last_error: settlementStatus === "failed" ? "E2E distribution transaction failed" : null,
       provider_response: {
+        ...(settlement.provider_response || {}),
         ...providerData,
         distribution_execution: execution,
+        completion_source: executionPhase === "executed"
+          ? "chain_executed"
+          : preservesTimeoutCompletion
+            ? "timeout_72h"
+            : null,
       },
       updated_at: new Date(),
     }, { transaction });
@@ -381,6 +394,40 @@ async function applyProviderStatus(settlement, providerData) {
     }
   });
   return settlement;
+}
+
+function hasDistributionPollingTimedOut(settlement, now = new Date()) {
+  if (
+    settlement.status !== "submitted"
+    || !settlement.submitted_at
+    || !TX_HASH_PATTERN.test(String(settlement.tx_hash || ""))
+  ) {
+    return false;
+  }
+  const submittedAt = new Date(settlement.submitted_at).getTime();
+  return Number.isFinite(submittedAt) && now.getTime() - submittedAt >= DISTRIBUTION_POLLING_WINDOW_MS;
+}
+
+async function completeTimedOutDistribution(settlement, now = new Date()) {
+  if (!hasDistributionPollingTimedOut(settlement, now)) return false;
+  await pgInstance.transaction(async (transaction) => {
+    await settlement.update({
+      status: "confirmed",
+      confirmed_at: settlement.confirmed_at || now,
+      provider_response: {
+        ...(settlement.provider_response || {}),
+        completion_source: "timeout_72h",
+        timeout_completed_at: now.toISOString(),
+      },
+      last_error: null,
+      updated_at: now,
+    }, { transaction });
+    await E2eList.update(
+      { status: "complete", complete_tx: settlement.tx_hash },
+      { where: { address: settlement.campaign_address }, transaction }
+    );
+  });
+  return true;
 }
 
 async function submitSettlementDistribution(address, admin) {
@@ -431,10 +478,21 @@ async function refreshSettlementDistribution(address) {
 async function refreshPendingDistributions() {
   const settlements = await E2eSettlement.findAll({
     where: { status: { [Op.in]: ["submitting", "submitted"] } },
-    limit: 50,
+    order: [["submitted_at", "ASC"]],
   });
-  const results = await Promise.allSettled(settlements.map((item) => refreshSettlementDistribution(item.campaign_address)));
-  return { checked: settlements.length, failed: results.filter((item) => item.status === "rejected").length };
+  let failed = 0;
+  let completedByTimeout = 0;
+  for (let offset = 0; offset < settlements.length; offset += DISTRIBUTION_REFRESH_BATCH_SIZE) {
+    const batch = settlements.slice(offset, offset + DISTRIBUTION_REFRESH_BATCH_SIZE);
+    const results = await Promise.allSettled(batch.map(async (item) => {
+      if (await completeTimedOutDistribution(item)) return true;
+      await refreshSettlementDistribution(item.campaign_address);
+      return false;
+    }));
+    failed += results.filter((item) => item.status === "rejected").length;
+    completedByTimeout += results.filter((item) => item.status === "fulfilled" && item.value).length;
+  }
+  return { checked: settlements.length, failed, completedByTimeout };
 }
 
 module.exports = {

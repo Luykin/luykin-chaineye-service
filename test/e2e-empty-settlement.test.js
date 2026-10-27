@@ -48,7 +48,10 @@ require.cache[modelsPath] = {
       },
     },
     E2eRecord: {},
-    E2eSettlement: { findOne: async () => settlement },
+    E2eSettlement: {
+      findOne: async () => settlement,
+      findAll: async () => [settlement],
+    },
     E2eSettlementItem: { findAll: async () => settlementItems },
     pgInstance: { transaction: async (callback) => callback({ LOCK: { UPDATE: "UPDATE" } }) },
   },
@@ -74,6 +77,7 @@ delete require.cache[servicePath];
 const {
   approveSettlement,
   refreshSettlementDistribution,
+  refreshPendingDistributions,
   submitSettlementDistribution,
 } = require(servicePath);
 
@@ -89,6 +93,7 @@ test.beforeEach(() => {
     tx_hash: null,
     confirmed_at: null,
     provider_response: null,
+    submitted_at: null,
   });
   settlementItems = [];
   distributionExecution = null;
@@ -172,6 +177,7 @@ test("the campaign completes after on-chain payout execution is observed", async
   const result = await refreshSettlementDistribution(campaign.address);
 
   assert.equal(result.status, "confirmed");
+  assert.equal(result.provider_response.completion_source, "chain_executed");
   assert.equal(campaign.status, "complete");
   assert.equal(campaign.complete_tx, submissionTxHash);
 });
@@ -217,4 +223,60 @@ test("stored payout execution evidence survives a temporary chain RPC failure", 
   assert.equal(result.status, "confirmed");
   assert.equal(campaign.status, "complete");
   assert.equal(campaign.complete_tx, submissionTxHash);
+});
+
+test("hourly refresh auto-completes a submitted distribution after 72 hours", async () => {
+  settlement.status = "submitted";
+  settlement.tx_hash = submissionTxHash;
+  settlement.submitted_at = new Date(Date.now() - (73 * 60 * 60 * 1000));
+  distributionExecution = null;
+
+  const result = await refreshPendingDistributions();
+
+  assert.equal(result.checked, 1);
+  assert.equal(result.completedByTimeout, 1);
+  assert.equal(settlement.status, "confirmed");
+  assert.equal(settlement.provider_response.completion_source, "timeout_72h");
+  assert.equal(campaign.status, "complete");
+  assert.equal(campaign.complete_tx, submissionTxHash);
+});
+
+test("hourly refresh keeps polling before the 72-hour fallback", async () => {
+  settlement.status = "submitted";
+  settlement.tx_hash = submissionTxHash;
+  settlement.submitted_at = new Date(Date.now() - (71 * 60 * 60 * 1000));
+  distributionExecution = null;
+
+  const result = await refreshPendingDistributions();
+
+  assert.equal(result.checked, 1);
+  assert.equal(result.completedByTimeout, 0);
+  assert.equal(settlement.status, "submitted");
+  assert.equal(campaign.status, "review");
+});
+
+test("hourly refresh does not time out a distribution without a valid transaction hash", async () => {
+  settlement.status = "submitted";
+  settlement.tx_hash = null;
+  settlement.submitted_at = new Date(Date.now() - (73 * 60 * 60 * 1000));
+  distributionExecution = null;
+
+  const result = await refreshPendingDistributions();
+
+  assert.equal(result.completedByTimeout, 0);
+  assert.equal(settlement.status, "submitted");
+  assert.equal(campaign.status, "review");
+});
+
+test("manual refresh preserves timeout completion until chain execution is verified", async () => {
+  settlement.status = "submitted";
+  settlement.tx_hash = submissionTxHash;
+  settlement.submitted_at = new Date(Date.now() - (73 * 60 * 60 * 1000));
+
+  await refreshPendingDistributions();
+  const result = await refreshSettlementDistribution(campaign.address);
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.provider_response.completion_source, "timeout_72h");
+  assert.equal(campaign.status, "complete");
 });

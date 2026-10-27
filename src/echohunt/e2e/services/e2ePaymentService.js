@@ -6,7 +6,7 @@ const {
   MAX_DISTRIBUTION_RECIPIENTS,
 } = require("./e2eMoney");
 
-const DEFAULT_FEE_PERCENTAGE = Number(process.env.E2E_FEE_PERCENTAGE || 10);
+const DEFAULT_FEE_PERCENTAGE = 20;
 const E2E_V2_API_BASE_URL = String(
   process.env.E2E_V2_API_BASE_URL || `${DATA_SERVICE_BASE_URL}/e2e_v2`
 ).replace(/\/+$/, "");
@@ -15,7 +15,24 @@ const E2E_V2_API_TIMEOUT_MS = Math.max(
   Number(process.env.E2E_V2_API_TIMEOUT_MS || 10000) || 10000
 );
 const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/;
-const E2E_BASE_RPC_URL = String(process.env.E2E_BASE_RPC_URL || "https://mainnet.base.org").trim();
+const DEFAULT_E2E_BASE_RPC_URLS = Object.freeze([
+  "https://base-rpc.publicnode.com",
+  "https://mainnet.base.org",
+  "https://8453.rpc.thirdweb.com",
+  "https://base.gateway.tenderly.co",
+]);
+
+function parseRpcUrls(value) {
+  return [...new Set(String(value || "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean))];
+}
+
+const configuredRpcUrls = parseRpcUrls(process.env.E2E_BASE_RPC_URLS);
+const legacyRpcUrl = String(process.env.E2E_BASE_RPC_URL || "").trim();
+const E2E_BASE_RPC_URLS = configuredRpcUrls.length
+  ? configuredRpcUrls
+  : legacyRpcUrl
+    ? [legacyRpcUrl, ...DEFAULT_E2E_BASE_RPC_URLS.filter((url) => url !== legacyRpcUrl)]
+    : [...DEFAULT_E2E_BASE_RPC_URLS];
 const E2E_CHAIN_RPC_TIMEOUT_MS = Math.max(
   1000,
   Number(process.env.E2E_CHAIN_RPC_TIMEOUT_MS || 6000) || 6000
@@ -127,6 +144,37 @@ function rpcResult(rows, id) {
   return row.result ?? null;
 }
 
+async function requestRpcBatch(payload, { preferredUrl = null, requireNonNullIds = [] } = {}) {
+  const urls = preferredUrl
+    ? [preferredUrl, ...E2E_BASE_RPC_URLS.filter((url) => url !== preferredUrl)]
+    : E2E_BASE_RPC_URLS;
+  const expectedIds = payload.map((item) => item.id);
+  let firstCompleteResponse = null;
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const response = await axios.post(
+        url,
+        payload,
+        { timeout: E2E_CHAIN_RPC_TIMEOUT_MS, headers: { "Content-Type": "application/json" } }
+      );
+      const rows = response?.data;
+      const isComplete = Array.isArray(rows) && expectedIds.every((id) => {
+        const row = rows.find((item) => item?.id === id);
+        return row && !row.error;
+      });
+      if (!isComplete) continue;
+      const candidate = { rows, url };
+      if (!firstCompleteResponse) firstCompleteResponse = candidate;
+      if (requireNonNullIds.every((id) => rpcResult(rows, id) !== null)) return candidate;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (firstCompleteResponse) return firstCompleteResponse;
+  throw lastError || new Error("No Base RPC endpoint returned a complete response");
+}
+
 function hexToNumber(value) {
   if (typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value)) return null;
   const result = Number(BigInt(value));
@@ -140,16 +188,15 @@ async function getExternalDistributionExecutionInfo(txHash) {
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
   try {
-    const transactionResponse = await axios.post(
-      E2E_BASE_RPC_URL,
+    const transactionResponse = await requestRpcBatch(
       [
         { jsonrpc: "2.0", id: 1, method: "eth_getTransactionByHash", params: [normalizedHash] },
         { jsonrpc: "2.0", id: 2, method: "eth_getTransactionReceipt", params: [normalizedHash] },
       ],
-      { timeout: E2E_CHAIN_RPC_TIMEOUT_MS, headers: { "Content-Type": "application/json" } }
+      { requireNonNullIds: [1, 2] }
     );
-    const transaction = rpcResult(transactionResponse?.data, 1);
-    const receipt = rpcResult(transactionResponse?.data, 2);
+    const transaction = rpcResult(transactionResponse.rows, 1);
+    const receipt = rpcResult(transactionResponse.rows, 2);
     if (!transaction) {
       return { phase: "submission_pending", recipients: [], submittedAt: null, earliestExecuteAt: null, waitTimeSeconds: null };
     }
@@ -163,8 +210,7 @@ async function getExternalDistributionExecutionInfo(txHash) {
     }
 
     const blockNumber = String(receipt.blockNumber || transaction.blockNumber || "");
-    const stateResponse = await axios.post(
-      E2E_BASE_RPC_URL,
+    const stateResponse = await requestRpcBatch(
       [
         { jsonrpc: "2.0", id: 3, method: "eth_getBlockByNumber", params: [blockNumber, false] },
         {
@@ -183,11 +229,11 @@ async function getExternalDistributionExecutionInfo(txHash) {
           }, "latest"],
         },
       ],
-      { timeout: E2E_CHAIN_RPC_TIMEOUT_MS, headers: { "Content-Type": "application/json" } }
+      { preferredUrl: transactionResponse.url, requireNonNullIds: [3, 4, 5] }
     );
-    const block = rpcResult(stateResponse?.data, 3);
-    const waitTimeResult = rpcResult(stateResponse?.data, 4);
-    const submittedDataResult = rpcResult(stateResponse?.data, 5);
+    const block = rpcResult(stateResponse.rows, 3);
+    const waitTimeResult = rpcResult(stateResponse.rows, 4);
+    const submittedDataResult = rpcResult(stateResponse.rows, 5);
     const blockTimestamp = hexToNumber(block?.timestamp);
     const waitTimeSeconds = waitTimeResult
       ? distributionContractInterface.decodeFunctionResult("waitTime", waitTimeResult)[0].toNumber()

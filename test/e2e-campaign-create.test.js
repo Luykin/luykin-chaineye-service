@@ -52,9 +52,9 @@ mockModule("src/models/postgres-start.js", {
 mockModule("src/echohunt/e2e/services/e2ePaymentService.js", {
   calculateDepositAmounts: (rewards) => ({
     rewards,
-    fees: rewards * 0.1,
-    depositRewards: rewards * 1.1,
-    feePercentage: 10,
+    fees: rewards * 0.2,
+    depositRewards: rewards * 1.2,
+    feePercentage: 20,
   }),
   createExternalPaymentOrder: async (options) => {
     state.paymentCalls.push(options);
@@ -97,7 +97,11 @@ test("replaces the creator's pending campaign with the next payment sequence", a
 
   assert.equal(result.status, true);
   assert.equal(result.campaign_sequence, 2);
+  assert.equal(result.fee_percentage, 20);
+  assert.equal(result.fees, 100);
+  assert.equal(result.deposit_rewards, 600);
   assert.equal(state.paymentCalls[0].campaignSequence, 2);
+  assert.equal(state.paymentCalls[0].depositRewards, 600);
   assert.deepEqual(state.destroyed[0].where, {
     tweet_id: "123",
     user_id: "111",
@@ -105,6 +109,7 @@ test("replaces the creator's pending campaign with the next payment sequence", a
   });
   assert.equal(state.created[0].values.campaign_sequence, 2);
   assert.equal(state.created[0].values.status, "pending");
+  assert.equal(state.created[0].values.fees, 100);
 });
 
 test("persists every create option and ignores a client-supplied creator id", async () => {

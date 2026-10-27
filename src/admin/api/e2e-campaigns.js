@@ -345,6 +345,7 @@ function serializeSettlementItem(row) {
 
 function serializeSettlement(row, items = [], distributionExecution = null) {
   const item = row.toJSON ? row.toJSON() : row;
+  const storedExecution = item.provider_response?.distribution_execution || null;
   return {
     id: String(item.id),
     campaignAddress: String(item.campaign_address),
@@ -371,7 +372,8 @@ function serializeSettlement(row, items = [], distributionExecution = null) {
     confirmedAt: toIso(item.confirmed_at),
     lastError: item.last_error || null,
     providerResponse: item.provider_response || null,
-    distributionExecution,
+    completionSource: item.provider_response?.completion_source || null,
+    distributionExecution: distributionExecution || storedExecution,
     items: items.map(serializeSettlementItem),
   };
 }

@@ -238,6 +238,7 @@ export interface E2eSettlement {
   confirmedAt: string | null;
   lastError: string | null;
   providerResponse: unknown;
+  completionSource: "chain_executed" | "timeout_72h" | null;
   distributionExecution: E2eDistributionExecution | null;
   items: E2eSettlementItem[];
 }
