@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { ethers } = require("ethers");
 const { DATA_SERVICE_BASE_URL } = require("../../../xhunt/constants/dataService");
 const {
   EVM_ADDRESS_PATTERN,
@@ -14,6 +15,19 @@ const E2E_V2_API_TIMEOUT_MS = Math.max(
   Number(process.env.E2E_V2_API_TIMEOUT_MS || 10000) || 10000
 );
 const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/;
+const E2E_BASE_RPC_URL = String(process.env.E2E_BASE_RPC_URL || "https://mainnet.base.org").trim();
+const E2E_CHAIN_RPC_TIMEOUT_MS = Math.max(
+  1000,
+  Number(process.env.E2E_CHAIN_RPC_TIMEOUT_MS || 6000) || 6000
+);
+const DISTRIBUTION_CHAIN_CACHE_TTL_MS = 15000;
+const distributionChainCache = new Map();
+const distributionContractInterface = new ethers.utils.Interface([
+  "function submitDisperseList(bytes32,address,address[],uint256[])",
+  "function waitTime() view returns(uint256)",
+  "function submittedData(bytes32) view returns(uint256,address)",
+]);
+const SUBMIT_DISPERSE_SELECTOR = distributionContractInterface.getSighash("submitDisperseList").toLowerCase();
 
 /**
  * 计算活动服务费与总充值金额
@@ -83,6 +97,130 @@ function normalizePaymentApiError(error, fallbackMessage) {
     fallbackMessage,
     upstreamStatus
   );
+}
+
+function decodeDistributionSubmission(transaction) {
+  const input = String(transaction?.input || "");
+  if (!transaction?.to || input.slice(0, 10).toLowerCase() !== SUBMIT_DISPERSE_SELECTOR) return null;
+  try {
+    const decoded = distributionContractInterface.decodeFunctionData("submitDisperseList", input);
+    const targets = Array.from(decoded[2] || []);
+    const amounts = Array.from(decoded[3] || []);
+    if (targets.length !== amounts.length) return null;
+    return {
+      contractAddress: ethers.utils.getAddress(transaction.to),
+      salt: String(decoded[0]),
+      tokenAddress: ethers.utils.getAddress(decoded[1]),
+      recipients: targets.map((target, index) => ({
+        address: ethers.utils.getAddress(target),
+        amount: ethers.utils.formatUnits(amounts[index], 6),
+      })),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function rpcResult(rows, id) {
+  const row = Array.isArray(rows) ? rows.find((item) => item?.id === id) : null;
+  if (!row || row.error) return null;
+  return row.result ?? null;
+}
+
+function hexToNumber(value) {
+  if (typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value)) return null;
+  const result = Number(BigInt(value));
+  return Number.isSafeInteger(result) ? result : null;
+}
+
+async function getExternalDistributionExecutionInfo(txHash) {
+  const normalizedHash = String(txHash || "").trim();
+  if (!TX_HASH_PATTERN.test(normalizedHash)) return null;
+  const cached = distributionChainCache.get(normalizedHash.toLowerCase());
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  try {
+    const transactionResponse = await axios.post(
+      E2E_BASE_RPC_URL,
+      [
+        { jsonrpc: "2.0", id: 1, method: "eth_getTransactionByHash", params: [normalizedHash] },
+        { jsonrpc: "2.0", id: 2, method: "eth_getTransactionReceipt", params: [normalizedHash] },
+      ],
+      { timeout: E2E_CHAIN_RPC_TIMEOUT_MS, headers: { "Content-Type": "application/json" } }
+    );
+    const transaction = rpcResult(transactionResponse?.data, 1);
+    const receipt = rpcResult(transactionResponse?.data, 2);
+    if (!transaction) {
+      return { phase: "submission_pending", recipients: [], submittedAt: null, earliestExecuteAt: null, waitTimeSeconds: null };
+    }
+    const submission = decodeDistributionSubmission(transaction);
+    if (!submission) return null;
+    if (!receipt) {
+      return { ...submission, phase: "submission_pending", submittedAt: null, earliestExecuteAt: null, waitTimeSeconds: null };
+    }
+    if (String(receipt.status).toLowerCase() !== "0x1") {
+      return { ...submission, phase: "submission_failed", submittedAt: null, earliestExecuteAt: null, waitTimeSeconds: null };
+    }
+
+    const blockNumber = String(receipt.blockNumber || transaction.blockNumber || "");
+    const stateResponse = await axios.post(
+      E2E_BASE_RPC_URL,
+      [
+        { jsonrpc: "2.0", id: 3, method: "eth_getBlockByNumber", params: [blockNumber, false] },
+        {
+          jsonrpc: "2.0",
+          id: 4,
+          method: "eth_call",
+          params: [{ to: submission.contractAddress, data: distributionContractInterface.encodeFunctionData("waitTime") }, "latest"],
+        },
+        {
+          jsonrpc: "2.0",
+          id: 5,
+          method: "eth_call",
+          params: [{
+            to: submission.contractAddress,
+            data: distributionContractInterface.encodeFunctionData("submittedData", [submission.salt]),
+          }, "latest"],
+        },
+      ],
+      { timeout: E2E_CHAIN_RPC_TIMEOUT_MS, headers: { "Content-Type": "application/json" } }
+    );
+    const block = rpcResult(stateResponse?.data, 3);
+    const waitTimeResult = rpcResult(stateResponse?.data, 4);
+    const submittedDataResult = rpcResult(stateResponse?.data, 5);
+    const blockTimestamp = hexToNumber(block?.timestamp);
+    const waitTimeSeconds = waitTimeResult
+      ? distributionContractInterface.decodeFunctionResult("waitTime", waitTimeResult)[0].toNumber()
+      : null;
+    const currentSubmitTime = submittedDataResult
+      ? distributionContractInterface.decodeFunctionResult("submittedData", submittedDataResult)[0].toNumber()
+      : null;
+    const submittedAt = blockTimestamp ? new Date(blockTimestamp * 1000).toISOString() : null;
+    const earliestExecuteAt = blockTimestamp && waitTimeSeconds !== null
+      ? new Date((blockTimestamp + waitTimeSeconds) * 1000).toISOString()
+      : null;
+    const phase = currentSubmitTime === 0
+      ? "executed"
+      : currentSubmitTime === null || !earliestExecuteAt
+        ? "unknown"
+        : Date.now() >= new Date(earliestExecuteAt).getTime()
+          ? "executable"
+          : "waiting";
+    const value = {
+      ...submission,
+      phase,
+      submittedAt,
+      earliestExecuteAt,
+      waitTimeSeconds,
+    };
+    distributionChainCache.set(normalizedHash.toLowerCase(), {
+      value,
+      expiresAt: Date.now() + DISTRIBUTION_CHAIN_CACHE_TTL_MS,
+    });
+    return value;
+  } catch (_) {
+    return null;
+  }
 }
 
 function validatePaymentResponse(data, expectedAddress = null) {
@@ -252,6 +390,8 @@ module.exports = {
   E2E_V2_API_BASE_URL,
   calculateDepositAmounts,
   createExternalPaymentOrder,
+  decodeDistributionSubmission,
+  getExternalDistributionExecutionInfo,
   getExternalDistributionStatus,
   submitExternalDistribution,
   verifyExternalPayment,

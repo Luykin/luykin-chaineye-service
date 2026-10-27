@@ -201,6 +201,17 @@ export interface E2eSettlementItem {
 
 export type E2eSettlementStatus = "draft" | "approved" | "submitting" | "submitted" | "confirmed" | "completed_no_payout" | "failed" | "superseded";
 
+export interface E2eDistributionExecution {
+  phase: "submission_pending" | "submission_failed" | "waiting" | "executable" | "executed" | "unknown";
+  contractAddress?: string;
+  salt?: string;
+  tokenAddress?: string;
+  recipients: Array<{ address: string; amount: string }>;
+  submittedAt: string | null;
+  earliestExecuteAt: string | null;
+  waitTimeSeconds: number | null;
+}
+
 export interface E2eSettlement {
   id: string;
   campaignAddress: string;
@@ -227,6 +238,7 @@ export interface E2eSettlement {
   confirmedAt: string | null;
   lastError: string | null;
   providerResponse: unknown;
+  distributionExecution: E2eDistributionExecution | null;
   items: E2eSettlementItem[];
 }
 

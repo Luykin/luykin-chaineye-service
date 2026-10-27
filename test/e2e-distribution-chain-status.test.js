@@ -1,0 +1,30 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const {
+  decodeDistributionSubmission,
+} = require("../src/echohunt/e2e/services/e2ePaymentService");
+
+test("decodes the on-chain E2E pending distribution list", () => {
+  const result = decodeDistributionSubmission({
+    to: "0xdddddddd4c6b351a5368cbf31adb5daa0e5c1585",
+    input: "0x16f81bd145a955ce2274fcfd178b112faeddca58a41b7a1ea6cec4d552780a4fd19a3bdf000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda02913000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000000020000000000000000000000001027eddc76efd67fee4bb6e32688cb6bc3604624000000000000000000000000725a55cab4a586dfc8c628c00d1199dc5637d924000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000186a000000000000000000000000000000000000000000000000000000000000f4240",
+  });
+
+  assert.deepEqual(result, {
+    contractAddress: "0xdDDDDdDD4c6b351a5368cBf31aDB5DAA0E5C1585",
+    salt: "0x45a955ce2274fcfd178b112faeddca58a41b7a1ea6cec4d552780a4fd19a3bdf",
+    tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    recipients: [
+      { address: "0x1027EDdC76EfD67FeE4BB6e32688cB6bC3604624", amount: "0.1" },
+      { address: "0x725a55cab4A586dFC8c628c00D1199Dc5637d924", amount: "1.0" },
+    ],
+  });
+});
+
+test("ignores unrelated transactions", () => {
+  assert.equal(decodeDistributionSubmission({
+    to: "0xdddddddd4c6b351a5368cbf31adb5daa0e5c1585",
+    input: "0x12345678",
+  }), null);
+});

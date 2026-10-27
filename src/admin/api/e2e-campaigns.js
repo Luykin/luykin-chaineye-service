@@ -14,7 +14,10 @@ const {
 } = require("../../models/postgres-start");
 const { logAdminAction } = require("../../xhunt/api/stats-routes/shared");
 const { forceActivateE2eCampaign } = require("../../echohunt/e2e/services/e2eService");
-const { verifyExternalPayment } = require("../../echohunt/e2e/services/e2ePaymentService");
+const {
+  getExternalDistributionExecutionInfo,
+  verifyExternalPayment,
+} = require("../../echohunt/e2e/services/e2ePaymentService");
 const {
   getE2ePublishAccessMode,
   grantE2ePublishAccess,
@@ -337,7 +340,7 @@ function serializeSettlementItem(row) {
   };
 }
 
-function serializeSettlement(row, items = []) {
+function serializeSettlement(row, items = [], distributionExecution = null) {
   const item = row.toJSON ? row.toJSON() : row;
   return {
     id: String(item.id),
@@ -365,13 +368,18 @@ function serializeSettlement(row, items = []) {
     confirmedAt: toIso(item.confirmed_at),
     lastError: item.last_error || null,
     providerResponse: item.provider_response || null,
+    distributionExecution,
     items: items.map(serializeSettlementItem),
   };
 }
 
 async function loadSettlementResponse(address) {
   const detail = await getSettlementDetail(address);
-  return detail ? serializeSettlement(detail.settlement, detail.items) : null;
+  if (!detail) return null;
+  const distributionExecution = detail.settlement.tx_hash
+    ? await getExternalDistributionExecutionInfo(detail.settlement.tx_hash)
+    : null;
+  return serializeSettlement(detail.settlement, detail.items, distributionExecution);
 }
 
 async function computeStats(address, { transaction } = {}) {
