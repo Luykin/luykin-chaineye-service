@@ -1,4 +1,4 @@
-const { Op, fn, col } = require("sequelize");
+const { Op, fn, col, where: sequelizeWhere } = require("sequelize");
 const { E2eList, E2eRecord, E2eTweet, pgInstance } = require("../../../models/postgres-start");
 const {
   calculateDepositAmounts,
@@ -7,7 +7,7 @@ const {
 } = require("./e2ePaymentService");
 const { examineE2eTweet, parseTweetInput } = require("./e2eExamineService");
 const { validateE2eCampaignRewards } = require("./e2eRewardsPolicy");
-const { EVM_ADDRESS_PATTERN } = require("./e2eMoney");
+const { EVM_ADDRESS_PATTERN, ZERO_ADDRESS } = require("./e2eMoney");
 const { normalizeScoringConfig } = require("./e2eScoringConfig");
 const {
   getEchohuntTweetDetail,
@@ -340,6 +340,27 @@ function e2eRegistrationError(code, status, publicMessage) {
   return error;
 }
 
+function payoutAddressInUseError() {
+  return e2eRegistrationError(
+    "E2E_PAYOUT_ADDRESS_IN_USE",
+    409,
+    "This payout address is already used by another participant"
+  );
+}
+
+async function findE2ePayoutAddressRegistration(campaignAddress, payoutAddress) {
+  return E2eRecord.findOne({
+    where: {
+      address: String(campaignAddress),
+      [Op.and]: sequelizeWhere(
+        fn("LOWER", col("user_address")),
+        String(payoutAddress).toLowerCase()
+      ),
+    },
+    attributes: ["user_id"],
+  });
+}
+
 async function findE2eCampaignForRegistration({ address, tweetId } = {}) {
   const normalizedAddress = String(address || "").trim();
   const normalizedTweetId = String(tweetId || "").trim();
@@ -442,8 +463,35 @@ async function registerE2eParticipant(payload = {}, options = {}) {
   if (!userAddress) {
     throw e2eRegistrationError("E2E_EVM_ADDRESS_REQUIRED", 400, "Please enter an EVM payout address");
   }
-  if (!EVM_ADDRESS_PATTERN.test(userAddress)) {
+  if (!EVM_ADDRESS_PATTERN.test(userAddress) || userAddress.toLowerCase() === ZERO_ADDRESS) {
     throw e2eRegistrationError("E2E_INVALID_EVM_ADDRESS", 400, "Please enter a valid EVM payout address");
+  }
+  const normalizedUserAddress = userAddress.toLowerCase();
+  const feeRecipientAddress = String(process.env.E2E_FEE_RECIPIENT_ADDRESS || "").trim();
+  if (
+    !EVM_ADDRESS_PATTERN.test(feeRecipientAddress)
+    || feeRecipientAddress.toLowerCase() === ZERO_ADDRESS
+  ) {
+    throw e2eRegistrationError(
+      "E2E_FEE_RECIPIENT_MISSING",
+      503,
+      "The service fee recipient address is not configured"
+    );
+  }
+  if (normalizedUserAddress === feeRecipientAddress.toLowerCase()) {
+    throw e2eRegistrationError(
+      "E2E_FEE_RECIPIENT_ADDRESS_NOT_ALLOWED",
+      400,
+      "The service fee recipient address cannot be used as a payout address"
+    );
+  }
+
+  const payoutAddressRegistration = await findE2ePayoutAddressRegistration(
+    campaign.address,
+    normalizedUserAddress
+  );
+  if (payoutAddressRegistration && String(payoutAddressRegistration.user_id) !== userId) {
+    throw payoutAddressInUseError();
   }
 
   const rankEligibility = await evaluateE2eRankEligibility(campaign.target, userId);
@@ -476,21 +524,40 @@ async function registerE2eParticipant(payload = {}, options = {}) {
   });
 
   const now = new Date();
-  const created = await E2eRecord.create({
-    tweet_id: String(campaign.tweet_id),
-    user_id: userId,
-    fan_rank: fanRank,
-    username: payload.username || null,
-    name: payload.name || payload.username || null,
-    point: 0,
-    profile_image_url: payload.profile_image_url || null,
-    rewards: null,
-    address: String(campaign.address),
-    user_address: userAddress,
-    create_time: now,
-    update_time: now,
-    explaination: null,
-  });
+  let created;
+  try {
+    created = await E2eRecord.create({
+      tweet_id: String(campaign.tweet_id),
+      user_id: userId,
+      fan_rank: fanRank,
+      username: payload.username || null,
+      name: payload.name || payload.username || null,
+      point: 0,
+      profile_image_url: payload.profile_image_url || null,
+      rewards: null,
+      address: String(campaign.address),
+      user_address: normalizedUserAddress,
+      create_time: now,
+      update_time: now,
+      explaination: null,
+    });
+  } catch (error) {
+    if (error?.name !== "SequelizeUniqueConstraintError") throw error;
+
+    const racedExisting = await E2eRecord.findOne({
+      where: { address: String(campaign.address), user_id: userId },
+    });
+    if (racedExisting) {
+      return { success: true, message: "已报名成功", data: racedExisting.toJSON() };
+    }
+
+    const racedPayoutAddressRegistration = await findE2ePayoutAddressRegistration(
+      campaign.address,
+      normalizedUserAddress
+    );
+    if (racedPayoutAddressRegistration) throw payoutAddressInUseError();
+    throw error;
+  }
 
   return {
     success: true,
