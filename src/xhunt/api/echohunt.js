@@ -58,7 +58,13 @@ const {
   loadCampaignConfigForRegistration,
   registerCampaignParticipant,
   fetchCampaignRankByDomain,
+  evaluateRankEligibility,
+  getCampaignDisplayDomains,
 } = require("../services/campaignRegistrationService");
+const {
+  fetchCreatorVerification,
+  submitCreatorVerification,
+} = require("../services/creatorVerificationService");
 const {
   getCustomLeaderboardData,
   getCustomUserActivityData,
@@ -1126,15 +1132,27 @@ async function fetchEchohuntRankSummary(twitterId) {
     }
   });
 
-  const creatorDomain = domains.find((domain) => byDomain[domain]?.isCreatorAuthed) || null;
-  const creatorAuth = creatorDomain ? byDomain[creatorDomain].creatorAuth : null;
+  const creatorStatusPriority = (domain) => {
+    const status = Number(byDomain[domain]?.creatorAuth?.status);
+    if (byDomain[domain]?.isCreatorAuthed || status === 2) return 5;
+    if (status === 1) return 4;
+    if (status === 3) return 3;
+    if (status === 4) return 2;
+    return byDomain[domain]?.creatorAuth ? 1 : 0;
+  };
+  const creatorAuthDomain = domains
+    .filter((domain) => creatorStatusPriority(domain) > 0)
+    .sort((left, right) => creatorStatusPriority(right) - creatorStatusPriority(left))[0] || null;
+  const creatorAuth = creatorAuthDomain ? byDomain[creatorAuthDomain].creatorAuth : null;
+  const approvedCreatorDomain = domains.find((domain) => byDomain[domain]?.isCreatorAuthed) || null;
 
   return {
     domains: byDomain,
     web3: byDomain.web3 || null,
     ai: byDomain.ai || null,
-    isCreatorAuthed: !!creatorDomain,
-    creatorDomain,
+    isCreatorAuthed: !!approvedCreatorDomain,
+    creatorDomain: approvedCreatorDomain,
+    creatorAuthDomain,
     creatorAuth,
     errors,
   };
@@ -1353,6 +1371,45 @@ router.post("/auth/logout", authenticateAuthCenterToken(), async (req, res) => {
     return sendError(res, error, "ECHOHUNT_LOGOUT_FAILED");
   }
 });
+
+router.get("/creator-verification", authenticateAuthCenterToken(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.set("Vary", "Authorization");
+  try {
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    const data = await fetchCreatorVerification(twitterIdentity?.twitterId);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "CREATOR_VERIFICATION_STATUS_FAILED", {
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+});
+
+router.post(
+  "/creator-verification/applications",
+  authenticateAuthCenterToken(),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.set("Vary", "Authorization");
+    try {
+      const twitterIdentity = getTwitterIdentityFromAuth(req);
+      const data = await submitCreatorVerification({
+        twitterId: twitterIdentity?.twitterId,
+        authCenterUserId: req.authCenter?.user?.id,
+        idempotencyKey: req.headers["idempotency-key"],
+        redisClient: req.redisClient,
+      });
+      return res.json({ success: true, data });
+    } catch (error) {
+      const retryAfterSeconds = Number(error.details?.retryAfterSeconds);
+      if (retryAfterSeconds > 0) res.set("Retry-After", String(Math.ceil(retryAfterSeconds)));
+      return sendError(res, error, "CREATOR_VERIFICATION_SUBMIT_FAILED", {
+        ...(error.details ? { details: error.details } : {}),
+      });
+    }
+  }
+);
 
 router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
   try {
@@ -1723,11 +1780,31 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
     const record = await findCampaignRecord(campaignKey);
     const normalizedCampaign = record?.campaignKey || campaignKey;
     if (!normalizedCampaign) throw publicError("CAMPAIGN_REQUIRED", 400);
+    res.set("Cache-Control", "no-store");
+    res.set("Vary", "Authorization");
+
+    const campaignConfig = record ? buildPluginCampaign(record, { channel: "echohunt" }) : null;
 
     const totalRegistrations = await CampaignRegistration.count({ where: { campaign: normalizedCampaign } }).catch(() => 0);
     const twitterIdentity = getTwitterIdentityFromAuth(req);
     if (!twitterIdentity?.twitterId) {
-      return res.json({ success: true, registered: false, totalRegistrations, user: null, registration: null, rank: null });
+      const rankEligibility = campaignConfig
+        ? await evaluateRankEligibility({
+            twitterId: null,
+            threshold: campaignConfig.threshold,
+            includeCreator: campaignConfig.includeCreator,
+            domains: getCampaignDisplayDomains(campaignConfig),
+          })
+        : null;
+      return res.json({
+        success: true,
+        registered: false,
+        totalRegistrations,
+        user: null,
+        registration: null,
+        rank: null,
+        rankEligibility,
+      });
     }
 
     const registration = await CampaignRegistration.findOne({
@@ -1747,6 +1824,15 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
         username: xhuntUser?.username || twitterIdentity.username,
       };
     }
+
+    const rankEligibility = campaignConfig
+      ? await evaluateRankEligibility({
+          twitterId: rankIdentity.twitterId,
+          threshold: campaignConfig.threshold,
+          includeCreator: campaignConfig.includeCreator,
+          domains: getCampaignDisplayDomains(campaignConfig),
+        })
+      : null;
 
     const historicalCampaigns = await findUserHistoricalCampaigns(rankIdentity).catch(() => []);
     let campaignHistory = historicalCampaigns.find((item) => item.campaignKey === normalizedCampaign || item.campaignKey === campaignKey) || null;
@@ -1778,10 +1864,10 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
         user: rankIdentity,
         registration: null,
         rank: campaignHistory,
+        rankEligibility,
       });
     }
 
-    res.set("Cache-Control", "private, max-age=80");
     return res.json({
       success: true,
       registered: true,
@@ -1789,6 +1875,7 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
       user: rankIdentity,
       registration: serializeRegistration(registration),
       rank: campaignHistory,
+      rankEligibility,
     });
   } catch (error) {
     return sendError(res, error, "ECHOHUNT_CAMPAIGN_ME_FAILED");

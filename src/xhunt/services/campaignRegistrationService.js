@@ -4,19 +4,20 @@ const { CampaignRegistration } = require("../../models/postgres-start");
 const { getManagedCampaignPayloadByKey } = require("./websiteCampaignService");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+const {
+  RANK_API_BY_DOMAIN,
+  evaluateRankEligibility,
+  fetchCampaignRankByDomain,
+  normalizeCreatorAuthPayload,
+  normalizeDisplayDomain,
+  rankResultMeetsThreshold,
+} = require("./rankEligibilityService");
 
 const INITIALIZE_CAMPAIGN_URL = `${DATA_SERVICE_BASE_URL}/pro/api/initialize_campaign`;
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400;
-const SPECIAL_AUTHORED_RANK = 9999999;
 const CAMPAIGN_NOT_ENABLED_MESSAGES = {
   "zh-CN": "活动尚未开始，敬请关注。",
   en: "This campaign has not started yet. Please stay tuned.",
-};
-
-const CAMPAIGN_DISPLAY_DOMAINS = new Set(["web3", "ai"]);
-const RANK_API_BY_DOMAIN = {
-  web3: `${DATA_SERVICE_BASE_URL}/fetch/twitter/rank`,
-  ai: `${DATA_SERVICE_BASE_URL}/fetch/ai/rank`,
 };
 
 function campaignRegistrationError(code, status = 400, publicMessage, details) {
@@ -64,13 +65,6 @@ function isCampaignTester(campaign, requestHandleOrViewer) {
   return list.some((item) => normalized.includes(normalizeTesterHandle(item)));
 }
 
-function normalizeDisplayDomain(value) {
-  if (Array.isArray(value)) return normalizeDisplayDomain(value[0]);
-  if (value === null || value === undefined || value === "") return "";
-  const normalized = String(value).trim().toLowerCase();
-  return CAMPAIGN_DISPLAY_DOMAINS.has(normalized) ? normalized : null;
-}
-
 function getCampaignDisplayDomains(campaign) {
   const list = Array.isArray(campaign?.displayDomains) ? campaign.displayDomains : ["web3"];
   const domains = list.map((item) => normalizeDisplayDomain(item)).filter(Boolean);
@@ -82,56 +76,9 @@ function matchesDisplayDomain(campaign, domain) {
   return getCampaignDisplayDomains(campaign).includes(domain);
 }
 
-function normalizeCreatorAuthPayload(rankData) {
-  const authCreator = rankData?.auth_creator || null;
-  const statusNumber = Number(authCreator?.status);
-  const kolRank = Number(rankData?.kolRank);
-  const hasStatus = Number.isFinite(statusNumber);
-  const isCreatorAuthed = statusNumber === 2 || kolRank === SPECIAL_AUTHORED_RANK;
-
-  return {
-    status: hasStatus ? statusNumber : null,
-    recordTime: authCreator?.record_time || authCreator?.recordTime || null,
-    twitterId: authCreator?.twitter_id || authCreator?.twitterId || null,
-    isCreatorAuthed,
-  };
-}
-
-function isRankValid(rank) {
-  return Number.isFinite(rank) && rank > 0;
-}
-
-async function fetchCampaignRankByDomain(domain, twitterId) {
-  const apiBase = RANK_API_BY_DOMAIN[domain];
-  if (!apiBase) throw new Error(`Unsupported rank domain: ${domain}`);
-
-  const rankApiUrl = `${apiBase}?user_ids=${encodeURIComponent(twitterId)}`;
-  const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
-  const list = rankResponse?.data?.data?.data;
-
-  if (!Array.isArray(list) || list.length === 0) {
-    throw new Error(`Empty ${domain} ranking data`);
-  }
-
-  const userRankData = list[0];
-  const creatorAuth = normalizeCreatorAuthPayload(userRankData);
-  return {
-    domain,
-    kolRank: Number(userRankData.kolRank),
-    isCreator: creatorAuth.isCreatorAuthed,
-    isCreatorAuthed: creatorAuth.isCreatorAuthed,
-    creatorAuth,
-  };
-}
-
-function rankResultMeetsThreshold(result, threshold, includeCreator) {
-  if (isRankValid(result.kolRank) && result.kolRank <= threshold) return true;
-  return !!includeCreator && result.isCreator;
-}
-
 function formatRankForMessage(result) {
   if (!result) return "unknown";
-  return isRankValid(result.kolRank) ? result.kolRank : "unranked";
+  return Number.isFinite(result.kolRank) && result.kolRank > 0 ? result.kolRank : "unranked";
 }
 
 async function validateCampaignThreshold(campaign, twitterId) {
@@ -141,34 +88,33 @@ async function validateCampaignThreshold(campaign, twitterId) {
     throw campaignRegistrationError("INVALID_TWITTER_ID", 400, "Invalid Twitter ID");
   }
 
-  const rankDomains = getCampaignDisplayDomains(campaign).filter((domain) => RANK_API_BY_DOMAIN[domain]);
-  const domainsToCheck = rankDomains.length ? rankDomains : ["web3"];
-  const rankResults = await Promise.allSettled(domainsToCheck.map((domain) => fetchCampaignRankByDomain(domain, normalizedTwitterId)));
-  const fulfilledResults = rankResults.filter((result) => result.status === "fulfilled").map((result) => result.value);
-  const rejectedResults = rankResults.filter((result) => result.status === "rejected");
-  const meetsThreshold = fulfilledResults.some((result) =>
-    rankResultMeetsThreshold(result, campaign.threshold, campaign.includeCreator)
-  );
+  const domainsToCheck = getCampaignDisplayDomains(campaign).filter((domain) => RANK_API_BY_DOMAIN[domain]);
+  const eligibility = await evaluateRankEligibility({
+    twitterId: normalizedTwitterId,
+    threshold: campaign.threshold,
+    includeCreator: campaign.includeCreator,
+    domains: domainsToCheck,
+  });
 
-  if (meetsThreshold) {
-    return { ranks: fulfilledResults, domains: domainsToCheck };
+  if (eligibility.status === "ELIGIBLE" || eligibility.status === "NOT_REQUIRED") {
+    return { ranks: eligibility.ranks, domains: eligibility.domains, eligibility };
   }
 
-  if (!fulfilledResults.length || rejectedResults.length > 0) {
+  if (eligibility.status === "UNKNOWN") {
     throw campaignRegistrationError(
       "RANK_DATA_UNAVAILABLE",
       502,
       "Failed to fetch user ranking data",
-      rejectedResults.map((item) => item.reason?.message || String(item.reason))
+      eligibility
     );
   }
 
-  const rankSummary = fulfilledResults.map((result) => `${result.domain}: ${formatRankForMessage(result)}`).join(", ");
+  const rankSummary = eligibility.ranks.map((result) => `${result.domain}: ${formatRankForMessage(result)}`).join(", ");
   throw campaignRegistrationError(
     "THRESHOLD_NOT_MET",
     400,
     `Does not meet registration threshold: KOL rank must be <= ${campaign.threshold}, current rank is ${rankSummary}`,
-    { threshold: campaign.threshold, ranks: fulfilledResults }
+    eligibility
   );
 }
 
@@ -427,6 +373,7 @@ module.exports = {
   normalizeCreatorAuthPayload,
   rankResultMeetsThreshold,
   fetchCampaignRankByDomain,
+  evaluateRankEligibility,
   validateCampaignThreshold,
   validateTwitterProfileQuality,
   normalizeRegistrationContact,

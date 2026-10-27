@@ -100,6 +100,8 @@ router.get("/tasks/:id", optionalAuth, async (req, res) => {
     if (!item) {
       return res.status(404).json({ status: false, message: "任务不存在" });
     }
+    res.set("Cache-Control", "no-store");
+    res.set("Vary", "Authorization");
     return res.json({ status: true, data: item });
   } catch (error) {
     console.error("[echohunt/e2e] getE2eActivityDetail failed:", error);
@@ -188,6 +190,7 @@ function sendE2eRegistrationError(res, error, fallbackCode) {
     ...(Number(error.retryAfterSeconds) > 0
       ? { retryAfterSeconds: Math.ceil(Number(error.retryAfterSeconds)) }
       : {}),
+    ...(error.details ? { details: error.details } : {}),
   });
 }
 

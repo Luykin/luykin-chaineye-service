@@ -14,8 +14,7 @@ const {
   verifyEchohuntTwitterFollowTask,
 } = require("../../../xhunt/services/twitter-echohunt");
 const {
-  fetchCampaignRankByDomain,
-  rankResultMeetsThreshold,
+  evaluateRankEligibility,
 } = require("../../../xhunt/services/campaignRegistrationService");
 
 const PUBLIC_CAMPAIGN_STATUSES = ["active", "review", "complete"];
@@ -56,6 +55,27 @@ function calculateCampaignEndTime(startTime, durationDays) {
     999
   );
   return new Date(endOfTargetDayUtc - ASIA_SHANGHAI_OFFSET_MS);
+}
+
+function getE2eRankRequirement(target) {
+  const normalizedTarget = Number(target || 0);
+  if (normalizedTarget === -1) {
+    return { threshold: 200000, includeCreator: true, domains: ["web3"] };
+  }
+  if (Number.isInteger(normalizedTarget) && normalizedTarget > 0) {
+    return { threshold: normalizedTarget, includeCreator: false, domains: ["web3"] };
+  }
+  return { threshold: null, includeCreator: false, domains: ["web3"] };
+}
+
+async function evaluateE2eRankEligibility(target, userId) {
+  const requirement = getE2eRankRequirement(target);
+  return evaluateRankEligibility({
+    twitterId: userId,
+    threshold: requirement.threshold,
+    includeCreator: requirement.includeCreator,
+    domains: requirement.domains,
+  });
 }
 
 function formatCampaignItem(campaign, signups = [], tweetMap = new Map(), currentUserId = null) {
@@ -307,7 +327,9 @@ async function getE2eActivityDetail(idOrAddress, { userId = null } = {}) {
   const tweetMap = new Map();
   if (tweetInfo) tweetMap.set(String(tweetInfo.tweet_id), tweetInfo.toJSON());
 
-  return formatCampaignItem(campaign, signups, tweetMap, userId);
+  const item = formatCampaignItem(campaign, signups, tweetMap, userId);
+  item.rankEligibility = await evaluateE2eRankEligibility(item.detail.target, userId);
+  return item;
 }
 
 function e2eRegistrationError(code, status, publicMessage) {
@@ -424,42 +446,34 @@ async function registerE2eParticipant(payload = {}, options = {}) {
     throw e2eRegistrationError("E2E_INVALID_EVM_ADDRESS", 400, "Please enter a valid EVM payout address");
   }
 
-  const followVerification = await verifyE2eAuthorFollow(campaign, {
-    identity: options.identity,
-    twitterUserId: userId,
-    redisClient: options.redisClient,
-  });
-
-  let rankResult;
-  try {
-    rankResult = await fetchCampaignRankByDomain("web3", userId);
-  } catch {
+  const rankEligibility = await evaluateE2eRankEligibility(campaign.target, userId);
+  if (rankEligibility.status === "UNKNOWN") {
     throw e2eRegistrationError(
       "E2E_RANK_DATA_UNAVAILABLE",
       502,
       "实时排名服务暂时不可用，请稍后重试"
     );
   }
-
-  const rawFanRank = Number(rankResult?.kolRank);
-  const fanRank = Number.isFinite(rawFanRank) && rawFanRank > 0 ? rawFanRank : null;
-
-  const targetRank = Number(campaign.target || 0);
-  const threshold = targetRank === -1 ? 200000 : targetRank;
-  const includeCreator = targetRank === -1;
-  const meetsThreshold = rankResultMeetsThreshold(rankResult, threshold, includeCreator);
-  if ((targetRank > 0 || includeCreator) && !meetsThreshold) {
-    return {
-      success: false,
-      message: includeCreator
-        ? fanRank
-          ? `当前账号 XHunt 排名 (#${fanRank}) 且非认证创作者，未达到该任务要求的 Top 200000 或认证创作者门槛`
-          : "当前账号暂无有效 XHunt 排名且非认证创作者，未达到该任务要求的 Top 200000 或认证创作者门槛"
-        : fanRank
-          ? `当前账号 XHunt 排名 (#${fanRank}) 未达到该任务要求的 Top ${targetRank} 门槛`
-          : `当前账号暂无有效 XHunt 排名，未达到该任务要求的 Top ${targetRank} 门槛`,
-    };
+  if (rankEligibility.status === "INELIGIBLE") {
+    const error = e2eRegistrationError(
+      "E2E_RANK_REQUIREMENT_NOT_MET",
+      403,
+      rankEligibility.reason === "CREATOR_VERIFICATION_AVAILABLE"
+        ? "当前账号未达到排名要求，可先申请创作者认证"
+        : "当前账号未达到该任务的排名或创作者认证要求"
+    );
+    error.details = { rankEligibility };
+    throw error;
   }
+
+  const web3Rank = rankEligibility.ranks.find((item) => item.domain === "web3");
+  const fanRank = web3Rank?.kolRank || null;
+
+  const followVerification = await verifyE2eAuthorFollow(campaign, {
+    identity: options.identity,
+    twitterUserId: userId,
+    redisClient: options.redisClient,
+  });
 
   const now = new Date();
   const created = await E2eRecord.create({
@@ -699,6 +713,8 @@ module.exports = {
   getActiveTweetIds,
   listE2eActivities,
   getE2eActivityDetail,
+  getE2eRankRequirement,
+  evaluateE2eRankEligibility,
   verifyE2eAuthorFollow,
   registerE2eParticipant,
   createE2eCampaign,
