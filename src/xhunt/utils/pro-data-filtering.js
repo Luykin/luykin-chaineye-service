@@ -1,27 +1,82 @@
 const { getVersionFromRequest, isVersionGreaterOrEqual } = require("./version");
 const { getXUserId, checkLegacyPro } = require("./legacy-pro");
+const {
+  isRequestXHuntVip,
+  isRequestInternalTestUser,
+} = require("../constants/xhuntVip");
 
 // 最小版本号：只有 >= 0.4.05 的版本才启用数据裁切
 const MIN_VERSION_FOR_PRO = "0.4.05";
+const DELETED_TWEET_VIP_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DELETED_TWEET_HIDDEN_MESSAGE = "您暂时无法查看详细删帖内容";
+
+function applyDeletedTweetFiltering(req, data) {
+  if (!data || typeof data !== "object") {
+    return data;
+  }
+
+  // 内部用户不受删帖数据时间及内容限制。
+  if (isRequestInternalTestUser(req)) {
+    return data;
+  }
+
+  const items = data?.data?.data;
+  if (!Array.isArray(items)) {
+    return data;
+  }
+
+  const filtered = {
+    ...data,
+    data: {
+      ...data.data,
+    },
+  };
+
+  if (isRequestXHuntVip(req)) {
+    const now = Date.now();
+    const cutoff = now - DELETED_TWEET_VIP_WINDOW_MS;
+    filtered.data.data = items.filter((item) => {
+      const createTime = Date.parse(item?.create_time);
+      return (
+        Number.isFinite(createTime) && createTime >= cutoff && createTime <= now
+      );
+    });
+    return filtered;
+  }
+
+  // 保留数组长度供客户端展示条数，但不暴露任何原始推文详情。
+  filtered.data.data = items.map(() => ({
+    text: DELETED_TWEET_HIDDEN_MESSAGE,
+  }));
+  filtered.proMessage = DELETED_TWEET_HIDDEN_MESSAGE;
+  return filtered;
+}
 
 /**
  * Pro 用户数据裁切逻辑（统一管理）
  * 根据 req.isPro 状态和请求路径，对返回数据进行过滤
  *
- * Pro 功能列表（非 Pro 用户需要过滤）：
- * - 删帖功能：/public/fetch/tweet/deleted
+ * 数据权限功能列表：
+ * - 删帖功能：/public/fetch/tweet/deleted（按内部用户 / VIP 名单控制）
  * - 删除账户信息：/public/fetch/twitter/user（部分字段）
  * - 实时feeds流：后续实现
  * - 账户profile改变：/public/fetch/twitter/user（部分字段）
  * - 最近5条关注和被关注：/public/fetch/twitter/follow_relation
  *
- * 注意：只有版本号 >= 0.4.05 才会进行数据裁切，否则直接返回原始数据
+ * 注意：除删帖接口外，只有版本号 >= 0.4.05 才会进行数据裁切。
  *
  * @param {express.Request} req - Express 请求对象
  * @param {any} data - 原始响应数据
  * @returns {any} 过滤后的数据
  */
 function applyProDataFiltering(req, data) {
+  const path = req.path;
+
+  // 删帖接口使用内部用户 / VIP 名单控制，不受插件版本和付费 Pro 状态影响。
+  if (path === "/public/fetch/tweet/deleted") {
+    return applyDeletedTweetFiltering(req, data);
+  }
+
   // 检查版本号，如果版本号 < 0.4.05，直接返回原始数据，不进行裁切
   const version = getVersionFromRequest(req);
   if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
@@ -42,9 +97,7 @@ function applyProDataFiltering(req, data) {
   // 如果是老用户 Pro，不进行数据裁切，但添加提示信息
   if (isLegacyPro) {
     // 检查是否是需要特殊处理的接口
-    const path = req.path;
     const needsLegacyMessage =
-      path === "/public/fetch/tweet/deleted" ||
       path === "/public/fetch/twitter/user" ||
       path === "/public/fetch/twitter/follow_relation";
 
@@ -60,48 +113,7 @@ function applyProDataFiltering(req, data) {
   }
 
   // 非 Pro 用户且不是老用户，根据路径进行数据裁切
-  const path = req.path;
-
-  // 1. 删帖接口：/public/fetch/tweet/deleted
-  // 非 Pro 用户：将 data.data 数组中每个对象的 info 变成空对象，text 变成空字符串
-  // 数据结构：{ code: 200, message: "get data success", data: { data: [...] } }
-  if (path === "/public/fetch/tweet/deleted") {
-    if (data && typeof data === "object") {
-      const filtered = { ...data };
-
-      // 处理嵌套的 data.data 数组
-      if (
-        filtered.data &&
-        typeof filtered.data === "object" &&
-        Array.isArray(filtered.data.data)
-      ) {
-        // 遍历数组，对每个对象进行处理
-        filtered.data.data = filtered.data.data.map((item) => {
-          if (item && typeof item === "object") {
-            const filteredItem = { ...item };
-            // 将 info 变成空对象
-            if (filteredItem.info !== undefined) {
-              filteredItem.info = {};
-            }
-            // 将 text 变成空字符串
-            if (filteredItem.text !== undefined) {
-              filteredItem.text = "";
-            }
-            return filteredItem;
-          }
-          return item;
-        });
-      }
-
-      // 在 message 同级添加提示信息
-      filtered.proMessage = "Pro subscription required to get full information";
-
-      return filtered;
-    }
-    return data;
-  }
-
-  // 2. 账户profile接口：/public/fetch/twitter/user
+  // 1. 账户profile接口：/public/fetch/twitter/user
   // 非 Pro 用户：将 profile_his.history 数组中每个对象只保留 name 字段
   // 数据结构：{ code: 200, message: "get data success", data: { data: { profile_his: { history: [...] } } } }
   if (path === "/public/fetch/twitter/user") {
@@ -137,7 +149,7 @@ function applyProDataFiltering(req, data) {
     return data;
   }
 
-  // 3. 关注关系接口：/public/fetch/twitter/follow_relation
+  // 2. 关注关系接口：/public/fetch/twitter/follow_relation
   // 非 Pro 用户：将 followed_action 和 following_action 数组的前 5 条数据变成空对象
   // 数据结构：{ code: 200, message: "get data success", data: { data: { followed_action: [...], following_action: [...] } } }
   if (path === "/public/fetch/twitter/follow_relation") {

@@ -49,7 +49,7 @@ const ensureCorsHeaders = (req, res, allowMethods = "GET, POST, PUT, PATCH, DELE
   if (!res.hasHeader("Access-Control-Allow-Headers")) {
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Request-ID, X-Request-Timestamp, X-Device-Fingerprint, X-Request-Signature, X-Extension-Version, X-User-ID, X-Window-Location-Href"
+      "Content-Type, Authorization, X-Request-ID, X-Request-Timestamp, X-Device-Fingerprint, X-Request-Signature, X-Extension-Version, X-User-ID, X-Tw-Id, X-Window-Location-Href"
     );
   }
 };
@@ -243,6 +243,9 @@ async function proxyRequest(req, res, targetUrl, transformJson = null) {
         data = applyProDataFiltering(req, data);
       } catch (filterErr) {
         console.warn("Pro data filtering warning:", filterErr);
+        if (req.path === "/public/fetch/tweet/deleted") {
+          return res.status(500).json({ error: "删帖数据权限处理失败" });
+        }
       }
 
       if (typeof transformJson === "function") {
@@ -300,7 +303,10 @@ const DEFAULT_CACHE_PATHS = [/.*/];
 const SHORT_CACHE_PATHS = ["twitter/trending_tweets"];
 
 // 完全不缓存分组：需要实时返回或不允许缓存的接口放这里
-const NO_CACHE_PATHS = ["twitter/unfollow_relation"];
+const NO_CACHE_PATHS = [
+  "twitter/unfollow_relation",
+  "fetch/tweet/deleted",
+];
 
 // 私有人信息分组：private 缓存 1 分钟，避免共享缓存复用用户态响应
 const PRIVATE_USER_CACHE_PATHS = [
@@ -615,11 +621,10 @@ router.all(
   }
 );
 
-// 代理路由 - 删帖接口（需要 Pro 状态检查）
+// 代理路由 - 删帖接口
 router.all(
   "/public/fetch/tweet/deleted",
   authenticateTokenOptional,
-  checkProStatus,
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
