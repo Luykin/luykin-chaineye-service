@@ -10,6 +10,43 @@ const MIN_VERSION_FOR_PRO = "0.4.05";
 const DELETED_TWEET_VIP_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DELETED_TWEET_HIDDEN_MESSAGE = "您暂时无法查看详细删帖内容";
 
+function maskDeletedTweetValue(value, key = "") {
+  if (Array.isArray(value)) {
+    return value.map((item) => maskDeletedTweetValue(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([childKey, childValue]) => [
+        childKey,
+        maskDeletedTweetValue(childValue, childKey),
+      ])
+    );
+  }
+
+  if (typeof value === "string") {
+    // 保留列表渲染、关联和时间展示所需的技术字段。
+    if (key === "id" || key.endsWith("_id") || key === "create_time") {
+      return value;
+    }
+    if (key === "text" || key === "html") {
+      return DELETED_TWEET_HIDDEN_MESSAGE;
+    }
+    return "";
+  }
+
+  if (typeof value === "number") {
+    // 保留删帖状态，其他计数与版本信息不对外展示。
+    return key === "is_delete" ? value : 0;
+  }
+
+  if (typeof value === "boolean") {
+    return false;
+  }
+
+  return value;
+}
+
 function applyDeletedTweetFiltering(req, data) {
   if (!data || typeof data !== "object") {
     return data;
@@ -44,10 +81,10 @@ function applyDeletedTweetFiltering(req, data) {
     return filtered;
   }
 
-  // 保留数组长度供客户端展示条数，但不暴露任何原始推文详情。
-  filtered.data.data = items.map(() => ({
-    text: DELETED_TWEET_HIDDEN_MESSAGE,
-  }));
+  // 保留每条数据的完整结构和数组长度，只隐藏具体内容。
+  filtered.data.data = items.map((item) =>
+    maskDeletedTweetValue(item)
+  );
   filtered.proMessage = DELETED_TWEET_HIDDEN_MESSAGE;
   return filtered;
 }
