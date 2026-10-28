@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { Op, QueryTypes } = require("sequelize");
 const {
   pgInstance,
+  AuthCenterXhuntIdentity,
   CampaignRegistration,
   XhuntCampaignTweetSubmission,
 } = require("../../models/postgres-start");
@@ -373,7 +374,8 @@ function parseIsoDate(value, errorCode) {
 async function listSubmissionPage({ where, decodedCursor, normalizedLimit }) {
   const queryWhere = { ...where };
   if (decodedCursor) {
-    queryWhere[Op.and] = [{
+    const existingAnd = Array.isArray(queryWhere[Op.and]) ? queryWhere[Op.and] : [];
+    queryWhere[Op.and] = [...existingAnd, {
       [Op.or]: [
         { submittedAt: { [Op.lt]: decodedCursor.submittedAt } },
         { submittedAt: decodedCursor.submittedAt, id: { [Op.lt]: decodedCursor.id } },
@@ -390,7 +392,26 @@ async function listSubmissionPage({ where, decodedCursor, normalizedLimit }) {
   return { items: items.map(serializeSubmission), nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null };
 }
 
-async function listExternalTweetSubmissions({ campaignKey, leaderboardKey, from, to, cursor, limit }) {
+function buildSubmissionSearchCondition(query) {
+  const keyword = parseOptionalQueryString(query, "INVALID_QUERY");
+  if (!keyword) return null;
+  if (keyword.length > 200) {
+    throw submissionError("INVALID_QUERY", 400, "搜索关键词不能超过 200 个字符");
+  }
+  const escaped = keyword.replace(/[\\%_]/g, "\\$&");
+  const pattern = `%${escaped}%`;
+  return {
+    [Op.or]: [
+      { tweetTitle: { [Op.iLike]: pattern } },
+      { tweetId: { [Op.iLike]: pattern } },
+      { tweetUrl: { [Op.iLike]: pattern } },
+      { twitterUsername: { [Op.iLike]: pattern } },
+      { twitterId: { [Op.iLike]: pattern } },
+    ],
+  };
+}
+
+async function listExternalTweetSubmissions({ campaignKey, leaderboardKey, from, to, cursor, limit, query }) {
   const fromDate = parseIsoDate(from, "INVALID_FROM");
   const toDate = parseIsoDate(to, "INVALID_TO");
   if (fromDate && toDate && fromDate > toDate) {
@@ -405,11 +426,114 @@ async function listExternalTweetSubmissions({ campaignKey, leaderboardKey, from,
   if (fromDate) submittedAt[Op.gte] = fromDate;
   if (toDate) submittedAt[Op.lte] = toDate;
   if (Object.keys(submittedAt).length) where.submittedAt = submittedAt;
+  const searchCondition = buildSubmissionSearchCondition(query);
+  if (searchCondition) where[Op.and] = [searchCondition];
   return listSubmissionPage({
     where,
     decodedCursor: decodeCursor(cursor),
     normalizedLimit: normalizePageLimit(limit, tweetSubmissionContract.externalHistoryPage),
   });
+}
+
+async function replaceTweetSubmission({ id, campaignKey, tweetUrl }) {
+  const where = { id: String(id || "").trim() };
+  if (!where.id) throw submissionError("SUBMISSION_ID_REQUIRED", 400, "投稿记录 ID 不能为空");
+  if (campaignKey) where.campaignKey = String(campaignKey).trim();
+
+  const current = await XhuntCampaignTweetSubmission.findOne({ where });
+  if (!current) throw submissionError("TWEET_SUBMISSION_NOT_FOUND", 404, "投稿记录不存在或已删除");
+
+  const parsedTweet = parseTweetUrl(tweetUrl);
+  const twitterId = String(current.twitterId || "").trim();
+  const twitterIdentityRecord = twitterId
+    ? await AuthCenterXhuntIdentity.findOne({
+      where: {
+        provider: "twitter",
+        providerSubjectLower: twitterId.toLowerCase(),
+      },
+    })
+    : null;
+  if (!twitterIdentityRecord) {
+    throw submissionError(
+      "TWITTER_IDENTITY_NOT_FOUND",
+      409,
+      "未找到投稿用户的 X 授权，请让用户重新连接 X 后再重试"
+    );
+  }
+
+  let tweetDetail;
+  try {
+    tweetDetail = await getEchohuntTweetDetail(twitterIdentityRecord, parsedTweet.tweetId);
+  } catch (error) {
+    if (error?.message === "X_REAUTH_REQUIRED") {
+      throw submissionError(
+        "TWITTER_REAUTH_REQUIRED",
+        409,
+        "投稿用户的 X 授权已失效，请让用户重新连接 X 后再重试"
+      );
+    }
+    if (error?.status === 429) {
+      throw submissionError("TWITTER_RATE_LIMITED", 429, "X 接口暂时限流，请稍后重试");
+    }
+    throw submissionError("TWITTER_LOOKUP_FAILED", 502, "暂时无法读取新推文，请稍后重试");
+  }
+  if (!tweetDetail) {
+    throw submissionError("TWEET_NOT_FOUND", 404, TWEET_NOT_FOUND_MESSAGES);
+  }
+  if (!tweetDetail.authorId || tweetDetail.authorId !== twitterId) {
+    throw submissionError(
+      "TWEET_AUTHOR_MISMATCH",
+      403,
+      "新链接必须仍然是原投稿用户本人发布的推文"
+    );
+  }
+  const tweetTitle = buildTweetDisplayTitle(tweetDetail.text);
+
+  try {
+    return await pgInstance.transaction(async (transaction) => {
+      const locked = await XhuntCampaignTweetSubmission.findOne({
+        where,
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!locked) throw submissionError("TWEET_SUBMISSION_NOT_FOUND", 404, "投稿记录不存在或已删除");
+
+      const duplicate = await XhuntCampaignTweetSubmission.findOne({
+        where: {
+          campaignKey: locked.campaignKey,
+          leaderboardKey: locked.leaderboardKey,
+          xHuntUserId: locked.xHuntUserId,
+          tweetId: parsedTweet.tweetId,
+          id: { [Op.ne]: locked.id },
+        },
+        transaction,
+      });
+      if (duplicate) {
+        throw submissionError(
+          "TWEET_ALREADY_SUBMITTED",
+          409,
+          "该用户已经向这个榜单提交过这条推文"
+        );
+      }
+
+      const before = serializeSubmission(locked);
+      await locked.update({
+        ...parsedTweet,
+        tweetTitle: tweetTitle || null,
+        twitterUsername: tweetDetail.authorUsername || locked.twitterUsername || null,
+      }, { transaction });
+      return { before, submission: serializeSubmission(locked) };
+    });
+  } catch (error) {
+    if (error?.name === "SequelizeUniqueConstraintError") {
+      throw submissionError(
+        "TWEET_ALREADY_SUBMITTED",
+        409,
+        "该用户已经向这个榜单提交过这条推文"
+      );
+    }
+    throw error;
+  }
 }
 
 module.exports = {
@@ -419,4 +543,5 @@ module.exports = {
   createTweetSubmission,
   getUserTweetSubmissions,
   listExternalTweetSubmissions,
+  replaceTweetSubmission,
 };

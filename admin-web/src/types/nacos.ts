@@ -114,6 +114,13 @@ export interface CampaignTweetSubmissionListResponse {
   message?: string;
 }
 
+export interface CampaignTweetSubmissionUpdateResponse {
+  success: boolean;
+  data: CampaignTweetSubmissionItem;
+  error?: string;
+  message?: string;
+}
+
 export type CampaignRegistrationRankDomain = "web3" | "ai";
 
 export interface CampaignRegistrationRankItem {

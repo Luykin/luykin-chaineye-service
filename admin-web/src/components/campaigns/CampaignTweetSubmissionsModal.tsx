@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, DatePicker, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, DatePicker, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
 import type { Dayjs } from "dayjs";
 import { useAuth } from "@/app/auth";
+import { getApiErrorMessage } from "@/services/apiClient";
 import {
   deleteCampaignTweetSubmissionAdmin,
   fetchCampaignTweetSubmissionsAdmin,
+  updateCampaignTweetSubmissionAdmin,
 } from "@/services/nacos";
 import type { CampaignTweetSubmissionItem } from "@/types/nacos";
 
@@ -49,14 +51,20 @@ export function CampaignTweetSubmissionsModal({
   onToast?: (message: string, type?: "success" | "error" | "info") => void;
 }) {
   const { hasPermission } = useAuth();
+  const canEdit = hasPermission("campaign-tweet-submissions:edit");
   const canDelete = hasPermission("campaign-tweet-submissions:delete");
+  const [editForm] = Form.useForm<{ tweetUrl: string }>();
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<CampaignTweetSubmissionItem | null>(null);
   const [rows, setRows] = useState<CampaignTweetSubmissionItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [leaderboardKey, setLeaderboardKey] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [appliedLeaderboardKey, setAppliedLeaderboardKey] = useState("");
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState("");
   const [appliedDateRange, setAppliedDateRange] = useState<DateRange>(null);
   const [appliedPageSize, setAppliedPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pageIndex, setPageIndex] = useState(0);
@@ -72,12 +80,14 @@ export function CampaignTweetSubmissionsModal({
     cursor,
     nextPageIndex,
     nextLeaderboardKey = leaderboardKey,
+    nextSearchQuery = searchQuery,
     nextDateRange = dateRange,
     nextPageSize = pageSize,
   }: {
     cursor: string | null;
     nextPageIndex: number;
     nextLeaderboardKey?: string;
+    nextSearchQuery?: string;
     nextDateRange?: DateRange;
     nextPageSize?: number;
   }) {
@@ -86,6 +96,7 @@ export function CampaignTweetSubmissionsModal({
     try {
       const resp = await fetchCampaignTweetSubmissionsAdmin({
         campaign,
+        query: nextSearchQuery || undefined,
         leaderboardKey: nextLeaderboardKey || undefined,
         from: nextDateRange?.[0]?.toISOString(),
         to: nextDateRange?.[1]?.toISOString(),
@@ -95,6 +106,7 @@ export function CampaignTweetSubmissionsModal({
       setRows(resp.data.items || []);
       setNextCursor(resp.data.nextCursor || null);
       setPageIndex(nextPageIndex);
+      setAppliedSearchQuery(nextSearchQuery);
       setAppliedLeaderboardKey(nextLeaderboardKey);
       setAppliedDateRange(nextDateRange);
       setAppliedPageSize(nextPageSize);
@@ -111,9 +123,11 @@ export function CampaignTweetSubmissionsModal({
   useEffect(() => {
     if (!open || !campaign) return;
     setLeaderboardKey("");
+    setSearchQuery("");
     setDateRange(null);
     setPageSize(DEFAULT_PAGE_SIZE);
     setAppliedLeaderboardKey("");
+    setAppliedSearchQuery("");
     setAppliedDateRange(null);
     setAppliedPageSize(DEFAULT_PAGE_SIZE);
     setRows([]);
@@ -124,6 +138,7 @@ export function CampaignTweetSubmissionsModal({
       cursor: null,
       nextPageIndex: 0,
       nextLeaderboardKey: "",
+      nextSearchQuery: "",
       nextDateRange: null,
       nextPageSize: DEFAULT_PAGE_SIZE,
     });
@@ -137,6 +152,7 @@ export function CampaignTweetSubmissionsModal({
 
   function resetFilters() {
     setLeaderboardKey("");
+    setSearchQuery("");
     setDateRange(null);
     setPageSize(DEFAULT_PAGE_SIZE);
     setPageCursors([null]);
@@ -144,6 +160,7 @@ export function CampaignTweetSubmissionsModal({
       cursor: null,
       nextPageIndex: 0,
       nextLeaderboardKey: "",
+      nextSearchQuery: "",
       nextDateRange: null,
       nextPageSize: DEFAULT_PAGE_SIZE,
     });
@@ -157,6 +174,7 @@ export function CampaignTweetSubmissionsModal({
       cursor: nextCursor,
       nextPageIndex: targetPageIndex,
       nextLeaderboardKey: appliedLeaderboardKey,
+      nextSearchQuery: appliedSearchQuery,
       nextDateRange: appliedDateRange,
       nextPageSize: appliedPageSize,
     });
@@ -169,9 +187,43 @@ export function CampaignTweetSubmissionsModal({
       cursor: pageCursors[targetPageIndex] || null,
       nextPageIndex: targetPageIndex,
       nextLeaderboardKey: appliedLeaderboardKey,
+      nextSearchQuery: appliedSearchQuery,
       nextDateRange: appliedDateRange,
       nextPageSize: appliedPageSize,
     });
+  }
+
+  function openEditor(record: CampaignTweetSubmissionItem) {
+    setEditingRecord(record);
+    editForm.setFieldsValue({ tweetUrl: record.tweetUrl });
+  }
+
+  function closeEditor() {
+    if (savingId) return;
+    setEditingRecord(null);
+    editForm.resetFields();
+  }
+
+  async function saveEditedLink(values: { tweetUrl: string }) {
+    if (!editingRecord) return;
+    setSavingId(editingRecord.id);
+    try {
+      const response = await updateCampaignTweetSubmissionAdmin(
+        editingRecord.id,
+        values.tweetUrl.trim(),
+        campaign,
+      );
+      setRows((current) => current.map((row) => (
+        row.id === editingRecord.id ? response.data : row
+      )));
+      onToast?.("投稿链接和总结文案已更新", "success");
+      setEditingRecord(null);
+      editForm.resetFields();
+    } catch (error) {
+      onToast?.(`更新失败：${getApiErrorMessage(error, "未知错误")}`, "error");
+    } finally {
+      setSavingId(null);
+    }
   }
 
   async function deleteRecord(record: CampaignTweetSubmissionItem) {
@@ -187,6 +239,7 @@ export function CampaignTweetSubmissionsModal({
         cursor: pageCursors[targetPageIndex] || null,
         nextPageIndex: targetPageIndex,
         nextLeaderboardKey: appliedLeaderboardKey,
+        nextSearchQuery: appliedSearchQuery,
         nextDateRange: appliedDateRange,
         nextPageSize: appliedPageSize,
       });
@@ -238,6 +291,18 @@ export function CampaignTweetSubmissionsModal({
         <Card size="small">
           <Space wrap size={[12, 8]} align="end">
             <Space direction="vertical" size={4}>
+              <Text strong>搜索</Text>
+              <Input
+                aria-label="搜索投稿记录"
+                allowClear
+                style={{ width: 300 }}
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onPressEnter={queryFirstPage}
+                placeholder="链接、推文 ID、文案或用户"
+              />
+            </Space>
+            <Space direction="vertical" size={4}>
               <Text strong>榜单</Text>
               <Select
                 aria-label="榜单筛选"
@@ -277,7 +342,7 @@ export function CampaignTweetSubmissionsModal({
           loading={loading}
           dataSource={rows}
           pagination={false}
-          scroll={{ x: 1000 }}
+          scroll={{ x: 1180 }}
           locale={{ emptyText: "当前筛选条件下暂无投稿记录" }}
           columns={[
             {
@@ -319,30 +384,41 @@ export function CampaignTweetSubmissionsModal({
             {
               title: "操作",
               key: "actions",
-              width: 110,
+              width: 170,
               fixed: "right",
-              render: (_value, record) =>
-                canDelete ? (
-                  <Popconfirm
-                    title="删除投稿记录"
-                    description={`确认删除 @${record.user?.username || record.user?.twitterId || "该用户"} 的这条投稿？此操作不可恢复，删除后对应投稿限额会释放。`}
-                    okText="删除"
-                    cancelText="取消"
-                    okButtonProps={{ danger: true }}
-                    onConfirm={() => void deleteRecord(record)}
-                  >
+              render: (_value, record) => (
+                <Space size={8}>
+                  {canEdit ? (
                     <Button
                       size="small"
-                      danger
-                      disabled={!!deletingId && deletingId !== record.id}
-                      loading={deletingId === record.id}
+                      disabled={!!deletingId || !!savingId}
+                      onClick={() => openEditor(record)}
                     >
-                      删除
+                      编辑链接
                     </Button>
-                  </Popconfirm>
-                ) : (
-                  <Tag>无删除权限</Tag>
-                ),
+                  ) : null}
+                  {canDelete ? (
+                    <Popconfirm
+                      title="删除投稿记录"
+                      description={`确认删除 @${record.user?.username || record.user?.twitterId || "该用户"} 的这条投稿？此操作不可恢复，删除后对应投稿限额会释放。`}
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => void deleteRecord(record)}
+                    >
+                      <Button
+                        size="small"
+                        danger
+                        disabled={!!savingId || (!!deletingId && deletingId !== record.id)}
+                        loading={deletingId === record.id}
+                      >
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  ) : null}
+                  {!canEdit && !canDelete ? <Tag>无操作权限</Tag> : null}
+                </Space>
+              ),
             },
           ]}
         />
@@ -392,6 +468,46 @@ export function CampaignTweetSubmissionsModal({
           </Space>
         </Card>
       </Space>
+
+      <Modal
+        open={!!editingRecord}
+        title="更换投稿链接"
+        okText="校验并保存"
+        cancelText="取消"
+        confirmLoading={!!savingId}
+        onOk={() => editForm.submit()}
+        onCancel={closeEditor}
+        destroyOnClose
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Alert
+            type="info"
+            showIcon
+            message="保存后会自动更新总结文案"
+            description="系统会读取新推文并校验作者仍是原投稿用户；投稿人、榜单和投稿时间不会改变。"
+          />
+          <div>
+            <Text type="secondary">当前总结文案</Text>
+            <div style={{ marginTop: 4 }}>{editingRecord?.title || "暂无文案"}</div>
+          </div>
+          <Form form={editForm} layout="vertical" onFinish={saveEditedLink} preserve={false}>
+            <Form.Item
+              name="tweetUrl"
+              label="新投稿链接"
+              validateTrigger="onBlur"
+              rules={[
+                { required: true, whitespace: true, message: "请输入新投稿链接" },
+                {
+                  pattern: /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/.+\/status\/\d+(?:[/?#].*)?$/i,
+                  message: "请输入有效的 X/Twitter 推文链接",
+                },
+              ]}
+            >
+              <Input autoFocus placeholder="https://x.com/username/status/123456789" />
+            </Form.Item>
+          </Form>
+        </Space>
+      </Modal>
     </Modal>
   );
 }

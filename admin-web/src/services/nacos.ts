@@ -7,6 +7,7 @@ import type {
   WebsiteCampaignSyncResponse,
   CampaignRegistrationListResponse,
   CampaignTweetSubmissionListResponse,
+  CampaignTweetSubmissionUpdateResponse,
 } from "@/types/nacos";
 
 
@@ -228,6 +229,7 @@ export async function fetchCampaignTweetSubmissionsAdmin(params: {
   to?: string;
   cursor?: string;
   limit?: number;
+  query?: string;
 }) {
   const query = new URLSearchParams();
   query.set("campaign", params.campaign);
@@ -236,8 +238,22 @@ export async function fetchCampaignTweetSubmissionsAdmin(params: {
   if (params.from) query.set("from", params.from);
   if (params.to) query.set("to", params.to);
   if (params.cursor) query.set("cursor", params.cursor);
+  if (params.query?.trim()) query.set("q", params.query.trim());
   return apiRequest<CampaignTweetSubmissionListResponse>(
     `/api/xhunt/campaigns/internal/tweet-submissions?${query.toString()}`
+  );
+}
+
+export async function updateCampaignTweetSubmissionAdmin(id: string, tweetUrl: string, campaign?: string) {
+  const query = new URLSearchParams();
+  if (campaign?.trim()) query.set("campaign", campaign.trim());
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiRequest<CampaignTweetSubmissionUpdateResponse>(
+    `/api/xhunt/campaigns/internal/tweet-submissions/${encodeURIComponent(id)}${suffix}`,
+    {
+      method: "PATCH",
+      body: { tweetUrl },
+    },
   );
 }
 

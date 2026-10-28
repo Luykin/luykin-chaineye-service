@@ -41,6 +41,7 @@ const {
 } = require("../services/campaignLeaderboardService");
 const {
   listExternalTweetSubmissions,
+  replaceTweetSubmission,
 } = require("../services/campaignTweetSubmissionService");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
@@ -565,6 +566,7 @@ router.get(
         to: req.query.to,
         cursor: req.query.cursor,
         limit: req.query.limit,
+        query: req.query.q,
       });
       return res.json({ success: true, data: { campaignKey, ...data } });
     } catch (err) {
@@ -572,6 +574,46 @@ router.get(
       return res.status(err.status || 500).json({
         success: false,
         error: err.message || "服务器内部错误（admin campaign tweet submissions）",
+        message: err.publicMessage || undefined,
+      });
+    }
+  }
+);
+
+// 管理后台：替换投稿链接，并从新推文正文重新生成展示摘要
+router.patch(
+  "/internal/tweet-submissions/:id",
+  adminAuth,
+  requirePermission("campaign-tweet-submissions:edit"),
+  async (req, res) => {
+    const id = String(req.params.id || "").trim();
+    const campaignKey = normalizeCampaign(req.query.campaign);
+    try {
+      const result = await replaceTweetSubmission({
+        id,
+        campaignKey,
+        tweetUrl: req.body?.tweetUrl,
+      });
+      await writeAdminAudit(req, {
+        action: "campaign-tweet-submission-edit",
+        success: true,
+        message: `替换活动投稿链接成功: campaign=${result.submission.campaignKey}, leaderboard=${result.submission.leaderboardKey}, tweetId=${result.before.tweetId}->${result.submission.tweetId}`,
+        payload: {
+          before: result.before,
+          after: result.submission,
+        },
+      });
+      return res.json({ success: true, data: result.submission });
+    } catch (err) {
+      console.error("Admin campaign tweet submission edit error:", err);
+      await writeAdminAudit(req, {
+        action: "campaign-tweet-submission-edit",
+        success: false,
+        message: `替换活动投稿链接失败: submissionId=${id}, ${err.message || err}`,
+      });
+      return res.status(err.status || 500).json({
+        success: false,
+        error: err.message || "服务器内部错误（edit campaign tweet submission）",
         message: err.publicMessage || undefined,
       });
     }
