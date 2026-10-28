@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Avatar, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
+import { Alert, Avatar, Button, Card, Collapse, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
 import { DeleteOutlined, LinkOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -389,9 +389,6 @@ export function E2eCampaignsPage() {
     : [];
 
   return <PermissionGuard permission="e2e-campaigns"><PageSection title="E2E 活动管理" description="查看抓取与评分依据，审核不可变获奖名单，并在管理员确认后触发 E2E V2 链上分发。"><>{contextHolder}
-    <div style={{ marginBottom: 16 }}>
-      <E2eScoringConfigCard global />
-    </div>
     <Space size={8} wrap style={{ marginBottom: 12 }} role="group" aria-label="活动状态筛选">
       <Button
         type={statusFilter === undefined ? "primary" : "default"}
@@ -432,6 +429,17 @@ export function E2eCampaignsPage() {
       }} />}
     </Card>
     <E2ePublishAccessCard />
+    <Collapse
+      style={{ marginTop: 12 }}
+      items={[{
+        key: "global-scoring-config",
+        label: <Space wrap size={8}>
+          <Typography.Text strong>全局默认评分参数</Typography.Text>
+          <Typography.Text type="secondary">仅影响之后新建的活动</Typography.Text>
+        </Space>,
+        children: <E2eScoringConfigCard global />,
+      }]}
+    />
 
     <Drawer
       open={Boolean(detailAddress)}
