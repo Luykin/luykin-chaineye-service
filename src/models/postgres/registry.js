@@ -71,6 +71,7 @@ const E2eSettlementModel = require("../../echohunt/e2e/models/E2eSettlement");
 const E2eSettlementItemModel = require("../../echohunt/e2e/models/E2eSettlementItem");
 const E2eCrawlRunModel = require("../../echohunt/e2e/models/E2eCrawlRun");
 const E2eInteractionSubmissionModel = require("../../echohunt/e2e/models/E2eInteractionSubmission");
+const E2eScoringSettingModel = require("../../echohunt/e2e/models/E2eScoringSetting");
 
 function initModels(pgInstance) {
   return {
@@ -154,6 +155,7 @@ function initModels(pgInstance) {
     E2eSettlementItem: E2eSettlementItemModel(pgInstance),
     E2eCrawlRun: E2eCrawlRunModel(pgInstance),
     E2eInteractionSubmission: E2eInteractionSubmissionModel(pgInstance),
+    E2eScoringSetting: E2eScoringSettingModel(pgInstance),
   };
 }
 

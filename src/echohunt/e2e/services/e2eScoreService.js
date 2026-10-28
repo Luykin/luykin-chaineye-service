@@ -1,24 +1,12 @@
 const { E2eList, E2eRecord, E2eLog } = require("../../../models/postgres-start");
 const { buildScoreExplanation, normalizeDecayFloor, scoreSingleInteraction } = require("./e2eScoringPolicy");
-const { normalizeScoringConfig } = require("./e2eScoringConfig");
+const { computeRankWeight, normalizeScoringConfig } = require("./e2eScoringConfig");
 const { getLanguageExclusionReason, matchesLanguage } = require("./e2eInteractionEligibility");
 const {
   listCampaignInteractionSubmissions,
   refreshCampaignInteractionSubmissions,
   toScoringInteraction,
 } = require("./e2eInteractionSubmissionService");
-
-function computeRankWeight(fanRank, scoringConfig = {}) {
-  const config = normalizeScoringConfig(scoringConfig);
-  const rank = Number(fanRank);
-  if (!Number.isFinite(rank) || rank <= 0) return config.rankWeightDefault;
-  if (rank <= config.rankThreshold1) return config.rankWeightTop1000;
-  if (rank <= config.rankThreshold2) return config.rankWeightTop5000;
-  if (rank <= config.rankThreshold3) return config.rankWeightTop20000;
-  if (rank <= config.rankThreshold4) return config.rankWeightTop50000;
-  if (rank <= config.rankThreshold5) return config.rankWeightTop100000;
-  return config.rankWeightDefault;
-}
 
 function interactionOrder(a, b) {
   const aTime = new Date(a?.create_time || 0).getTime() || 0;

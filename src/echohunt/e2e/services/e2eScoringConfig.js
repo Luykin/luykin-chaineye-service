@@ -1,6 +1,6 @@
 const DEFAULT_E2E_SCORING_CONFIG = Object.freeze({
   timeDecayFloor: 0.7,
-  replyBase: 10,
+  replyBase: 5,
   quoteBase: 15,
   lengthCharsPerPoint: 12,
   lengthBonusCap: 25,
@@ -17,12 +17,14 @@ const DEFAULT_E2E_SCORING_CONFIG = Object.freeze({
   rankThreshold3: 20000,
   rankThreshold4: 50000,
   rankThreshold5: 100000,
+  rankThreshold6: 200000,
   rankWeightTop1000: 2.5,
   rankWeightTop5000: 2,
   rankWeightTop20000: 1.6,
   rankWeightTop50000: 1.35,
   rankWeightTop100000: 1.15,
-  rankWeightDefault: 1,
+  rankWeightTop200000: 1,
+  rankWeightDefault: 0.5,
 });
 
 const RULES = {
@@ -44,11 +46,13 @@ const RULES = {
   rankThreshold3: { min: 1, max: 1000000000, integer: true },
   rankThreshold4: { min: 1, max: 1000000000, integer: true },
   rankThreshold5: { min: 1, max: 1000000000, integer: true },
+  rankThreshold6: { min: 1, max: 1000000000, integer: true },
   rankWeightTop1000: { min: 0, max: 10 },
   rankWeightTop5000: { min: 0, max: 10 },
   rankWeightTop20000: { min: 0, max: 10 },
   rankWeightTop50000: { min: 0, max: 10 },
   rankWeightTop100000: { min: 0, max: 10 },
+  rankWeightTop200000: { min: 0, max: 10 },
   rankWeightDefault: { min: 0, max: 10 },
 };
 
@@ -88,9 +92,9 @@ function validateScoringConfig(value) {
     }
   }
   const normalized = normalizeScoringConfig(value);
-  const thresholds = [1, 2, 3, 4, 5].map((index) => normalized[`rankThreshold${index}`]);
+  const thresholds = [1, 2, 3, 4, 5, 6].map((index) => normalized[`rankThreshold${index}`]);
   if (thresholds.some((threshold, index) => index > 0 && threshold <= thresholds[index - 1])) {
-    const error = new Error("XHunt 排名档位上限必须按第 1 档到第 5 档严格递增");
+    const error = new Error("XHunt 排名档位上限必须按第 1 档到第 6 档严格递增");
     error.code = "E2E_INVALID_SCORING_CONFIG";
     error.status = 400;
     throw error;
@@ -98,8 +102,22 @@ function validateScoringConfig(value) {
   return normalized;
 }
 
+function computeRankWeight(fanRank, scoringConfig = {}) {
+  const config = normalizeScoringConfig(scoringConfig);
+  const rank = Number(fanRank);
+  if (!Number.isFinite(rank) || rank <= 0) return config.rankWeightDefault;
+  if (rank <= config.rankThreshold1) return config.rankWeightTop1000;
+  if (rank <= config.rankThreshold2) return config.rankWeightTop5000;
+  if (rank <= config.rankThreshold3) return config.rankWeightTop20000;
+  if (rank <= config.rankThreshold4) return config.rankWeightTop50000;
+  if (rank <= config.rankThreshold5) return config.rankWeightTop100000;
+  if (rank <= config.rankThreshold6) return config.rankWeightTop200000;
+  return config.rankWeightDefault;
+}
+
 module.exports = {
   DEFAULT_E2E_SCORING_CONFIG,
+  computeRankWeight,
   normalizeScoringConfig,
   validateScoringConfig,
 };

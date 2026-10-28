@@ -10,6 +10,7 @@ const { validateE2eCampaignRewards } = require("./e2eRewardsPolicy");
 const { normalizeE2eCampaignTarget } = require("./e2eCampaignPolicy");
 const { EVM_ADDRESS_PATTERN, ZERO_ADDRESS } = require("./e2eMoney");
 const { normalizeScoringConfig } = require("./e2eScoringConfig");
+const { getGlobalE2eScoringConfig } = require("./e2eScoringSettingService");
 const {
   getEchohuntTweetDetail,
   verifyEchohuntTwitterFollowTask,
@@ -623,6 +624,7 @@ async function createE2eCampaign(payload = {}, options = {}) {
   const rawLang = String(payload.lang || "all").trim();
   const lang = E2E_CAMPAIGN_LANGUAGES.has(rawLang) ? rawLang : "all";
   const retro = typeof payload.retro === "boolean" ? payload.retro : true;
+  const scoreConfig = await getGlobalE2eScoringConfig();
 
   const { rewards, fees, depositRewards, feePercentage } = calculateDepositAmounts(rewardsNum);
   const creatorCampaignWhere = {
@@ -680,6 +682,7 @@ async function createE2eCampaign(payload = {}, options = {}) {
       fees,
       lang,
       retro,
+      score_config: scoreConfig,
     }, { transaction });
   });
 

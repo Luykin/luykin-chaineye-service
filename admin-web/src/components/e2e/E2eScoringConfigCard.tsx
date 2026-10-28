@@ -4,14 +4,16 @@ import { InfoCircleOutlined, SaveOutlined, UndoOutlined } from "@ant-design/icon
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getApiErrorMessage } from "@/services/apiClient";
 import {
+  getGlobalE2eScoringConfig,
   getCampaignSettlement,
+  updateGlobalE2eScoringConfig,
   updateCampaignScoringConfig,
   type E2eScoringConfig,
 } from "@/services/e2e-campaigns";
 
 const defaults: E2eScoringConfig = {
   timeDecayFloor: 0.7,
-  replyBase: 10,
+  replyBase: 5,
   quoteBase: 15,
   lengthCharsPerPoint: 12,
   lengthBonusCap: 25,
@@ -28,12 +30,14 @@ const defaults: E2eScoringConfig = {
   rankThreshold3: 20000,
   rankThreshold4: 50000,
   rankThreshold5: 100000,
+  rankThreshold6: 200000,
   rankWeightTop1000: 2.5,
   rankWeightTop5000: 2,
   rankWeightTop20000: 1.6,
   rankWeightTop50000: 1.35,
   rankWeightTop100000: 1.15,
-  rankWeightDefault: 1,
+  rankWeightTop200000: 1,
+  rankWeightDefault: 0.5,
 };
 
 type FieldDefinition = {
@@ -73,7 +77,9 @@ const rankFields: FieldDefinition[] = [
   { name: "rankWeightTop50000", label: "第 4 档权重", help: "默认 ×1.35", min: 0, max: 10, step: 0.05, precision: 2 },
   { name: "rankThreshold5", label: "第 5 档排名上限", help: "默认 Top 100,000", min: 1, max: 1000000000, step: 100, precision: 0 },
   { name: "rankWeightTop100000", label: "第 5 档权重", help: "默认 ×1.15", min: 0, max: 10, step: 0.05, precision: 2 },
-  { name: "rankWeightDefault", label: "其他 / 无排名权重", help: "排名超过第 5 档上限或无有效排名", min: 0, max: 10, step: 0.05, precision: 2 },
+  { name: "rankThreshold6", label: "第 6 档排名上限", help: "默认 Top 200,000", min: 1, max: 1000000000, step: 100, precision: 0 },
+  { name: "rankWeightTop200000", label: "第 6 档权重", help: "默认 ×1.0", min: 0, max: 10, step: 0.05, precision: 2 },
+  { name: "rankWeightDefault", label: "其他 / 无排名权重", help: "排名超过第 6 档上限或无有效排名", min: 0, max: 10, step: 0.05, precision: 2 },
 ];
 
 function FieldGrid({ fields }: { fields: FieldDefinition[] }) {
@@ -96,6 +102,7 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
     [config.rankThreshold2 + 1, config.rankThreshold3, config.rankWeightTop20000],
     [config.rankThreshold3 + 1, config.rankThreshold4, config.rankWeightTop50000],
     [config.rankThreshold4 + 1, config.rankThreshold5, config.rankWeightTop100000],
+    [config.rankThreshold5 + 1, config.rankThreshold6, config.rankWeightTop200000],
   ];
   return <div style={{ width: "min(620px, calc(100vw - 56px))", maxHeight: "72vh", overflowY: "auto", paddingRight: 4 }}>
     <Typography.Paragraph style={{ marginBottom: 8 }}>
@@ -144,7 +151,7 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
     </Typography.Paragraph>
     <Descriptions bordered size="small" column={1}>
       {rankRows.map(([from, to, weight], index) => <Descriptions.Item key={index} label={`排名 ${from.toLocaleString()} - ${to.toLocaleString()}`}>× {weight}</Descriptions.Item>)}
-      <Descriptions.Item label={`排名超过 ${config.rankThreshold5.toLocaleString()} 或无有效排名`}>× {config.rankWeightDefault}</Descriptions.Item>
+      <Descriptions.Item label={`排名超过 ${config.rankThreshold6.toLocaleString()} 或无有效排名`}>× {config.rankWeightDefault}</Descriptions.Item>
     </Descriptions>
 
     <Divider style={{ margin: "16px 0 12px" }} />
@@ -156,29 +163,60 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
   </div>;
 }
 
-export function E2eScoringConfigCard({ address, status, config }: { address: string; status?: string | null; config?: E2eScoringConfig }) {
+export function E2eScoringConfigCard({
+  address = "",
+  status,
+  config,
+  global = false,
+}: {
+  address?: string;
+  status?: string | null;
+  config?: E2eScoringConfig;
+  global?: boolean;
+}) {
   const [form] = Form.useForm<E2eScoringConfig>();
   const [messageApi, contextHolder] = message.useMessage();
   const queryClient = useQueryClient();
+  const globalConfigQuery = useQuery({
+    queryKey: ["e2e-global-scoring-config"],
+    queryFn: getGlobalE2eScoringConfig,
+  });
   const settlementQuery = useQuery({
     queryKey: ["e2e-campaigns", "settlement", address],
     queryFn: () => getCampaignSettlement(address),
+    enabled: !global && Boolean(address),
   });
+  const globalConfig = globalConfigQuery.data?.data;
   useEffect(() => {
-    form.setFieldsValue(config || defaults);
-  }, [config, form]);
+    if (global) form.setFieldsValue(globalConfig || defaults);
+  }, [form, global, globalConfig]);
+  useEffect(() => {
+    if (!global) form.setFieldsValue(config || defaults);
+  }, [config, form, global]);
   const settlement = settlementQuery.data?.data;
-  const effectiveConfig = config || defaults;
-  const locked = status === "complete" || (status === "review" && Boolean(settlement) && settlement?.status !== "draft");
-  const controlsDisabled = locked || settlementQuery.isLoading;
+  const effectiveConfig = global ? (globalConfig || defaults) : (config || defaults);
+  const locked = !global && (status === "complete" || (status === "review" && Boolean(settlement) && settlement?.status !== "draft"));
+  const controlsDisabled = locked || (global && globalConfigQuery.isLoading) || (!global && settlementQuery.isLoading);
   const save = useMutation({
-    mutationFn: (values: E2eScoringConfig) => updateCampaignScoringConfig(address, values),
+    mutationFn: async (values: E2eScoringConfig) => {
+      if (global) {
+        const response = await updateGlobalE2eScoringConfig(values);
+        return { globalConfig: response.data, detail: null, settlement: null };
+      }
+      const response = await updateCampaignScoringConfig(address, values);
+      return { globalConfig: null, ...response.data };
+    },
     onSuccess: (response) => {
+      if (global && response.globalConfig) {
+        messageApi.success("全局默认评分参数已保存");
+        queryClient.setQueryData(["e2e-global-scoring-config"], { success: true, data: response.globalConfig });
+        return;
+      }
       messageApi.success(status === "review"
         ? "评分参数已保存，并生成了新的结算版本"
         : status === "active" ? "评分参数已保存，积分已重新计算" : "评分参数已保存");
-      queryClient.setQueryData(["e2e-campaigns", "detail", address], { success: true, data: response.data.detail });
-      queryClient.setQueryData(["e2e-campaigns", "settlement", address], { success: true, data: response.data.settlement });
+      queryClient.setQueryData(["e2e-campaigns", "detail", address], { success: true, data: response.detail });
+      queryClient.setQueryData(["e2e-campaigns", "settlement", address], { success: true, data: response.settlement });
       void queryClient.invalidateQueries({ queryKey: ["e2e-campaigns"] });
       void queryClient.invalidateQueries({ queryKey: ["e2e-campaigns", "diagnostics", address] });
     },
@@ -190,15 +228,18 @@ export function E2eScoringConfigCard({ address, status, config }: { address: str
     <Alert
       type="info"
       showIcon
-      message="评分规则按活动独立保存"
-      description={status === "review"
-        ? "保存后会立即重新计算积分并生成新的不可变结算版本；名单一旦确认，参数即锁定。"
-        : "保存后会立即按新参数重新计算当前积分。普通转推原推文始终不计分，不能通过配置开启。"}
+      message={global ? "新活动会复制这套全局默认规则" : "评分规则按活动独立保存"}
+      description={global
+        ? "修改全局默认值只影响之后新建的活动，不会改动已有活动的规则。已有活动可在详情中单独调整或重新采用全局默认值。"
+        : status === "review"
+          ? "保存后会立即重新计算积分并生成新的不可变结算版本；名单一旦确认，参数即锁定。"
+          : "保存后会立即按新参数重新计算当前积分。普通转推原推文始终不计分，不能通过配置开启。"}
     />
     {locked && <Alert type="warning" showIcon message="评分规则已锁定" description="活动已完成或获奖名单已经管理员确认，不能再改变结算依据。" />}
     <Card
+      loading={global && globalConfigQuery.isLoading}
       title={<Space>
-        <span>评分参数</span>
+        <span>{global ? "全局默认评分参数" : "评分参数"}</span>
         <Popover
           title="E2E 综合评分算法"
           content={<ScoringAlgorithmHelp config={effectiveConfig} />}
@@ -210,8 +251,12 @@ export function E2eScoringConfigCard({ address, status, config }: { address: str
         <Tag color="blue">时间衰减下限默认 0.7</Tag>
       </Space>}
       extra={<Space>
-        <Button icon={<UndoOutlined />} disabled={controlsDisabled || save.isPending} onClick={() => form.setFieldsValue(defaults)}>恢复默认值</Button>
-        <Button type="primary" icon={<SaveOutlined />} disabled={controlsDisabled} loading={save.isPending} onClick={() => form.submit()}>{status === "pending" ? "保存评分参数" : "保存并重新计算"}</Button>
+        <Button icon={<UndoOutlined />} disabled={controlsDisabled || save.isPending || (!global && globalConfigQuery.isLoading)} onClick={() => form.setFieldsValue(global ? defaults : (globalConfig || defaults))}>
+          {global ? "恢复系统初始值" : "采用全局默认值"}
+        </Button>
+        <Button type="primary" icon={<SaveOutlined />} disabled={controlsDisabled} loading={save.isPending} onClick={() => form.submit()}>
+          {global ? "保存全局默认值" : status === "pending" ? "保存评分参数" : "保存并重新计算"}
+        </Button>
       </Space>}
     >
       <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)} disabled={controlsDisabled}>

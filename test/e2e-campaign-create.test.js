@@ -19,6 +19,7 @@ const state = {
   paymentCalls: [],
   paymentError: null,
   campaignByPk: null,
+  globalScoringConfig: { replyBase: 7 },
 };
 
 const E2eList = {
@@ -43,6 +44,9 @@ const E2eList = {
 
 mockModule("src/models/postgres-start.js", {
   E2eList,
+  E2eScoringSetting: {
+    findByPk: async () => ({ config: state.globalScoringConfig }),
+  },
   E2eRecord: {},
   E2eTweet: {},
   pgInstance: {
@@ -110,6 +114,8 @@ test("replaces the creator's pending campaign with the next payment sequence", a
   assert.equal(state.created[0].values.campaign_sequence, 2);
   assert.equal(state.created[0].values.status, "pending");
   assert.equal(state.created[0].values.fees, 100);
+  assert.equal(state.created[0].values.score_config.replyBase, 7);
+  assert.equal(state.created[0].values.score_config.rankThreshold6, 200000);
 });
 
 test("persists every create option and ignores a client-supplied creator id", async () => {

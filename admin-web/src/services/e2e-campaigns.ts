@@ -23,11 +23,13 @@ export interface E2eScoringConfig {
   rankThreshold3: number;
   rankThreshold4: number;
   rankThreshold5: number;
+  rankThreshold6: number;
   rankWeightTop1000: number;
   rankWeightTop5000: number;
   rankWeightTop20000: number;
   rankWeightTop50000: number;
   rankWeightTop100000: number;
+  rankWeightTop200000: number;
   rankWeightDefault: number;
 }
 
@@ -342,6 +344,15 @@ export interface E2eCampaignDeleteResult {
 }
 
 const base = "/api/admin/e2e-campaigns";
+
+export const getGlobalE2eScoringConfig = () =>
+  apiRequest<{ success: boolean; data: E2eScoringConfig }>(`${base}/scoring-config`);
+
+export const updateGlobalE2eScoringConfig = (config: E2eScoringConfig) =>
+  apiRequest<{ success: boolean; data: E2eScoringConfig }>(`${base}/scoring-config`, {
+    method: "PUT",
+    body: { config },
+  });
 
 export const listCampaigns = (params: { page: number; pageSize: number; status?: string; keyword?: string }) => {
   const search = new URLSearchParams();

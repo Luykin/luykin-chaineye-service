@@ -30,6 +30,10 @@ const {
 const { calculateCampaignScores } = require("../../echohunt/e2e/services/e2eScoreService");
 const { normalizeScoringConfig, validateScoringConfig } = require("../../echohunt/e2e/services/e2eScoringConfig");
 const {
+  getGlobalE2eScoringConfig,
+  updateGlobalE2eScoringConfig,
+} = require("../../echohunt/e2e/services/e2eScoringSettingService");
+const {
   getDisallowedE2eCampaignUpdateFields,
   normalizeE2eCampaignTarget,
 } = require("../../echohunt/e2e/services/e2eCampaignPolicy");
@@ -54,6 +58,33 @@ const MAX_WINNERS = 200;
 
 router.use(express.json({ limit: "1mb" }));
 router.use(requirePermission(MANAGE_PERMISSION));
+
+router.get("/scoring-config", async (req, res) => {
+  try {
+    return res.json({ success: true, data: await getGlobalE2eScoringConfig() });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.put("/scoring-config", async (req, res) => {
+  try {
+    const config = await updateGlobalE2eScoringConfig(req.body?.config, req.adminUser?.id || null);
+    await logAdminAction(req, {
+      action: "e2e_global_scoring_config_update",
+      success: true,
+      message: `config=${JSON.stringify(config)}`,
+    });
+    return res.json({ success: true, data: config });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "e2e_global_scoring_config_update",
+      success: false,
+      message: error.message || "failed",
+    }).catch(() => {});
+    return sendError(res, error);
+  }
+});
 
 router.get("/publish-accesses", async (req, res) => {
   try {

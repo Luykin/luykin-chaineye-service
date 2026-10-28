@@ -8,6 +8,7 @@ const {
   scoreSingleInteraction,
 } = require("../src/echohunt/e2e/services/e2eScoringPolicy");
 const {
+  computeRankWeight,
   DEFAULT_E2E_SCORING_CONFIG,
   validateScoringConfig,
 } = require("../src/echohunt/e2e/services/e2eScoringConfig");
@@ -46,6 +47,15 @@ test("default per-user submission and scoring limits are one reply and one quote
   assert.equal(DEFAULT_E2E_SCORING_CONFIG.maxQuotes, 1);
 });
 
+test("default reply base and rank weights match the global initial policy", () => {
+  assert.equal(DEFAULT_E2E_SCORING_CONFIG.replyBase, 5);
+  assert.equal(computeRankWeight(100000), 1.15);
+  assert.equal(computeRankWeight(100001), 1);
+  assert.equal(computeRankWeight(200000), 1);
+  assert.equal(computeRankWeight(200001), 0.5);
+  assert.equal(computeRankWeight(null), 0.5);
+});
+
 test("like quality coefficient remains 1.5", () => {
   const detail = scoreSingleInteraction(
     { id: "1", text: "", likes: 2, create_time: "2026-01-01T00:00:00.000Z" },
@@ -55,7 +65,7 @@ test("like quality coefficient remains 1.5", () => {
     0.5
   );
   assert.equal(detail.engagementBonus, 3);
-  assert.equal(detail.score, 13);
+  assert.equal(detail.score, 8);
 });
 
 test("campaign scoring coefficients are configurable", () => {
