@@ -113,7 +113,7 @@ test("score explanation shows the complete calculation and actual time weight", 
     rankMultiplier: 1,
     point: 14.05,
     policy: {
-      timeDecayFloor: 0.7,
+      timeDecayFloor: 0.5,
       lengthCharsPerPoint: 10,
       lengthBonusCap: 10,
       likeMultiplier: 1.5,
@@ -137,7 +137,7 @@ test("score explanation shows the complete calculation and actual time weight", 
   });
   assert.equal(
     explanation,
-    "最终积分 14.05 = 互动原始分 14.05 × 排名权重 1；评论1：(基础 10 + 长度 4 + 互动 0.05) × 实际时间权重 1 = 14.05〔长度：40 字，每 10 字 +1，上限 10；互动：赞 0×1.5，回复 0×1，被转发 0×1，浏览 min(√100÷10, 5)，互动总上限 20〕；时间衰减最低权重 0.7"
+    "最终积分 14.05 = 互动原始分 14.05 × 排名权重 1；评论1：(基础 10 + 长度 4 + 互动 0.05) × 实际时间权重 1 = 14.05〔长度：40 字，每 10 字 +1，上限 10；互动：赞 0×1.5，回复 0×1，被转发 0×1，浏览 min(√100÷10, 5)，互动总上限 20〕；时间衰减最低权重 0.5"
   );
 });
 

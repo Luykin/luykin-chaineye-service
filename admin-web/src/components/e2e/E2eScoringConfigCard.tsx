@@ -248,7 +248,7 @@ export function E2eScoringConfigCard({
         >
           <Button type="text" size="small" icon={<InfoCircleOutlined />} aria-label="查看 E2E 评分算法说明" aria-haspopup="dialog" />
         </Popover>
-        <Tag color="blue">时间衰减下限默认 0.7</Tag>
+        <Tag color="blue">当前时间衰减下限 {effectiveConfig.timeDecayFloor}</Tag>
       </Space>}
       extra={<Space>
         <Button icon={<UndoOutlined />} disabled={controlsDisabled || save.isPending || (!global && globalConfigQuery.isLoading)} onClick={() => form.setFieldsValue(global ? defaults : (globalConfig || defaults))}>
