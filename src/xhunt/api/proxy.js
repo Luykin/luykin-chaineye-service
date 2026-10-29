@@ -440,17 +440,30 @@ function setBrowserCacheHeaders(res, req) {
   setTimedCacheHeaders(res, 3 * 60);
 }
 
+function getForwardedQuery(req, targetPath) {
+  const originalQuery = { ...req.query };
+  delete originalQuery.target;
+
+  // fetch/twitter 下游接口使用严格参数校验，不转发插件内部语言参数
+  if (
+    targetPath === "fetch/twitter" ||
+    targetPath.startsWith("fetch/twitter/")
+  ) {
+    delete originalQuery["x-language"];
+  }
+
+  return originalQuery;
+}
+
 // 获取目标URL
 function getTargetUrl(req) {
-  // 提取并删除 target 参数
-  const originalQuery = { ...req.query };
-  const target = originalQuery.target || DEFAULT_TARGET;
-  delete originalQuery.target;
+  const target = req.query.target || DEFAULT_TARGET;
 
   let baseUrl = (URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET]).trim();
 
   // 提取路径（去除 /auth/ 或 /public/ 前缀）
   const targetPath = req.path.replace(/^\/(auth|public)\//, "");
+  const originalQuery = getForwardedQuery(req, targetPath);
 
   // 将剩余查询参数转换为查询字符串
   const search = new URLSearchParams(originalQuery).toString();
@@ -465,15 +478,13 @@ function getTargetUrl(req) {
 
 // 获取目标URL（流式专用：去除 public-stream 前缀）
 function getTargetUrlForStreaming(req) {
-  // 提取并删除 target 参数
-  const originalQuery = { ...req.query };
-  const target = originalQuery.target || DEFAULT_TARGET;
-  delete originalQuery.target;
+  const target = req.query.target || DEFAULT_TARGET;
 
   let baseUrl = (URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET]).trim();
 
   // 提取路径（去除 /auth/ 或 /public-stream/ 前缀）
   const targetPath = req.path.replace(/^\/(auth|public-stream)\//, "");
+  const originalQuery = getForwardedQuery(req, targetPath);
 
   // 将剩余查询参数转换为查询字符串
   const search = new URLSearchParams(originalQuery).toString();
