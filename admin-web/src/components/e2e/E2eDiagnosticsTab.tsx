@@ -42,6 +42,9 @@ function ScoreExplanation({ breakdown, fallback }: { breakdown: E2eScoreBreakdow
       </Typography.Text>
       {counted.map((item) => {
         typeIndexes[item.type] = (typeIndexes[item.type] || 0) + 1;
+        const viewBonusFormula = Number(breakdown.policy.viewSqrtDivisor) > 0
+          ? `√${item.metrics.views}÷${policyNumber(breakdown, "viewSqrtDivisor")}`
+          : `${item.metrics.views}÷${policyNumber(breakdown, "viewsPerPoint")}`;
         return (
           <div key={item.id}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -55,7 +58,7 @@ function ScoreExplanation({ breakdown, fallback }: { breakdown: E2eScoreBreakdow
               互动：赞 {item.metrics.likes}×{policyNumber(breakdown, "likeMultiplier")}、
               回复 {item.metrics.replies}×{policyNumber(breakdown, "replyMultiplier")}、
               被转发 {item.metrics.retweets}×{policyNumber(breakdown, "retweetReceivedMultiplier")}、
-              浏览 min({item.metrics.views}÷{policyNumber(breakdown, "viewsPerPoint")}，{policyNumber(breakdown, "viewBonusCap")}），
+              浏览 min({viewBonusFormula}，{policyNumber(breakdown, "viewBonusCap")}），
               互动总上限 {policyNumber(breakdown, "engagementBonusCap")}
             </Typography.Text>
           </div>

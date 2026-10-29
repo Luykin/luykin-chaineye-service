@@ -23,7 +23,7 @@ module.exports = {
           likeMultiplier: 1.5,
           replyMultiplier: 2,
           retweetReceivedMultiplier: 2,
-          viewsPerPoint: 200,
+          viewSqrtDivisor: 10,
           viewBonusCap: 10,
           engagementBonusCap: 30,
           maxReplies: 1,

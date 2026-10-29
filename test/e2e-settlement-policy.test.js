@@ -10,6 +10,7 @@ const {
 const {
   computeRankWeight,
   DEFAULT_E2E_SCORING_CONFIG,
+  normalizeScoringConfig,
   validateScoringConfig,
 } = require("../src/echohunt/e2e/services/e2eScoringConfig");
 const {
@@ -82,6 +83,30 @@ test("campaign scoring coefficients are configurable", () => {
   assert.equal(detail.score, 26);
 });
 
+test("view bonus uses a capped square-root curve", () => {
+  const score = (views, scoringConfig = {}) => scoreSingleInteraction(
+    { id: "1", text: "", views, create_time: "2026-01-01T00:00:00.000Z" },
+    "reply",
+    "2026-01-01T00:00:00.000Z",
+    "2026-01-02T00:00:00.000Z",
+    { replyBase: 0, ...scoringConfig }
+  ).engagementBonus;
+
+  assert.equal(score(0), 0);
+  assert.equal(score(2000), 4.47);
+  assert.equal(score(10000), 10);
+  assert.equal(score(40000), 10);
+  assert.equal(score(10000, { viewBonusCap: 6 }), 6);
+});
+
+test("older scoring configs replace linear view conversion with the default square-root divisor", () => {
+  const config = normalizeScoringConfig({ viewsPerPoint: 200, replyBase: 8 });
+
+  assert.equal(config.replyBase, 8);
+  assert.equal(config.viewSqrtDivisor, 10);
+  assert.equal(Object.hasOwn(config, "viewsPerPoint"), false);
+});
+
 test("score explanation shows the complete calculation and actual time weight", () => {
   const explanation = buildScoreExplanation({
     rawScore: 14.05,
@@ -94,7 +119,7 @@ test("score explanation shows the complete calculation and actual time weight", 
       likeMultiplier: 1.5,
       replyMultiplier: 1,
       retweetReceivedMultiplier: 1,
-      viewsPerPoint: 2000,
+      viewSqrtDivisor: 10,
       viewBonusCap: 5,
       engagementBonusCap: 20,
     },
@@ -112,7 +137,7 @@ test("score explanation shows the complete calculation and actual time weight", 
   });
   assert.equal(
     explanation,
-    "最终积分 14.05 = 互动原始分 14.05 × 排名权重 1；评论1：(基础 10 + 长度 4 + 互动 0.05) × 实际时间权重 1 = 14.05〔长度：40 字，每 10 字 +1，上限 10；互动：赞 0×1.5，回复 0×1，被转发 0×1，浏览 min(100÷2000, 5)，互动总上限 20〕；时间衰减最低权重 0.7"
+    "最终积分 14.05 = 互动原始分 14.05 × 排名权重 1；评论1：(基础 10 + 长度 4 + 互动 0.05) × 实际时间权重 1 = 14.05〔长度：40 字，每 10 字 +1，上限 10；互动：赞 0×1.5，回复 0×1，被转发 0×1，浏览 min(√100÷10, 5)，互动总上限 20〕；时间衰减最低权重 0.7"
   );
 });
 

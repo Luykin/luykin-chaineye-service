@@ -48,5 +48,6 @@ test("E2E 评分配置迁移可以生成包含 JSONB 初始值的 PostgreSQL SQL
   assert.match(generatedSql[0], /CREATE TABLE IF NOT EXISTS/);
   assert.match(generatedSql[1], /"config"/);
   assert.match(generatedSql[1], /"timeDecayFloor":0\.7/);
+  assert.match(generatedSql[1], /"viewSqrtDivisor":10/);
   assert.match(generatedSql[1], /ON CONFLICT DO NOTHING/);
 });

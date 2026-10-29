@@ -20,7 +20,7 @@ const defaults: E2eScoringConfig = {
   likeMultiplier: 1.5,
   replyMultiplier: 2,
   retweetReceivedMultiplier: 2,
-  viewsPerPoint: 200,
+  viewSqrtDivisor: 10,
   viewBonusCap: 10,
   engagementBonusCap: 30,
   maxReplies: 1,
@@ -62,7 +62,7 @@ const engagementFields: FieldDefinition[] = [
   { name: "likeMultiplier", label: "获赞系数", help: "评论或引用每收到 1 个赞增加的分数", min: 0, max: 20, step: 0.1, precision: 2 },
   { name: "replyMultiplier", label: "收到回复系数", help: "评论或引用每收到 1 条回复增加的分数", min: 0, max: 20, step: 0.1, precision: 2 },
   { name: "retweetReceivedMultiplier", label: "被转推系数", help: "互动内容被转推时的质量分；不是普通转推原推文", min: 0, max: 20, step: 0.1, precision: 2 },
-  { name: "viewsPerPoint", label: "每 1 分所需浏览量", help: "浏览量除以该值换算浏览奖励", min: 1, max: 100000, step: 10, precision: 0 },
+  { name: "viewSqrtDivisor", label: "浏览平方根除数", help: "浏览奖励 = √浏览量 ÷ 该值，默认 10", min: 0.01, max: 100000, step: 1, precision: 2 },
   { name: "viewBonusCap", label: "浏览奖励上限", help: "单条互动的浏览奖励封顶", min: 0, max: 200, step: 1, precision: 2 },
   { name: "engagementBonusCap", label: "互动质量分上限", help: "点赞、回复、被转推和浏览奖励的合计封顶", min: 0, max: 500, step: 1, precision: 2 },
 ];
@@ -129,7 +129,7 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
         min（{config.engagementBonusCap}，获赞数 × {config.likeMultiplier} + 收到回复数 × {config.replyMultiplier} + 被转推数 × {config.retweetReceivedMultiplier} + 浏览奖励）
       </Descriptions.Item>
       <Descriptions.Item label="浏览奖励">
-        min（{config.viewBonusCap}，浏览量 ÷ {config.viewsPerPoint}）
+        min（{config.viewBonusCap}，√浏览量 ÷ {config.viewSqrtDivisor}）
       </Descriptions.Item>
     </Descriptions>
     <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 12 }}>
@@ -157,7 +157,7 @@ function ScoringAlgorithmHelp({ config }: { config: E2eScoringConfig }) {
     <Divider style={{ margin: "16px 0 12px" }} />
     <Typography.Title level={5}>可配置参数</Typography.Title>
     <Typography.Paragraph style={{ marginBottom: 0 }}>
-      管理员可以调整：时间衰减下限、评论/引用基础分、长度换算与封顶、每人提交和计分条数、获赞/回复/被转推/浏览系数、互动质量封顶，以及 XHunt 排名档位和权重。
+      管理员可以调整：时间衰减下限、评论/引用基础分、长度换算与封顶、每人提交和计分条数、获赞/回复/被转推系数、浏览平方根除数与奖励上限、互动质量封顶，以及 XHunt 排名档位和权重。
       普通转推原推文 0 分、活动结束后互动不计分、最终保留 2 位小数属于固定规则，不能配置。
     </Typography.Paragraph>
   </div>;

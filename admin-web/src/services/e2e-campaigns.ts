@@ -13,7 +13,7 @@ export interface E2eScoringConfig {
   likeMultiplier: number;
   replyMultiplier: number;
   retweetReceivedMultiplier: number;
-  viewsPerPoint: number;
+  viewSqrtDivisor: number;
   viewBonusCap: number;
   engagementBonusCap: number;
   maxReplies: number;

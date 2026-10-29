@@ -31,7 +31,8 @@ function scoreSingleInteraction(item, type, campaignStart, campaignEnd, scoringC
   const likeBonus = Number(item?.likes || 0) * config.likeMultiplier;
   const replyBonus = Number(item?.replies || 0) * config.replyMultiplier;
   const retweetBonus = Number(item?.retweets || 0) * config.retweetReceivedMultiplier;
-  const viewBonus = Math.min(config.viewBonusCap, Number(item?.views || 0) / config.viewsPerPoint);
+  const views = Math.max(0, Number(item?.views || 0));
+  const viewBonus = Math.min(config.viewBonusCap, Math.sqrt(views) / config.viewSqrtDivisor);
   const engagementBonus = Math.min(config.engagementBonusCap, likeBonus + replyBonus + retweetBonus + viewBonus);
   const scoreBeforeDecay = base + lengthBonus + engagementBonus;
   const timeWeight = computeTimeDecayWeight(item?.create_time, campaignStart, campaignEnd, config.timeDecayFloor);
@@ -73,6 +74,9 @@ function buildScoreExplanation(breakdown = {}) {
   const interactionParts = counted.map((item) => {
     const type = item.type === "quote" ? "引用" : "评论";
     const metrics = item.metrics || {};
+    const viewBonusFormula = Number(policy.viewSqrtDivisor) > 0
+      ? `√${formatScoreNumber(metrics.views, 0)}÷${formatScoreNumber(policy.viewSqrtDivisor)}`
+      : `${formatScoreNumber(metrics.views, 0)}÷${formatScoreNumber(policy.viewsPerPoint, 0)}`;
     typeIndexes[item.type] = (typeIndexes[item.type] || 0) + 1;
     return `${type}${typeIndexes[item.type]}：` +
       `(基础 ${formatScoreNumber(item.base)} + 长度 ${formatScoreNumber(item.lengthBonus)} + ` +
@@ -82,7 +86,7 @@ function buildScoreExplanation(breakdown = {}) {
       `上限 ${formatScoreNumber(policy.lengthBonusCap)}；互动：赞 ${formatScoreNumber(metrics.likes, 0)}×${formatScoreNumber(policy.likeMultiplier)}，` +
       `回复 ${formatScoreNumber(metrics.replies, 0)}×${formatScoreNumber(policy.replyMultiplier)}，` +
       `被转发 ${formatScoreNumber(metrics.retweets, 0)}×${formatScoreNumber(policy.retweetReceivedMultiplier)}，` +
-      `浏览 min(${formatScoreNumber(metrics.views, 0)}÷${formatScoreNumber(policy.viewsPerPoint, 0)}, ${formatScoreNumber(policy.viewBonusCap)})，` +
+      `浏览 min(${viewBonusFormula}, ${formatScoreNumber(policy.viewBonusCap)})，` +
       `互动总上限 ${formatScoreNumber(policy.engagementBonusCap)}〕`;
   });
   const excludedCount = interactions.length - counted.length;
