@@ -110,6 +110,29 @@ function calculateVoteWeight(rank, config = null) {
 }
 
 /**
+ * 格式化公开展示的 XHunt 排名。
+ * 匿名用户仅保留最高位、其余位数归零，避免暴露可用于反查身份的精确排名。
+ *
+ * @param {number|string|null} rank
+ * @param {boolean} [isAnonymous]
+ * @returns {number|null}
+ */
+function formatPublicXHuntRank(rank, isAnonymous = false) {
+  const numericRank = Number(rank);
+  if (!Number.isFinite(numericRank) || numericRank <= 0) {
+    return null;
+  }
+
+  const normalizedRank = Math.floor(numericRank);
+  if (!isAnonymous) {
+    return normalizedRank;
+  }
+
+  const magnitude = 10 ** Math.floor(Math.log10(normalizedRank));
+  return Math.floor(normalizedRank / magnitude) * magnitude;
+}
+
+/**
  * 解析选民当前的瞬时 XHunt 排名与投票权重
  * @param {object} params
  * @param {string} params.twitterId
@@ -157,5 +180,6 @@ module.exports = {
   DEFAULT_BASE_WEIGHT,
   getVoteWeightConfig,
   calculateVoteWeight,
+  formatPublicXHuntRank,
   resolveVoterRankAndWeight,
 };

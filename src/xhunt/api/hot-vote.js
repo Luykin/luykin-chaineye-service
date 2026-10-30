@@ -29,6 +29,7 @@ const { queryTwitterProfile } = require("./stats-routes/twitter-id-handler-looku
 const {
   resolveVoterRankAndWeight,
   calculateVoteWeight,
+  formatPublicXHuntRank,
 } = require("../utils/hot-vote-weight");
 const { resolveXLanguage } = require("../utils/request-language");
 
@@ -1464,7 +1465,7 @@ router.get(
             topicId,
             twitterId: { [Op.in]: twitterIds },
           },
-          attributes: ["twitterId", "optionId", "voteWeight"],
+          attributes: ["twitterId", "optionId", "voteWeight", "voterRankSnapshot"],
         });
         for (const vr of voteRecords) {
           voterRecordsByTwId[vr.twitterId] = vr;
@@ -1489,6 +1490,10 @@ router.get(
         const optionColor = opt?.color || null;
         const isGua = Boolean(opt?.isGua);
         const voteWeight = userVote?.voteWeight || 1;
+        const xhuntRank = formatPublicXHuntRank(
+          userVote?.voterRankSnapshot,
+          Boolean(c.isAnonymous)
+        );
 
         if (c.isAnonymous) {
           list.push({
@@ -1506,6 +1511,7 @@ router.get(
             optionColor,
             isGua,
             voteWeight,
+            xhuntRank,
             createdAt: c.createdAt,
           });
         } else {
@@ -1524,6 +1530,7 @@ router.get(
             optionColor,
             isGua,
             voteWeight,
+            xhuntRank,
             createdAt: c.createdAt,
           });
         }
@@ -1712,6 +1719,7 @@ router.get(
           ? sanitizeCommentPlainText(comment.content, 200)
           : null;
         const commentCreatedAt = hasComment ? comment.createdAt : null;
+        const xhuntRank = formatPublicXHuntRank(r.voterRankSnapshot, isAnon);
 
         return {
           id: r.id,
@@ -1727,6 +1735,7 @@ router.get(
           optionColor: opt?.color || null,
           isGua: Boolean(opt?.isGua),
           voteWeight: r.voteWeight || 1,
+          xhuntRank,
           hasComment,
           commentContent,
           commentCreatedAt,
