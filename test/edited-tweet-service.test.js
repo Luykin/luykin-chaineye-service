@@ -28,7 +28,7 @@ test("buildEditedTweetUrl only forwards endpoint-specific parameters", () => {
   );
 
   assert.equal(url.origin, "https://data.example");
-  assert.equal(url.pathname, "/tweet/edited");
+  assert.equal(url.pathname, "/fetch/tweet/edited");
   assert.equal(url.searchParams.get("user_id"), "123");
   assert.equal(url.searchParams.get("limit"), "20");
   assert.equal(url.searchParams.get("offset"), "0");
@@ -52,7 +52,7 @@ test("requestEditedTweetData parses a successful response", async () => {
     }
   );
 
-  assert.equal(requestedUrl.pathname, "/tweet/edited_counts");
+  assert.equal(requestedUrl.pathname, "/fetch/tweet/edited_counts");
   assert.equal(requestedUrl.searchParams.get("user_ids"), "123,456");
   assert.equal(data.data.counts["123"], 1);
 });

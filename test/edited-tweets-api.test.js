@@ -85,7 +85,7 @@ test("edited counts forwards only the fixed upstream query and returns access", 
       assert.equal(response.body.data.counts["123"], 2);
       assert.equal(response.body.data.xhunt_access.detail_scope, "count_only");
       assert.match(response.headers["cache-control"], /no-store/);
-      assert.equal(requestedUrl.pathname, "/tweet/edited_counts");
+      assert.equal(requestedUrl.pathname, "/fetch/tweet/edited_counts");
       assert.equal(requestedUrl.searchParams.get("user_ids"), "123");
     });
   } finally {

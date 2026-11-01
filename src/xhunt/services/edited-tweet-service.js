@@ -2,8 +2,8 @@ const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 
 const EDITED_TWEET_UPSTREAM_TIMEOUT_MS = 10_000;
 const EDITED_TWEET_PATHS = {
-  counts: "/tweet/edited_counts",
-  details: "/tweet/edited",
+  counts: "/fetch/tweet/edited_counts",
+  details: "/fetch/tweet/edited",
 };
 
 class EditedTweetServiceError extends Error {
