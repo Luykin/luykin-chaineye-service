@@ -25,7 +25,7 @@ const xHuntGhostFollowingRoutes = require("../../xhunt/api/ghost-following");
 const xHuntRootdataRoutes = require("../../xhunt/api/rootdata");
 const xHuntTagsRoutes = require("../../xhunt/api/tags");
 const xHuntSpecialMarkersRoutes = require("../../xhunt/api/special-markers");
-const xHuntTwitterRenameRoutes = require("../../xhunt/api/twitter-rename");
+const xHuntTwitterRoutes = require("../../xhunt/api/twitter");
 const xHuntAIDetectRoutes = require("../../xhunt/api/ai-detect");
 const xHuntKolChatRoutes = require("../../xhunt/api/kol-chat");
 const xHuntKolMarketingSearchRoutes = require("../../xhunt/api/kol-marketing");
@@ -131,7 +131,7 @@ function registerXhuntRoutes(app) {
     fingerprintLimiter,
     browserOnlyMiddleware,
     securityMiddleware,
-    xHuntTwitterRenameRoutes
+    xHuntTwitterRoutes
   );
 
   // AI 探测功能接口 - 推文内容分析和评分

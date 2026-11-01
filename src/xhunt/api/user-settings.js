@@ -50,6 +50,7 @@ const DEFAULT_USER_SETTINGS = {
     showPersonalityType: true,
     showRenameInfo: true,
     showDelInfo: true,
+    showEditInfo: true,
     showDiscussion: true,
     showKolAbilityModel: true,
     showSoulIndex: true,

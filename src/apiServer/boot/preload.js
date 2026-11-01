@@ -43,7 +43,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/kol-chat',
   './xhunt/api/kol-marketing',
   './xhunt/api/tags',
-  './xhunt/api/twitter-rename',
+  './xhunt/api/twitter',
   './xhunt/api/hot-vote',
   './xhunt/api/hot-vote-admin',
 

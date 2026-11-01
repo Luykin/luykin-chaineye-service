@@ -42,6 +42,7 @@ const DEFAULT_FEATURE_KEYS: Record<string, string> = {
   showPersonalityType: "显示性格类型",
   showRenameInfo: "显示改名",
   showDelInfo: "显示删帖",
+  showEditInfo: "显示改贴",
   showDiscussion: "显示讨论功能",
   showKolAbilityModel: "显示KOL能力模型",
   showSoulIndex: "显示灵魂浓度",
