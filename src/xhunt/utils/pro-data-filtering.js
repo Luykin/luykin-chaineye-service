@@ -53,18 +53,24 @@ function applyDeletedTweetFiltering(req, data) {
     return data;
   }
 
+  const isVip = isRequestXHuntVip(req);
+  const result = {
+    ...data,
+    isVip,
+  };
+
   // 内部用户不受删帖数据时间及内容限制。
   if (isRequestInternalTestUser(req)) {
-    return data;
+    return result;
   }
 
   const items = data?.data?.data;
   if (!Array.isArray(items)) {
-    return data;
+    return result;
   }
 
   const filtered = {
-    ...data,
+    ...result,
     data: {
       ...data.data,
     },
@@ -80,7 +86,7 @@ function applyDeletedTweetFiltering(req, data) {
     );
   });
 
-  if (isRequestXHuntVip(req)) {
+  if (isVip) {
     filtered.data.data = recentItems;
     return filtered;
   }

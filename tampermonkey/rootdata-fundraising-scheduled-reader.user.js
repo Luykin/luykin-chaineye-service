@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.7.4
+// @version      0.7.6
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -44,6 +44,7 @@
     scheduleBeijingTimes: ["07:10", "18:10"],
     scheduleCheckIntervalMs: 30 * 1000,
     idleCountdownRefreshMs: 1000,
+    pageStableDelayMs: 1000,
 
     maxWaitMs: 30 * 1000,
     pollIntervalMs: 500,
@@ -84,6 +85,56 @@
 
   const PAGE_WINDOW =
     typeof unsafeWindow !== "undefined" && unsafeWindow ? unsafeWindow : window;
+
+  const RUNTIME_DIAGNOSTICS = {
+    version: "0.7.6",
+    loadedAt: nowIso(),
+    initialReadyState: document.readyState,
+    lifecycle: [],
+    errors: [],
+  };
+
+  function diagnosticUrl(rawUrl = location.href) {
+    try {
+      const url = new URL(rawUrl, location.origin);
+      return {
+        origin: url.origin,
+        pathname: url.pathname,
+        queryKeys: Array.from(url.searchParams.keys()),
+      };
+    } catch (_) {
+      return { pathname: String(rawUrl || "").slice(0, 300), queryKeys: [] };
+    }
+  }
+
+  function recordLifecycle(name) {
+    RUNTIME_DIAGNOSTICS.lifecycle.push({ name, at: nowIso(), readyState: document.readyState });
+    RUNTIME_DIAGNOSTICS.lifecycle = RUNTIME_DIAGNOSTICS.lifecycle.slice(-12);
+  }
+
+  function recordRuntimeError(type, error, source = "") {
+    const message = String(error?.message || error || "unknown error").slice(0, 1000);
+    const item = {
+      type,
+      at: nowIso(),
+      message,
+      source: source ? diagnosticUrl(source) : null,
+      stack: String(error?.stack || "").slice(0, 2000),
+    };
+    RUNTIME_DIAGNOSTICS.errors.push(item);
+    RUNTIME_DIAGNOSTICS.errors = RUNTIME_DIAGNOSTICS.errors.slice(-20);
+    console.warn("[RootData Reader][diag-v076] runtime error captured:", item);
+  }
+
+  recordLifecycle("userscript_loaded");
+  document.addEventListener("DOMContentLoaded", () => recordLifecycle("dom_content_loaded"), { once: true });
+  PAGE_WINDOW.addEventListener("load", () => recordLifecycle("window_load"), { once: true });
+  PAGE_WINDOW.addEventListener("error", (event) => {
+    recordRuntimeError("window_error", event.error || event.message, event.filename || "");
+  });
+  PAGE_WINDOW.addEventListener("unhandledrejection", (event) => {
+    recordRuntimeError("unhandled_rejection", event.reason);
+  });
 
   console.log("[RootData Reader] userscript loaded:", {
     href: location.href,
@@ -2926,6 +2977,10 @@
     }
   }
 
+  let lastPanelState = null;
+  let panelDismissed = false;
+  let panelRemountCount = 0;
+
   function createPanel() {
     let panel = document.getElementById(CONFIG.panelId);
     if (panel) return panel;
@@ -3005,6 +3060,8 @@
   }
 
   function renderPanel(state) {
+    lastPanelState = state;
+    panelDismissed = false;
     const panel = createPanel();
     const data = state.data || [];
     const preview = data.slice(0, 5);
@@ -3060,7 +3117,10 @@
       )}</pre>
     `;
 
-    panel.querySelector("#rd-fr-close")?.addEventListener("click", () => panel.remove());
+    panel.querySelector("#rd-fr-close")?.addEventListener("click", () => {
+      panelDismissed = true;
+      panel.remove();
+    });
     panel.querySelector("#rd-fr-manual")?.addEventListener("click", () => {
       startRefreshThenScrape({ slot: "manual", reason: "manual_button" });
     });
@@ -3076,6 +3136,16 @@
     });
 
     updateIdleCountdown(panel);
+  }
+
+  function keepPanelMounted() {
+    if (panelDismissed || !lastPanelState || document.getElementById(CONFIG.panelId)) return;
+    panelRemountCount += 1;
+    console.warn("[RootData Reader] panel removed by page, remounting:", {
+      panelRemountCount,
+      readyState: document.readyState,
+    });
+    renderPanel(lastPanelState);
   }
 
   function updateIdleCountdown(panel = document.getElementById(CONFIG.panelId)) {
@@ -3354,7 +3424,10 @@
   function initScheduleLoop() {
     // 倒计时面板在 fundraising / detail / member 页面都可能出现；
     // 定时触发只允许在 fundraising 首页执行，但倒计时刷新不应该被页面类型挡住。
-    setInterval(() => updateIdleCountdown(), CONFIG.idleCountdownRefreshMs);
+    setInterval(() => {
+      updateIdleCountdown();
+      keepPanelMounted();
+    }, CONFIG.idleCountdownRefreshMs);
 
     if (!isFundraisingPage()) return;
     setInterval(checkSchedule, CONFIG.scheduleCheckIntervalMs);
@@ -3390,11 +3463,121 @@
     renderPanel({ ok: true, status: "idle", retryCount: 0, data: lastResult?.data || [] });
   }
 
+  function runAfterPageStable(callback) {
+    return new Promise((resolve, reject) => {
+      const run = () => {
+        setTimeout(() => {
+          recordLifecycle("page_stable_start");
+          Promise.resolve()
+            .then(callback)
+            .then(resolve, reject);
+        }, CONFIG.pageStableDelayMs);
+      };
+
+      if (document.readyState === "complete") run();
+      else PAGE_WINDOW.addEventListener("load", run, { once: true });
+    });
+  }
+
 
   // ============================================================================
   // SECTION 10: DEBUG / CONSOLE API
   // - RootDataFundraisingCollector public methods for manual operations
   // ============================================================================
+
+  function summarizePendingJob(job) {
+    if (!job) return null;
+    return {
+      id: job.id || null,
+      slot: job.slot || null,
+      reason: job.reason || null,
+      nextAction: job.nextAction || null,
+      retryCount: Number(job.retryCount || 0),
+      lastError: job.lastError || null,
+      createdAt: job.createdAt || null,
+      updatedAt: job.updatedAt || null,
+    };
+  }
+
+  function collectDiagnosticSnapshot() {
+    const fundraisingRows = isFundraisingPage() ? parseFundraisingRows() : [];
+    let detail = null;
+
+    if (isDetailPage()) {
+      try {
+        const parsed = parseDetailDocument(document, location.href, { isInitial: true, dryRun: true });
+        detail = {
+          ready: parsed.ready,
+          projectName: parsed.projectName,
+          logoPresent: Boolean(parsed.logo),
+          socialLinkKeys: Object.keys(parsed.socialLinks || {}),
+          teamMemberCount: parsed.teamMembers?.length || 0,
+          investorCount: parsed.investors?.length || 0,
+          debug: parsed.debug,
+        };
+      } catch (error) {
+        detail = { error: String(error?.message || error || "detail_parse_failed") };
+      }
+    }
+
+    const lastResult = safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null);
+    return {
+      version: RUNTIME_DIAGNOSTICS.version,
+      capturedAt: nowIso(),
+      page: {
+        ...diagnosticUrl(),
+        title: document.title,
+        readyState: document.readyState,
+        isFundraisingPage: isFundraisingPage(),
+        isDetailPage: isDetailPage(),
+      },
+      dom: {
+        bodyConnected: Boolean(document.body?.isConnected),
+        bodyTextLength: cleanText(document.body?.innerText || "").length,
+        panelPresent: Boolean(document.getElementById(CONFIG.panelId)),
+        panelDismissed,
+        panelRemountCount,
+        detailFramePresent: Boolean(document.getElementById(CONFIG.detailFrameId)),
+        tableCount: document.querySelectorAll("table").length,
+        tableRowCount: document.querySelectorAll("table tbody tr").length,
+        projectLinkCount: document.querySelectorAll(
+          'a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+        ).length,
+      },
+      parser: {
+        fundraisingRowCount: fundraisingRows.length,
+        firstFundraisingProject: fundraisingRows[0]
+          ? {
+              projectName: fundraisingRows[0].projectName,
+              projectLink: fundraisingRows[0].projectLink,
+              investorCount: fundraisingRows[0].investors?.length || 0,
+            }
+          : null,
+        detail,
+      },
+      jobs: {
+        pending: summarizePendingJob(getPendingJob()),
+        recrawl: summarizeRecrawlJob(getRecrawlJob()),
+        detail: summarizeDetailJob(getDetailJob()),
+        lastResult: lastResult
+          ? {
+              ok: lastResult.ok,
+              status: lastResult.status,
+              rowsCount: Number(lastResult.rowsCount || lastResult.data?.length || 0),
+              scrapedAt: lastResult.scrapedAt || null,
+              page: diagnosticUrl(lastResult.pageUrl || ""),
+            }
+          : null,
+      },
+      nextSchedule: getNextScheduleInfo(),
+      runtime: {
+        loadedAt: RUNTIME_DIAGNOSTICS.loadedAt,
+        initialReadyState: RUNTIME_DIAGNOSTICS.initialReadyState,
+        lifecycle: [...RUNTIME_DIAGNOSTICS.lifecycle],
+        errors: [...RUNTIME_DIAGNOSTICS.errors],
+      },
+    };
+  }
 
   function exposeDebugApi() {
     const debugApi = {
@@ -3682,7 +3865,17 @@
         document.getElementById(CONFIG.panelId)?.remove();
         const lastResult = safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null);
         renderPanel({ ok: true, status: "idle", retryCount: 0, data: lastResult?.data || [] });
-        return { ok: true, nextSchedule: getNextScheduleInfo(), version: "0.7.4" };
+        return { ok: true, nextSchedule: getNextScheduleInfo(), version: "0.7.6" };
+      },
+
+      /**
+       * 输出当前页面、解析器、任务游标与运行时错误的脱敏诊断快照。
+       * 控制台调用：RootDataFundraisingCollector.diagnose()
+       */
+      diagnose() {
+        const snapshot = collectDiagnosticSnapshot();
+        console.log("[RootData Reader][diag-v076] snapshot:", snapshot);
+        return snapshot;
       },
 
       /**
@@ -3728,12 +3921,18 @@
     PAGE_WINDOW.RootDataFundraisingCollector = debugApi;
 
     console.log(
-      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), cleanAndRecrawlHomepageTop(30), parse(), crawlDetailsNow(), recrawlDetails(items), resumeRecrawlDetails(), recrawlStatus(), debugDetail(url), testConnection(), sendTestAlert(), showPanel(), status()"
+      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), cleanAndRecrawlHomepageTop(30), parse(), crawlDetailsNow(), recrawlDetails(items), resumeRecrawlDetails(), recrawlStatus(), debugDetail(url), testConnection(), sendTestAlert(), showPanel(), diagnose(), status()"
     );
   }
 
   exposeDebugApi();
   testConnection({ silent: false });
-  initScheduleLoop();
-  bootstrap();
+  runAfterPageStable(async () => {
+    initScheduleLoop();
+    await bootstrap();
+  }).catch((error) => {
+    recordRuntimeError("bootstrap_error", error);
+    console.error("[RootData Reader] bootstrap failed:", error);
+    renderPanel({ ok: false, status: "bootstrap_failed", retryCount: 0, error: error.message, data: [] });
+  });
 })();
