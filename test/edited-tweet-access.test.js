@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  EDITED_TWEET_WINDOW_SECONDS,
   applyEditedTweetScope,
 } = require("../src/xhunt/utils/edited-tweet-access");
 
@@ -59,34 +58,26 @@ test("internal users receive every item in the upstream source window", () => {
   assert.equal(result.data.items.length, 2);
 });
 
-test("VIP users receive only chains first published within 24 hours", () => {
+test("VIP users receive every item in the upstream source window", () => {
   const items = [
     { edit: { root_id: "recent", first_created_at: NOW_SECONDS - 60 } },
     {
       edit: {
-        root_id: "boundary",
-        first_created_at: NOW_SECONDS - EDITED_TWEET_WINDOW_SECONDS,
+        root_id: "old",
+        first_created_at: NOW_SECONDS - 10 * 24 * 60 * 60,
       },
     },
-    {
-      edit: {
-        root_id: "expired",
-        first_created_at: NOW_SECONDS - EDITED_TWEET_WINDOW_SECONDS - 1,
-      },
-    },
-    { edit: { root_id: "future", first_created_at: NOW_SECONDS + 1 } },
     { edit: { root_id: "invalid", first_created_at: "invalid" } },
   ];
 
   const result = applyEditedTweetScope(buildResponse(items), {
     endpoint: "details",
-    access: buildAccess("vip_24h", EDITED_TWEET_WINDOW_SECONDS),
-    nowSeconds: NOW_SECONDS,
+    access: buildAccess("vip_24h", null),
   });
 
   assert.deepEqual(
     result.data.items.map((item) => item.edit.root_id),
-    ["recent", "boundary"]
+    ["recent", "old", "invalid"]
   );
 });
 

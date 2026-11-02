@@ -1,5 +1,3 @@
-const EDITED_TWEET_WINDOW_SECONDS = 24 * 60 * 60;
-
 function getEditedTweetAccess(req) {
   const {
     isRequestXHuntVip,
@@ -16,8 +14,10 @@ function getEditedTweetAccess(req) {
 
   if (isRequestXHuntVip(req)) {
     return {
+      // 保留既有 scope 名，避免已发布插件无法识别 VIP 详情权限。
+      // detail_window_seconds=null 表示服务端不再限制 24 小时窗口。
       detail_scope: "vip_24h",
-      detail_window_seconds: EDITED_TWEET_WINDOW_SECONDS,
+      detail_window_seconds: null,
       count_semantics: "edited_threads",
     };
   }
@@ -42,18 +42,17 @@ function assertSuccessfulResponse(data, endpoint) {
 function applyEditedTweetAccess(
   req,
   data,
-  { endpoint, nowSeconds = Math.floor(Date.now() / 1000) } = {}
+  { endpoint } = {}
 ) {
   return applyEditedTweetScope(data, {
     endpoint,
-    nowSeconds,
     access: getEditedTweetAccess(req),
   });
 }
 
 function applyEditedTweetScope(
   data,
-  { endpoint, access, nowSeconds = Math.floor(Date.now() / 1000) } = {}
+  { endpoint, access } = {}
 ) {
   if (endpoint !== "counts" && endpoint !== "details") {
     throw new TypeError("Unknown edited tweet endpoint");
@@ -89,7 +88,10 @@ function applyEditedTweetScope(
     throw new TypeError("Invalid edited tweet items");
   }
 
-  if (access.detail_scope === "internal_source_window") {
+  if (
+    access.detail_scope === "internal_source_window" ||
+    access.detail_scope === "vip_24h"
+  ) {
     return filtered;
   }
 
@@ -107,21 +109,10 @@ function applyEditedTweetScope(
     return filtered;
   }
 
-  const cutoff = nowSeconds - EDITED_TWEET_WINDOW_SECONDS;
-  filtered.data.items = filtered.data.items.filter((item) => {
-    const firstCreatedAt = Number(item?.edit?.first_created_at);
-    return (
-      Number.isFinite(firstCreatedAt) &&
-      firstCreatedAt >= cutoff &&
-      firstCreatedAt <= nowSeconds
-    );
-  });
-
   return filtered;
 }
 
 module.exports = {
-  EDITED_TWEET_WINDOW_SECONDS,
   applyEditedTweetAccess,
   applyEditedTweetScope,
   getEditedTweetAccess,
