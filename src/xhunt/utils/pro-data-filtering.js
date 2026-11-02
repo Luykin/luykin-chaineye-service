@@ -4,9 +4,10 @@ const {
   isRequestXHuntVip,
   isRequestInternalTestUser,
 } = require("../constants/xhuntVip");
+const {
+  PRO_ACCESS_MIN_EXTENSION_VERSION,
+} = require("../constants/pro");
 
-// 最小版本号：只有 >= 9.9.99 的版本才启用数据裁切
-const MIN_VERSION_FOR_PRO = "9.9.99";
 const DELETED_TWEET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DELETED_TWEET_HIDDEN_MESSAGE = "您暂时无法查看详细删帖内容";
 
@@ -102,7 +103,7 @@ function applyDeletedTweetFiltering(req, data) {
  * - 实时feeds流：后续实现
  * - 账户profile改变：/public/fetch/twitter/user（部分字段）
  *
- * 注意：除删帖接口外，只有版本号 >= 9.9.99 才会进行数据裁切。
+ * 注意：除删帖接口外，只有版本号 >= 99.99.99 才会进行数据裁切。
  *
  * @param {express.Request} req - Express 请求对象
  * @param {any} data - 原始响应数据
@@ -121,9 +122,12 @@ function applyProDataFiltering(req, data) {
     return data;
   }
 
-  // 检查版本号，如果版本号 < 9.9.99，直接返回原始数据，不进行裁切
+  // 检查版本号，如果版本号 < 99.99.99，直接返回原始数据，不进行裁切
   const version = getVersionFromRequest(req);
-  if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
+  if (
+    !version ||
+    !isVersionGreaterOrEqual(version, PRO_ACCESS_MIN_EXTENSION_VERSION)
+  ) {
     return data;
   }
 

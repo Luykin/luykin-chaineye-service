@@ -9,6 +9,13 @@ process.env.PG_PASSWORD ||= "xhunt_test";
 const {
   applyProDataFiltering,
 } = require("../src/xhunt/utils/pro-data-filtering");
+const {
+  PRO_ACCESS_MIN_EXTENSION_VERSION,
+} = require("../src/xhunt/constants/pro");
+
+test("uses one shared Pro access version threshold", () => {
+  assert.equal(PRO_ACCESS_MIN_EXTENSION_VERSION, "99.99.99");
+});
 
 test("follow relation always returns the complete upstream payload", () => {
   const payload = {
@@ -29,7 +36,9 @@ test("follow relation always returns the complete upstream payload", () => {
   const result = applyProDataFiltering(
     {
       path: "/public/fetch/twitter/follow_relation",
-      headers: { "x-extension-version": "9.9.99" },
+      headers: {
+        "x-extension-version": PRO_ACCESS_MIN_EXTENSION_VERSION,
+      },
       isPro: false,
     },
     payload

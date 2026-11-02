@@ -7,12 +7,12 @@ const {
   isVersionGreaterOrEqual,
 } = require("../utils/version");
 const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
+const {
+  PRO_ACCESS_MIN_EXTENSION_VERSION,
+} = require("../constants/pro");
 const PRO_STATUS_MIDDLEWARE_FLAG = Symbol.for(
   "xhunt.proStatusMiddlewareExecuted"
 );
-
-// 最小版本号：只有 >= 9.9.99 的版本才启用 Pro 检查
-const MIN_VERSION_FOR_PRO = "99.99.99";
 
 /**
  * 获取版本号（智能选择来源）
@@ -46,16 +46,19 @@ function getVersion(req) {
  * 如果 req.user 不存在，设置 req.isPro = false 并继续
  * 适用于使用 authenticateTokenOptional 的路由
  *
- * 注意：只有版本号 >= 9.9.99 才会进行 Pro 检查，否则直接跳过
+ * 注意：只有版本号 >= 99.99.99 才会进行 Pro 检查，否则直接跳过
  */
 async function checkProStatus(req, res, next) {
   try {
     if (req[PRO_STATUS_MIDDLEWARE_FLAG]) {
       return next();
     }
-    // 检查版本号，如果版本号 < 9.9.99，直接跳过 Pro 检查
+    // 检查版本号，如果版本号 < 99.99.99，直接跳过 Pro 检查
     const version = getVersion(req);
-    if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
+    if (
+      !version ||
+      !isVersionGreaterOrEqual(version, PRO_ACCESS_MIN_EXTENSION_VERSION)
+    ) {
       req.isPro = false;
       req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
       return next();
@@ -125,16 +128,19 @@ async function checkProStatus(req, res, next) {
  * 必须有 req.user，否则返回错误
  * 适用于使用 authenticateToken 的路由
  *
- * 注意：只有版本号 >= 9.9.99 才会进行 Pro 检查，否则直接跳过
+ * 注意：只有版本号 >= 99.99.99 才会进行 Pro 检查，否则直接跳过
  */
 async function checkProStatusRequired(req, res, next) {
   try {
     if (req[PRO_STATUS_MIDDLEWARE_FLAG]) {
       return next();
     }
-    // 检查版本号，如果版本号 < 9.9.99，直接跳过 Pro 检查
+    // 检查版本号，如果版本号 < 99.99.99，直接跳过 Pro 检查
     const version = getVersion(req);
-    if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
+    if (
+      !version ||
+      !isVersionGreaterOrEqual(version, PRO_ACCESS_MIN_EXTENSION_VERSION)
+    ) {
       req.isPro = false;
       req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
       return next();
