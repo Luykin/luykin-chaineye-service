@@ -5,8 +5,8 @@ const {
   isRequestInternalTestUser,
 } = require("../constants/xhuntVip");
 
-// 最小版本号：只有 >= 0.4.05 的版本才启用数据裁切
-const MIN_VERSION_FOR_PRO = "0.4.05";
+// 最小版本号：只有 >= 9.9.99 的版本才启用数据裁切
+const MIN_VERSION_FOR_PRO = "9.9.99";
 const DELETED_TWEET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DELETED_TWEET_HIDDEN_MESSAGE = "您暂时无法查看详细删帖内容";
 
@@ -101,9 +101,8 @@ function applyDeletedTweetFiltering(req, data) {
  * - 删除账户信息：/public/fetch/twitter/user（部分字段）
  * - 实时feeds流：后续实现
  * - 账户profile改变：/public/fetch/twitter/user（部分字段）
- * - 最近5条关注和被关注：/public/fetch/twitter/follow_relation
  *
- * 注意：除删帖接口外，只有版本号 >= 0.4.05 才会进行数据裁切。
+ * 注意：除删帖接口外，只有版本号 >= 9.9.99 才会进行数据裁切。
  *
  * @param {express.Request} req - Express 请求对象
  * @param {any} data - 原始响应数据
@@ -117,7 +116,12 @@ function applyProDataFiltering(req, data) {
     return applyDeletedTweetFiltering(req, data);
   }
 
-  // 检查版本号，如果版本号 < 0.4.05，直接返回原始数据，不进行裁切
+  // 关注关系接口不做 Pro 或版本裁剪，始终原样返回上游数据。
+  if (path === "/public/fetch/twitter/follow_relation") {
+    return data;
+  }
+
+  // 检查版本号，如果版本号 < 9.9.99，直接返回原始数据，不进行裁切
   const version = getVersionFromRequest(req);
   if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
     return data;
@@ -137,9 +141,7 @@ function applyProDataFiltering(req, data) {
   // 如果是老用户 Pro，不进行数据裁切，但添加提示信息
   if (isLegacyPro) {
     // 检查是否是需要特殊处理的接口
-    const needsLegacyMessage =
-      path === "/public/fetch/twitter/user" ||
-      path === "/public/fetch/twitter/follow_relation";
+    const needsLegacyMessage = path === "/public/fetch/twitter/user";
 
     if (needsLegacyMessage && data && typeof data === "object") {
       const result = { ...data };
@@ -178,57 +180,6 @@ function applyProDataFiltering(req, data) {
             }
             // 如果没有 name 字段，返回空对象
             return {};
-          });
-      }
-
-      // 在 message 同级添加提示信息
-      filtered.proMessage = "Pro subscription required to get full information";
-
-      return filtered;
-    }
-    return data;
-  }
-
-  // 2. 关注关系接口：/public/fetch/twitter/follow_relation
-  // 非 Pro 用户：将 followed_action 和 following_action 数组的前 5 条数据变成空对象
-  // 数据结构：{ code: 200, message: "get data success", data: { data: { followed_action: [...], following_action: [...] } } }
-  if (path === "/public/fetch/twitter/follow_relation") {
-    if (data && typeof data === "object") {
-      const filtered = { ...data };
-
-      // 处理嵌套的 data.data.followed_action 数组
-      if (
-        filtered.data &&
-        typeof filtered.data === "object" &&
-        filtered.data.data &&
-        typeof filtered.data.data === "object" &&
-        Array.isArray(filtered.data.data.followed_action)
-      ) {
-        // 将前 5 条数据变成空对象
-        filtered.data.data.followed_action =
-          filtered.data.data.followed_action.map((item, index) => {
-            if (index < 5) {
-              return {};
-            }
-            return item;
-          });
-      }
-
-      // 处理嵌套的 data.data.following_action 数组
-      if (
-        filtered.data &&
-        typeof filtered.data === "object" &&
-        filtered.data.data &&
-        typeof filtered.data.data === "object" &&
-        Array.isArray(filtered.data.data.following_action)
-      ) {
-        // 将前 5 条数据变成空对象
-        filtered.data.data.following_action =
-          filtered.data.data.following_action.map((item, index) => {
-            if (index < 5) {
-              return {};
-            }
-            return item;
           });
       }
 
