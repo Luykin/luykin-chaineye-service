@@ -180,11 +180,6 @@ async function syncMissingTwitterId(row) {
   }
 }
 
-function requireSuperAdmin(req, res, next) {
-  if (req.adminUser?.role === "super") return next();
-  return res.status(403).json({ success: false, error: "仅超级管理员可操作" });
-}
-
 router.get(
   "/vip-lists",
   adminAuth,
@@ -553,7 +548,7 @@ router.post(
 router.post(
   "/vip-lists/:id/become-creator",
   adminAuth,
-  requireSuperAdmin,
+  requirePermission("vip-management"),
   async (req, res) => {
     let row;
     try {

@@ -2,7 +2,6 @@ import { Button, Card, Empty, Input, Modal, Space, Tag, Typography, message } fr
 import { CrownOutlined, ExperimentOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
   addVipListUserAndSync,
@@ -145,11 +144,9 @@ function VipListCard({
 
 export function VipManagementPage() {
   const [messageApi, contextHolder] = message.useMessage();
-  const { user } = useAuth();
   const query = useQuery({ queryKey: ["vip-lists"], queryFn: fetchVipLists });
   const vip = query.data?.data.vip || [];
   const internalTest = query.data?.data.internalTest || [];
-  const isSuperAdmin = user?.role === "super";
 
   const [editingItem, setEditingItem] = useState<VipListItem | null>(null);
   const [editingTwitterId, setEditingTwitterId] = useState("");
@@ -275,7 +272,7 @@ export function VipManagementPage() {
             onAdd={(username, twitterId) => handleAddUser("vip", username, twitterId)}
             onDelete={(id) => deleteMutation.mutate(id)}
             onEditTwitterId={handleOpenEdit}
-            showCreatorAction={isSuperAdmin}
+            showCreatorAction
             onBecomeCreator={confirmBecomeCreator}
             creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null}
           />
@@ -287,7 +284,7 @@ export function VipManagementPage() {
             onAdd={(username, twitterId) => handleAddUser("internal_test", username, twitterId)}
             onDelete={(id) => deleteMutation.mutate(id)}
             onEditTwitterId={handleOpenEdit}
-            showCreatorAction={isSuperAdmin}
+            showCreatorAction
             onBecomeCreator={confirmBecomeCreator}
             creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null}
           />
