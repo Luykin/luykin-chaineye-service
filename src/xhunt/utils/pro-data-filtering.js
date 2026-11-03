@@ -76,23 +76,25 @@ function applyDeletedTweetFiltering(req, data) {
     },
   };
 
-  // 除内部用户外，所有用户都只能查看最近 24 小时内的删帖记录。
+  // VIP 仅能查看最近 24 小时内的详细内容，超时记录仍返回但隐藏内容。
   const now = Date.now();
   const cutoff = now - DELETED_TWEET_WINDOW_MS;
-  const recentItems = items.filter((item) => {
+  const isRecentItem = (item) => {
     const createTime = Date.parse(item?.create_time);
     return (
       Number.isFinite(createTime) && createTime >= cutoff && createTime <= now
     );
-  });
+  };
 
   if (isVip) {
-    filtered.data.data = recentItems;
+    filtered.data.data = items.map((item) =>
+      isRecentItem(item) ? item : maskDeletedTweetValue(item)
+    );
     return filtered;
   }
 
-  // 保留 24 小时内每条数据的完整结构和数组长度，只隐藏具体内容。
-  filtered.data.data = recentItems.map((item) =>
+  // 普通用户保留每条数据的完整结构和数组长度，但隐藏全部具体内容。
+  filtered.data.data = items.map((item) =>
     maskDeletedTweetValue(item)
   );
   filtered.proMessage = DELETED_TWEET_HIDDEN_MESSAGE;
@@ -104,7 +106,7 @@ function applyDeletedTweetFiltering(req, data) {
  * 根据 req.isPro 状态和请求路径，对返回数据进行过滤
  *
  * 数据权限功能列表：
- * - 删帖功能：/public/fetch/tweet/deleted（内部用户不限时间，其他用户限最近 24 小时）
+ * - 删帖功能：/public/fetch/tweet/deleted（内测用户查看全部详情，VIP 查看最近 24 小时详情，普通用户隐藏全部详情）
  * - 删除账户信息：/public/fetch/twitter/user（部分字段）
  * - 实时feeds流：后续实现
  * - 账户profile改变：/public/fetch/twitter/user（部分字段）

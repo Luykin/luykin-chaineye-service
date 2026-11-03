@@ -113,3 +113,87 @@ test("deleted tweet response includes the request VIP status", async () => {
     XhuntVipTestUser.findAll = originalFindAll;
   }
 });
+
+test("deleted tweet response preserves every upstream item with role-based masking", async () => {
+  const originalFindAll = XhuntVipTestUser.findAll;
+  XhuntVipTestUser.findAll = async () => [
+    {
+      username: "vip-user",
+      twitterId: "123456",
+      listType: "vip",
+    },
+    {
+      username: "internal-user",
+      twitterId: "999999",
+      listType: "internal_test",
+    },
+  ];
+
+  try {
+    await loadVipLists();
+
+    const recentTime = new Date().toISOString();
+    const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const payload = {
+      code: 200,
+      data: {
+        data: Array.from({ length: 5 }, (_, index) => ({
+          id: `tweet-${index + 1}`,
+          text: `deleted tweet content ${index + 1}`,
+          create_time: index === 0 ? recentTime : oldTime,
+        })),
+      },
+    };
+
+    const internalResult = applyProDataFiltering(
+      {
+        path: "/public/fetch/tweet/deleted",
+        headers: { "x-tw-id": "999999" },
+      },
+      payload
+    );
+    const vipResult = applyProDataFiltering(
+      {
+        path: "/public/fetch/tweet/deleted",
+        headers: { "x-tw-id": "123456" },
+      },
+      payload
+    );
+    const nonVipResult = applyProDataFiltering(
+      {
+        path: "/public/fetch/tweet/deleted",
+        headers: { "x-tw-id": "654321" },
+      },
+      payload
+    );
+
+    assert.deepEqual(
+      internalResult.data.data.map((item) => item.text),
+      [
+        "deleted tweet content 1",
+        "deleted tweet content 2",
+        "deleted tweet content 3",
+        "deleted tweet content 4",
+        "deleted tweet content 5",
+      ]
+    );
+    assert.deepEqual(
+      vipResult.data.data.map((item) => item.text),
+      [
+        "deleted tweet content 1",
+        "您暂时无法查看详细删帖内容",
+        "您暂时无法查看详细删帖内容",
+        "您暂时无法查看详细删帖内容",
+        "您暂时无法查看详细删帖内容",
+      ]
+    );
+    assert.deepEqual(
+      nonVipResult.data.data.map((item) => item.text),
+      Array(5).fill("您暂时无法查看详细删帖内容")
+    );
+  } finally {
+    XhuntVipTestUser.findAll = async () => [];
+    await loadVipLists();
+    XhuntVipTestUser.findAll = originalFindAll;
+  }
+});
