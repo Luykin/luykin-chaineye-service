@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const { securityMiddleware } = require("../middleware/security");
 const {
   authenticateToken,
@@ -13,6 +14,8 @@ const {
 } = require("../utils/unfollow-relation-masking");
 const { handleUserCreateGiftCredits } = require("../services/giftCreditsService");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { getRateLimitIdentity } = require("../utils/request-identity");
 
 const router = express.Router();
 
@@ -27,6 +30,110 @@ const URL_MAPPINGS = {
 
 // 默认目标服务器
 const DEFAULT_TARGET = "kota";
+
+const SOCIAL_CIRCLE_FREE_DAILY_LIMIT = 6;
+const SOCIAL_CIRCLE_VIP_DAILY_LIMIT = 30;
+const SOCIAL_CIRCLE_DAILY_LIMIT_SCRIPT = `
+local key = KEYS[1]
+local target = ARGV[1]
+local limit = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
+
+if redis.call("SISMEMBER", key, target) == 1 then
+  return {1, redis.call("SCARD", key)}
+end
+
+local used = redis.call("SCARD", key)
+if used >= limit then
+  return {0, used}
+end
+
+redis.call("SADD", key, target)
+redis.call("EXPIRE", key, ttl)
+return {1, used + 1}
+`;
+
+function getSocialCircleTarget(req) {
+  const userId = String(req.query?.user_id || "").trim();
+  if (/^[1-9]\d{0,19}$/.test(userId)) return `id:${userId}`;
+
+  const username = String(req.query?.username || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  if (/^[a-z0-9_]{1,15}$/.test(username)) return `username:${username}`;
+
+  // cursor 属于已经查看过的同一个社交圈，不额外扣减 handler 额度。
+  return null;
+}
+
+function getBeijingDayContext(now = new Date()) {
+  const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const year = beijingTime.getUTCFullYear();
+  const month = beijingTime.getUTCMonth();
+  const day = beijingTime.getUTCDate();
+  const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const nextMidnight = Date.UTC(year, month, day + 1) - 8 * 60 * 60 * 1000;
+
+  return {
+    date,
+    resetTime: nextMidnight,
+    ttlSeconds: Math.max(1, Math.ceil((nextMidnight - now.getTime()) / 1000)),
+  };
+}
+
+async function socialCircleDailyLimit(req, res, next) {
+  const target = getSocialCircleTarget(req);
+  if (!target) return next();
+
+  const isVip = isRequestXHuntVip(req);
+  const limit = isVip
+    ? SOCIAL_CIRCLE_VIP_DAILY_LIMIT
+    : SOCIAL_CIRCLE_FREE_DAILY_LIMIT;
+  const identity = getRateLimitIdentity(req);
+  const identityHash = crypto
+    .createHash("sha256")
+    .update(identity)
+    .digest("hex");
+  const dayContext = getBeijingDayContext();
+  const key = `xhunt:social-circle:daily:${dayContext.date}:${identityHash}`;
+
+  try {
+    const result = await req.redisClient.eval(SOCIAL_CIRCLE_DAILY_LIMIT_SCRIPT, {
+      keys: [key],
+      arguments: [target, String(limit), String(dayContext.ttlSeconds)],
+    });
+    const allowed = Number(result?.[0]) === 1;
+    const used = Number(result?.[1]) || 0;
+
+    res.setHeader("X-RateLimit-Limit", limit);
+    res.setHeader("X-RateLimit-Remaining", Math.max(0, limit - used));
+    res.setHeader("X-RateLimit-Reset", dayContext.resetTime);
+
+    if (!allowed) {
+      ensureCorsHeaders(req, res);
+      setNoCacheHeaders(res);
+      return res.status(200).json({
+        code: 429,
+        limitExceeded: true,
+        message: isVip
+          ? "超过每日查看限额"
+          : "超过每日查看限额，免费申请VIP获取更多限额",
+        isVip,
+        limit,
+        used,
+        remaining: 0,
+        resetTime: dayContext.resetTime,
+      });
+    }
+
+    return next();
+  } catch (error) {
+    // Redis 异常时优先保证社交圈可用，避免基础设施故障误伤用户。
+    console.error("Social circle daily limit error:", error);
+    return next();
+  }
+}
 
 // 确保所有响应都包含 CORS 头（无论状态码是多少）
 const ensureCorsHeaders = (req, res, allowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS") => {
@@ -305,6 +412,7 @@ const SHORT_CACHE_PATHS = ["twitter/trending_tweets"];
 // 完全不缓存分组：需要实时返回或不允许缓存的接口放这里
 const NO_CACHE_PATHS = [
   "twitter/unfollow_relation",
+  "twitter/kol_interactions",
   "fetch/tweet/deleted",
 ];
 
@@ -674,6 +782,17 @@ router.all(
     await proxyRequest(req, res, targetUrl, (data) =>
       applyUnfollowRelationMasking(req, data)
     );
+  }
+);
+
+// KOL 社交圈：不要求 XHunt 登录，按签名中的 X 身份统计每日查看的 handler 数。
+router.all(
+  "/public/fetch/twitter/kol_interactions",
+  securityMiddleware,
+  socialCircleDailyLimit,
+  async (req, res) => {
+    const targetUrl = getTargetUrl(req);
+    await proxyRequest(req, res, targetUrl);
   }
 );
 
