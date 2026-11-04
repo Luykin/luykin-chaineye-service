@@ -15,6 +15,9 @@ const { handleUserCreateGiftCredits } = require("../services/giftCreditsService"
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
+  isProxyPathAllowed,
+} = require("../constants/proxyPathAllowlist");
+const {
   createSocialCircleQuotaContext,
   checkSocialCircleQuota,
   buildSocialCircleAvailabilityResponse,
@@ -113,6 +116,20 @@ const ensureCorsHeaders = (req, res, allowMethods = "GET, POST, PUT, PATCH, DELE
     );
   }
 };
+
+function enforceProxyPathAllowlist(req, res, next) {
+  if (isProxyPathAllowed(req.path)) {
+    return next();
+  }
+
+  console.warn("[XHuntProxy] 拒绝非白名单路径:", {
+    method: req.method,
+    path: req.path,
+  });
+  ensureCorsHeaders(req, res);
+  setNoCacheHeaders(res);
+  return res.status(403).json({ error: "PROXY_PATH_NOT_ALLOWED" });
+}
 
 // 代理请求处理函数
 async function proxyRequest(req, res, targetUrl, transformJson = null) {
@@ -682,6 +699,9 @@ async function handleStreamingResponse(response, res, req) {
   }
 }
 
+// 所有代理入口先按逻辑目标 path 校验，未列入白名单的请求不访问上游。
+router.use(enforceProxyPathAllowlist);
+
 // 代理路由 - 需要认证
 router.all(
   "/auth/*",
@@ -778,10 +798,14 @@ router.all(
   }
 );
 
-// 代理路由 - 流式（与普通代理完全分离）
-router.all("/public-stream/*", securityMiddleware, async (req, res) => {
-  const targetUrl = getTargetUrlForStreaming(req);
-  await proxyRequestStream(req, res, targetUrl);
-});
+// 代理路由 - 流式；仅 public-stream 白名单内的 path 会到达这里。
+router.all(
+  "/public-stream/*",
+  securityMiddleware,
+  async (req, res) => {
+    const targetUrl = getTargetUrlForStreaming(req);
+    await proxyRequestStream(req, res, targetUrl);
+  }
+);
 
 module.exports = router;
