@@ -113,6 +113,16 @@ function isSuccessfulSocialCircleResponse(data) {
   );
 }
 
+function buildSocialCircleAvailabilityResponse(data) {
+  return {
+    code: 200,
+    message: "success",
+    data: {
+      available: isSuccessfulSocialCircleResponse(data),
+    },
+  };
+}
+
 async function commitSocialCircleQuotaIfSuccessful(
   redisClient,
   context,
@@ -169,6 +179,7 @@ module.exports = {
   getBeijingDayContext,
   createSocialCircleQuotaContext,
   checkSocialCircleQuota,
+  buildSocialCircleAvailabilityResponse,
   commitSocialCircleQuotaIfSuccessful,
   setSocialCircleQuotaHeaders,
   buildSocialCircleLimitResponse,

@@ -3,6 +3,7 @@ const { test } = require("node:test");
 
 const {
   checkSocialCircleQuota,
+  buildSocialCircleAvailabilityResponse,
   commitSocialCircleQuotaIfSuccessful,
 } = require("../src/xhunt/utils/social-circle-quota");
 
@@ -52,6 +53,57 @@ test("404 or empty social-circle data does not consume quota", async () => {
   assert.deepEqual(notFound, { charged: false });
   assert.deepEqual(empty, { charged: false });
   assert.equal(evalCalls, 0);
+});
+
+test("availability response reports data without touching quota", () => {
+  assert.deepEqual(
+    buildSocialCircleAvailabilityResponse({
+      code: 200,
+      data: { items: [{ kol: { user_id: "456" } }] },
+    }),
+    { code: 200, message: "success", data: { available: true } },
+  );
+  assert.deepEqual(
+    buildSocialCircleAvailabilityResponse({ code: 200, data: { items: [] } }),
+    { code: 200, message: "success", data: { available: false } },
+  );
+  assert.deepEqual(
+    buildSocialCircleAvailabilityResponse({ code: 404 }),
+    { code: 200, message: "success", data: { available: false } },
+  );
+});
+
+test("only the social-circle detail route uses the quota middleware", () => {
+  process.env.PG_HOST ||= "127.0.0.1";
+  process.env.PG_DATABASE ||= "test";
+  process.env.PG_USERNAME ||= "test";
+  process.env.PG_PASSWORD ||= "test";
+
+  const router = require("../src/xhunt/api/proxy");
+  const routeLayers = router.stack.filter((layer) =>
+    String(layer.route?.path || "").includes("kol_interactions"),
+  );
+  const availabilityRoute = routeLayers.find((layer) =>
+    String(layer.route.path).endsWith("/availability"),
+  );
+  const detailRoute = routeLayers.find(
+    (layer) => layer.route.path === "/public/fetch/twitter/kol_interactions",
+  );
+
+  assert.deepEqual(availabilityRoute?.route.methods, { get: true });
+  assert.equal(
+    availabilityRoute?.route.stack.some(
+      (layer) => layer.name === "socialCircleDailyLimit",
+    ),
+    false,
+  );
+  assert.deepEqual(detailRoute?.route.methods, { get: true });
+  assert.equal(
+    detailRoute?.route.stack.some(
+      (layer) => layer.name === "socialCircleDailyLimit",
+    ),
+    true,
+  );
 });
 
 test("valid social-circle data atomically consumes one handler", async () => {

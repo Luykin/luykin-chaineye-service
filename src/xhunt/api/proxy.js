@@ -17,6 +17,7 @@ const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
   createSocialCircleQuotaContext,
   checkSocialCircleQuota,
+  buildSocialCircleAvailabilityResponse,
   commitSocialCircleQuotaIfSuccessful,
   setSocialCircleQuotaHeaders,
   buildSocialCircleLimitResponse,
@@ -516,13 +517,14 @@ function getForwardedQuery(req, targetPath) {
 }
 
 // 获取目标URL
-function getTargetUrl(req) {
+function getTargetUrl(req, targetPathOverride = null) {
   const target = req.query.target || DEFAULT_TARGET;
 
   let baseUrl = (URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET]).trim();
 
   // 提取路径（去除 /auth/ 或 /public/ 前缀）
-  const targetPath = req.path.replace(/^\/(auth|public)\//, "");
+  const targetPath =
+    targetPathOverride || req.path.replace(/^\/(auth|public)\//, "");
   const originalQuery = getForwardedQuery(req, targetPath);
 
   // 将剩余查询参数转换为查询字符串
@@ -737,8 +739,23 @@ router.all(
   }
 );
 
-// KOL 社交圈：不要求 XHunt 登录，按签名中的 X 身份统计每日查看的 handler 数。
-router.all(
+// KOL 社交圈入口检查：只判断是否有可展示数据，不读取或消耗每日额度。
+router.get(
+  "/public/fetch/twitter/kol_interactions/availability",
+  securityMiddleware,
+  async (req, res) => {
+    const targetUrl = new URL(
+      getTargetUrl(req, "fetch/twitter/kol_interactions")
+    );
+    targetUrl.searchParams.set("limit", "1");
+    await proxyRequest(req, res, targetUrl.toString(), (data) =>
+      buildSocialCircleAvailabilityResponse(data)
+    );
+  }
+);
+
+// KOL 社交圈详情：不要求 XHunt 登录，成功返回非空详情后才消耗 handler 额度。
+router.get(
   "/public/fetch/twitter/kol_interactions",
   securityMiddleware,
   socialCircleDailyLimit,
