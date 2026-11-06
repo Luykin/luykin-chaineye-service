@@ -32,6 +32,36 @@ test("maps the supported Chinese essay winner columns", () => {
   assert.equal(parsed.rows[0].profileLookup, "pending");
 });
 
+test("finds a header after introductory rows and prefers the explicit X account column", () => {
+  const parsed = normalizeImportedRows([
+    ["NeoSoul｜征文获奖名单｜研发展示版", "", "", "", "", ""],
+    ["奖励说明", "", "", "", "", ""],
+    ["奖项", "作者", "X账号", "网页单行简介", "作品链接", "奖金 / USDT"],
+    [
+      "一等奖",
+      "展示名称",
+      "@real_x_handle",
+      "获奖作品标题",
+      "https://x.com/real_x_handle/status/123",
+      "1000",
+    ],
+  ]);
+
+  assert.deepEqual(parsed.mapping, { award: 0, handler: 2, post: 3, url: 4, reward: 5 });
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0].sourceRow, 4);
+  assert.deepEqual(parsed.rows[0].winner, {
+    name: "",
+    handler: "real_x_handle",
+    avatar: "",
+    reward: "1000",
+    award: "一等奖",
+    post: "获奖作品标题",
+    url: "https://x.com/real_x_handle/status/123",
+  });
+  assert.equal(parsed.rows[0].profileLookup, "pending");
+});
+
 test("extracts handler from an X post URL and reports duplicate rows", () => {
   const parsed = normalizeImportedRows([
     ["文章链接", "摘要"],

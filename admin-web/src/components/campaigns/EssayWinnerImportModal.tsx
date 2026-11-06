@@ -35,6 +35,11 @@ import {
   type EssayWinnerImportPreview,
   type EssayWinnerImportRow,
 } from "@/services/essay-winner-import";
+import {
+  appendEssayWinners,
+  normalizeHandle,
+  normalizeUrl,
+} from "./essayWinnerImportUtils";
 
 type ExistingWinner = Partial<EssayWinnerDraft>;
 type ImportMode = "replace" | "append";
@@ -49,16 +54,6 @@ const FIELD_LABELS: Record<keyof EssayWinnerDraft, string> = {
   reward: "奖励",
   award: "奖项",
 };
-
-function normalizeHandle(value: string) {
-  return String(value || "")
-    .trim()
-    .replace(/^@+/, "");
-}
-
-function normalizeUrl(value: string) {
-  return String(value || "").trim().toLowerCase().replace(/[?#].*$/, "").replace(/\/$/, "");
-}
 
 function validateWinner(winner: EssayWinnerDraft) {
   const errors: string[] = [];
@@ -238,28 +233,9 @@ export function EssayWinnerImportModal({
     let nextWinners = normalized;
     let duplicateCount = 0;
     if (importMode === "append") {
-      const usedHandles = new Set(existingWinners.map((item) => normalizeHandle(item.handler || "").toLowerCase()).filter(Boolean));
-      const usedUrls = new Set(existingWinners.map((item) => normalizeUrl(item.url || "")).filter(Boolean));
-      const appended = normalized.filter((winner) => {
-        const handlerKey = winner.handler.toLowerCase();
-        const urlKey = normalizeUrl(winner.url);
-        if ((handlerKey && usedHandles.has(handlerKey)) || (urlKey && usedUrls.has(urlKey))) {
-          duplicateCount += 1;
-          return false;
-        }
-        if (handlerKey) usedHandles.add(handlerKey);
-        if (urlKey) usedUrls.add(urlKey);
-        return true;
-      });
-      nextWinners = [...existingWinners.map((item) => ({
-        name: item.name || "",
-        handler: item.handler || "",
-        avatar: item.avatar || "",
-        reward: item.reward || "",
-        award: item.award || "",
-        post: item.post || "",
-        url: item.url || "",
-      })), ...appended];
+      const appended = appendEssayWinners(existingWinners, normalized);
+      nextWinners = appended.winners;
+      duplicateCount = appended.duplicateCount;
     }
     onImport(nextWinners);
     onMessage(

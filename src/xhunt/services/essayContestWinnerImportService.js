@@ -3,6 +3,7 @@ const XLSX = require("xlsx");
 const MAX_IMPORT_ROWS = 500;
 const MAX_IMPORT_COLUMNS = 50;
 const MAX_CELL_LENGTH = 5000;
+const MAX_HEADER_SCAN_ROWS = 20;
 
 const FIELD_ALIASES = {
   handler: [
@@ -40,6 +41,7 @@ const FIELD_ALIASES = {
     "摘要",
     "文章标题",
     "作品标题",
+    "网页单行简介",
     "标题",
     "post",
     "title",
@@ -47,7 +49,7 @@ const FIELD_ALIASES = {
     "content",
     "description",
   ],
-  reward: ["奖励", "奖金", "奖励金额", "金额", "reward", "prize", "amount"],
+  reward: ["奖励", "奖金", "奖金 / USDT", "奖励金额", "金额", "reward", "prize", "amount"],
   award: ["奖项", "名次", "排名", "获奖等级", "award", "rank", "place"],
 };
 
@@ -95,13 +97,36 @@ function isHttpUrl(value) {
 
 function detectColumns(headers) {
   const mapping = {};
+  const mappingPriority = {};
   const columns = (Array.isArray(headers) ? headers : []).slice(0, MAX_IMPORT_COLUMNS).map((header, index) => {
     const source = cleanCell(header, 200);
-    const field = ALIAS_TO_FIELD.get(normalizeHeader(source)) || null;
-    if (field && mapping[field] === undefined) mapping[field] = index;
+    const normalizedSource = normalizeHeader(source);
+    const field = ALIAS_TO_FIELD.get(normalizedSource) || null;
+    const priority = field === "handler" && normalizedSource === normalizeHeader("作者") ? 0 : 1;
+    if (field && (mapping[field] === undefined || priority > mappingPriority[field])) {
+      mapping[field] = index;
+      mappingPriority[field] = priority;
+    }
     return { index, source, field: field || null };
   });
   return { mapping, columns };
+}
+
+function findHeaderRow(rows) {
+  let best = { index: 0, ...detectColumns(rows[0]) };
+  let bestScore = Object.keys(best.mapping).length;
+  const scanRows = rows.slice(1, MAX_HEADER_SCAN_ROWS);
+
+  scanRows.forEach((headers, offset) => {
+    const candidate = detectColumns(headers);
+    const score = Object.keys(candidate.mapping).length;
+    if (score > bestScore) {
+      best = { index: offset + 1, ...candidate };
+      bestScore = score;
+    }
+  });
+
+  return best;
 }
 
 function makeRowIssue(message, level = "warning") {
@@ -114,9 +139,8 @@ function normalizeImportedRows(matrix) {
     return { rows: [], columns: [], mapping: {}, truncated: false };
   }
 
-  const headers = Array.isArray(rows[0]) ? rows[0] : [];
-  const { mapping, columns } = detectColumns(headers);
-  const dataRows = rows.slice(1, MAX_IMPORT_ROWS + 1);
+  const { index: headerRowIndex, mapping, columns } = findHeaderRow(rows);
+  const dataRows = rows.slice(headerRowIndex + 1, headerRowIndex + MAX_IMPORT_ROWS + 1);
   const normalizedRows = [];
   const seenHandlers = new Map();
   const seenUrls = new Map();
@@ -141,7 +165,7 @@ function normalizeImportedRows(matrix) {
     const hasContent = Object.values(winner).some(Boolean) || cells.some((cell) => cleanCell(cell));
     if (!hasContent) return;
 
-    const sourceRow = index + 2;
+    const sourceRow = headerRowIndex + index + 2;
     const issues = [];
     if (!handler) {
       issues.push(makeRowIssue("缺少有效的 Twitter handler，且无法从文章链接提取", "error"));
@@ -179,7 +203,7 @@ function normalizeImportedRows(matrix) {
     rows: normalizedRows,
     columns,
     mapping,
-    truncated: rows.length - 1 > MAX_IMPORT_ROWS,
+    truncated: rows.length - headerRowIndex - 1 > MAX_IMPORT_ROWS,
   };
 }
 
