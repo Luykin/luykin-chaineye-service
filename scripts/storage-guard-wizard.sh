@@ -429,11 +429,11 @@ import sys
 
 path = pathlib.Path(sys.argv[1])
 text = path.read_text()
-if "access_log /var/log/nginx/sse_error_access.log if=$access_log_enabled;" not in text:
+if "access_log /var/log/nginx/sse_error_access.log main if=$access_log_enabled;" not in text:
     pattern = r"(?m)^(\s*)access_log\s+/var/log/nginx/sse_error_access\.log;$"
     text, count = re.subn(
         pattern,
-        r"\1access_log /var/log/nginx/sse_error_access.log if=$access_log_enabled;",
+        r"\1access_log /var/log/nginx/sse_error_access.log main if=$access_log_enabled;",
         text,
         count=1,
     )
