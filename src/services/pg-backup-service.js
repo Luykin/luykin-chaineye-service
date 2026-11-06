@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const readline = require("readline");
+const zlib = require("zlib");
 const { promisify } = require("util");
 const { Client } = require("pg");
 
@@ -12,6 +13,7 @@ const readdir = promisify(fs.readdir);
 const unlink = promisify(fs.unlink);
 const stat = promisify(fs.stat);
 const mkdir = promisify(fs.mkdir);
+const rename = promisify(fs.rename);
 
 const SOCIAL_LISTENING_TABLES = Object.freeze([
   "EchohuntFeatureAccesses",
@@ -177,7 +179,7 @@ class PostgresBackupService {
     if (
       !safeName ||
       safeName !== backupName ||
-      !/^pg_backup_[A-Za-z0-9_.:-]+\.sql$/.test(safeName)
+      !this.isBackupFileName(safeName)
     ) {
       throw new Error("备份文件名不合法");
     }
@@ -191,6 +193,19 @@ class PostgresBackupService {
       throw new Error("备份文件不存在");
     }
     return backupFilePath;
+  }
+
+  isBackupFileName(fileName) {
+    return /^pg_backup_[A-Za-z0-9_.:-]+\.sql(?:\.gz)?$/.test(fileName);
+  }
+
+  createBackupReadStream(backupFilePath) {
+    const source = fs.createReadStream(backupFilePath);
+    if (backupFilePath.endsWith(".gz")) {
+      return source.pipe(zlib.createGunzip());
+    }
+    source.setEncoding("utf8");
+    return source;
   }
 
   isCopyLineForTable(line, tableName) {
@@ -214,7 +229,7 @@ class PostgresBackupService {
     const sequenceLines = [];
     const presentTables = new Set();
 
-    const stream = fs.createReadStream(backupFilePath, { encoding: "utf8" });
+    const stream = this.createBackupReadStream(backupFilePath);
     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
     let currentTable = null;
@@ -369,13 +384,15 @@ class PostgresBackupService {
       const { stdout } = await execAsync("pg_dump --version");
       const version = stdout.trim();
       console.log(`✅ PostgreSQL 客户端工具已安装: ${version}`);
+      await execAsync("gzip --version");
+      console.log("✅ gzip 压缩工具已安装");
       return true;
     } catch (error) {
-      console.error("❌ PostgreSQL 客户端工具未安装或不可用");
+      console.error("❌ PostgreSQL 客户端工具或 gzip 未安装/不可用");
       console.error("\n请安装 PostgreSQL 客户端工具：");
-      console.error("  macOS:   brew install postgresql");
-      console.error("  Ubuntu:  sudo apt-get install postgresql-client");
-      console.error("  CentOS:  sudo yum install postgresql");
+      console.error("  macOS:   brew install postgresql gzip");
+      console.error("  Ubuntu:  sudo apt-get install postgresql-client gzip");
+      console.error("  CentOS:  sudo yum install postgresql gzip");
       console.error("\n安装后重启服务即可启用自动备份功能\n");
       return false;
     }
@@ -450,8 +467,10 @@ class PostgresBackupService {
       .replace(/[:.]/g, "-")
       .replace(/T/, "_")
       .split(".")[0];
-    const backupFileName = `pg_backup_${timestamp}.sql`;
+    const backupFileName = `pg_backup_${timestamp}.sql.gz`;
     const backupFilePath = path.join(this.backupDir, backupFileName);
+    const backupTempFilePath = `${backupFilePath}.tmp`;
+    let createdBackupFile = false;
 
     console.log(`📦 开始备份数据库: ${this.dbConfig.database}`);
     console.log(`📝 备份文件: ${backupFileName}`);
@@ -460,6 +479,10 @@ class PostgresBackupService {
     );
 
     try {
+      if (fs.existsSync(backupFilePath) || fs.existsSync(backupTempFilePath)) {
+        throw new Error(`备份文件已存在，拒绝覆盖: ${backupFileName}`);
+      }
+
       // 发现数据库中实际存在的表（public），并进行 schema 限定与正确引用
       const existing = await this.discoverExistingTables();
       if (!existing.length) {
@@ -473,9 +496,27 @@ class PostgresBackupService {
         .map(({ schema, name }) => `-t '${this.quoteIdent(schema)}.${this.quoteIdent(name)}'`)
         .join(" ");
 
-      const command = `PGPASSWORD="${this.dbConfig.password}" pg_dump -h ${this.dumpHost} -p ${this.dbConfig.port} -U ${this.dbConfig.username} -d ${this.dbConfig.database} ${tableParams} -F p --no-owner --no-privileges -f "${backupFilePath}"`;
+      const configuredGzipLevel = Number(process.env.PG_BACKUP_GZIP_LEVEL || 1);
+      const gzipLevel = Number.isInteger(configuredGzipLevel)
+        ? Math.min(9, Math.max(1, configuredGzipLevel))
+        : 1;
+      const dumpCommand = `pg_dump -h ${this.shellEscape(this.dumpHost)} -p ${this.shellEscape(
+        this.dbConfig.port
+      )} -U ${this.shellEscape(this.dbConfig.username)} -d ${this.shellEscape(
+        this.dbConfig.database
+      )} ${tableParams} -F p --no-owner --no-privileges`;
+      const pipelineCommand = `set -o pipefail; umask 077; ${dumpCommand} | gzip -${gzipLevel} > ${this.shellEscape(
+        backupTempFilePath
+      )}`;
 
-      await execAsync(command);
+      await execAsync(`bash -c ${this.shellEscape(pipelineCommand)}`, {
+        env: {
+          ...process.env,
+          PGPASSWORD: this.dbConfig.password,
+        },
+      });
+      await rename(backupTempFilePath, backupFilePath);
+      createdBackupFile = true;
 
       // 检查备份文件大小
       const stats = await stat(backupFilePath);
@@ -502,7 +543,10 @@ class PostgresBackupService {
 
       // 如果备份失败，删除可能不完整的备份文件
       try {
-        if (fs.existsSync(backupFilePath)) {
+        if (fs.existsSync(backupTempFilePath)) {
+          await unlink(backupTempFilePath);
+        }
+        if (createdBackupFile && fs.existsSync(backupFilePath)) {
           await unlink(backupFilePath);
           console.log("🗑️ 已删除不完整的备份文件");
         }
@@ -525,7 +569,7 @@ class PostgresBackupService {
       // 过滤出备份文件并获取文件信息
       const backupFiles = [];
       for (const file of files) {
-        if (file.startsWith("pg_backup_") && file.endsWith(".sql")) {
+        if (this.isBackupFileName(file)) {
           const filePath = path.join(this.backupDir, file);
           const stats = await stat(filePath);
           backupFiles.push({
@@ -578,7 +622,7 @@ class PostgresBackupService {
       const backupFiles = [];
 
       for (const file of files) {
-        if (file.startsWith("pg_backup_") && file.endsWith(".sql")) {
+        if (this.isBackupFileName(file)) {
           const filePath = path.join(this.backupDir, file);
           const stats = await stat(filePath);
           backupFiles.push({
