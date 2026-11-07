@@ -48,6 +48,13 @@ function renderEligibility(row?: CampaignRegistrationRankCheckRow) {
   return <Tag color={color} title={row.eligibility.reason}>{row.eligibility.label}</Tag>;
 }
 
+function renderWalletVerification(record: CampaignRegistrationItem) {
+  const wallet = record.walletRegistration;
+  if (!wallet) return <Tag>{record.evmAddress ? "历史记录" : "-"}</Tag>;
+  if (!wallet.signatureRequired) return <Tag color="orange">未要求签名</Tag>;
+  return wallet.verified ? <Tag color="green">已验证</Tag> : <Tag color="red">未验证</Tag>;
+}
+
 export function getRegistrationCampaignKey(target?: Record<string, any> | null) {
   const raw =
     target?.campaignKey ||
@@ -282,11 +289,26 @@ export function CampaignRegistrationsModal({
               render: (_value, record) => renderEligibility(rankRows[record.twitterId]),
             },
             {
-              title: "EVM",
-              dataIndex: "evmAddress",
-              width: 260,
+              title: "网络",
+              key: "walletNetwork",
+              width: 130,
+              render: (_value, record) => record.walletRegistration?.networkName || (record.evmAddress ? "Legacy EVM" : "-"),
+            },
+            {
+              title: "钱包地址",
+              key: "walletAddress",
+              width: 330,
               ellipsis: true,
-              render: (value) => value || "-",
+              render: (_value, record) => {
+                const address = record.walletRegistration?.address || record.evmAddress || "-";
+                return <span title={address}>{address}</span>;
+              },
+            },
+            {
+              title: "签名状态",
+              key: "walletVerified",
+              width: 140,
+              render: (_value, record) => renderWalletVerification(record),
             },
             {
               title: "Email",

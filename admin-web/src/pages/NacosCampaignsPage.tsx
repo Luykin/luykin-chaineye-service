@@ -115,6 +115,15 @@ const CAMPAIGN_DISPLAY_DOMAIN_OPTIONS = [
 const CAMPAIGN_DISPLAY_DOMAIN_VALUES = new Set(
   CAMPAIGN_DISPLAY_DOMAIN_OPTIONS.map((item) => item.value),
 );
+const CAMPAIGN_WALLET_CHAIN_OPTIONS = [
+  { value: "solana", label: "Solana" },
+  { value: "sui", label: "Sui" },
+  { value: "monad", label: "Monad" },
+  { value: "bsc", label: "BNB Chain" },
+];
+const CAMPAIGN_WALLET_CHAIN_VALUES = new Set(
+  CAMPAIGN_WALLET_CHAIN_OPTIONS.map((item) => item.value),
+);
 const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS = [
   { value: "plugin", label: "插件" },
   { value: "echohunt", label: "EchoHunt" },
@@ -166,6 +175,25 @@ function normalizeDisplayDomains(value: unknown) {
     ),
   );
   return domains.length ? domains : ["web3"];
+}
+
+function normalizeWalletRegistration(value: unknown) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as AnyObj)
+    : {};
+  const enabled = source.enabled === true;
+  const supportedChains = Array.from(
+    new Set(
+      (Array.isArray(source.supportedChains) ? source.supportedChains : [])
+        .map((item) => String(item || "").trim().toLowerCase())
+        .filter((item) => CAMPAIGN_WALLET_CHAIN_VALUES.has(item)),
+    ),
+  );
+  return {
+    enabled,
+    supportedChains: enabled ? supportedChains : [],
+    signatureRequired: enabled ? source.signatureRequired !== false : false,
+  };
 }
 
 function normalizeCustomLeaderboardDisplayChannels(value: unknown) {
@@ -489,6 +517,7 @@ function normalizeCampaign(
   c.testList = Array.isArray(c.testList) ? c.testList : [];
   c.targetUserIds = normalizeTwitterHandleList(c.targetUserIds);
   c.displayDomains = normalizeDisplayDomains(c.displayDomains);
+  c.walletRegistration = normalizeWalletRegistration(c.walletRegistration);
   c.logos = Array.isArray(c.logos) ? c.logos : [];
   c.tasks = Array.isArray(c.tasks) ? c.tasks : [];
   c.essayContestWinners = Array.isArray(c.essayContestWinners)
@@ -669,6 +698,11 @@ function makeNewCampaign(): AnyObj {
     includeCreator: false,
     showSponsoredPolicy: true,
     allowEmailRegistration: false,
+    walletRegistration: {
+      enabled: false,
+      supportedChains: [],
+      signatureRequired: false,
+    },
     leaderboardMode: "custom",
     leaderboardApiUrl: DEFAULT_CUSTOM_LEADERBOARD_API_URL,
     userActivityApiUrl: DEFAULT_CUSTOM_USER_ACTIVITY_API_URL,
@@ -1571,6 +1605,13 @@ export function NacosCampaignsPage() {
       else c.id = `${c.campaignKey.trim()}-hunter`;
       if (!c.displayName?.zh?.trim() && !c.displayName?.en?.trim())
         errors.push(`${prefix}: displayName 至少需要填写中文或英文`);
+      c.walletRegistration = normalizeWalletRegistration(c.walletRegistration);
+      if (c.walletRegistration.enabled) {
+        if (!c.displayName?.en?.trim())
+          errors.push(`${prefix}: 启用钱包报名后必须填写标题（English）`);
+        if (!c.walletRegistration.supportedChains.length)
+          errors.push(`${prefix}: 启用钱包报名后至少选择一条支持网络`);
+      }
       if (!c.enrollmentWindow?.startAt || !c.enrollmentWindow?.endAt)
         errors.push(
           `${prefix}: enrollmentWindow 的 startAt 和 endAt 都必须填写`,
@@ -3075,6 +3116,72 @@ function CampaignEditor(props: {
               </Col>
               <Col xs={24} sm={12} md={8} xl={12}>
                 <Space><Switch checked={c.allowEmailRegistration === true} onChange={(v) => setCampaignPath("allowEmailRegistration", v)} /><InfoLabel info="开启后 EVM 和 Email 二选一报名。">Email 注册</InfoLabel></Space>
+              </Col>
+              <Col xs={24}>
+                <Card size="small" title="多链钱包报名">
+                  <Row gutter={[12, 12]} align="middle">
+                    <Col xs={24} md={8}>
+                      <Space>
+                        <Switch
+                          checked={c.walletRegistration?.enabled === true}
+                          onChange={(enabled) =>
+                            updateSelectedCampaign((campaign) => {
+                              const current = normalizeWalletRegistration(campaign.walletRegistration);
+                              campaign.walletRegistration = {
+                                enabled,
+                                supportedChains: enabled ? current.supportedChains : [],
+                                signatureRequired: enabled ? true : false,
+                              };
+                            })
+                          }
+                        />
+                        <InfoLabel info="开启后仅允许在 EchoHunt Web 连接钱包报名；插件报名接口会拒绝并返回网页地址。">
+                          启用钱包报名
+                        </InfoLabel>
+                      </Space>
+                    </Col>
+                    <Col xs={24} md={10}>
+                      <Field label="支持网络">
+                        <Select
+                          mode="multiple"
+                          allowClear={false}
+                          disabled={c.walletRegistration?.enabled !== true}
+                          value={normalizeWalletRegistration(c.walletRegistration).supportedChains}
+                          options={CAMPAIGN_WALLET_CHAIN_OPTIONS}
+                          onChange={(values) =>
+                            setCampaignPath(
+                              "walletRegistration.supportedChains",
+                              Array.from(new Set(values.filter((value) => CAMPAIGN_WALLET_CHAIN_VALUES.has(value)))),
+                            )
+                          }
+                          placeholder="请选择允许报名的钱包网络"
+                        />
+                      </Field>
+                    </Col>
+                    <Col xs={24} md={6}>
+                      <Space>
+                        <Switch
+                          disabled={c.walletRegistration?.enabled !== true}
+                          checked={c.walletRegistration?.signatureRequired !== false && c.walletRegistration?.enabled === true}
+                          onChange={(value) => setCampaignPath("walletRegistration.signatureRequired", value)}
+                        />
+                        <InfoLabel info="关闭后只能校验地址格式，无法证明报名用户拥有该地址。">
+                          要求签名
+                        </InfoLabel>
+                      </Space>
+                    </Col>
+                  </Row>
+                  {c.walletRegistration?.enabled === true && c.walletRegistration?.signatureRequired === false ? (
+                    <div style={{ marginTop: 10, color: "#b45309", fontSize: 12 }}>
+                      未签名只能校验地址格式，无法证明报名用户拥有该地址。
+                    </div>
+                  ) : null}
+                  {c.walletRegistration?.enabled === true ? (
+                    <div style={{ marginTop: 8, color: "#64748b", fontSize: 12 }}>
+                      用户提交前将看到“本次活动绑定后不可更换”；已有报名后，服务端会拒绝修改上述核心配置。
+                    </div>
+                  ) : null}
+                </Card>
               </Col>
               <Col xs={24} sm={12} md={8} xl={12}>
                 <Space direction="vertical" size={4} style={{ width: "100%" }}>

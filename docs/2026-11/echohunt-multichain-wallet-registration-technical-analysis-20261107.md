@@ -1,6 +1,6 @@
 # EchoHunt 活动多链钱包报名技术分析
 
-> 状态：实施范围已确认，待评审与排期，未实施  
+> 状态：代码已实施，待数据库迁移、真实钱包联调与发布
 > 日期：2026-11-07  
 > 管理后台：`/Users/luykin/Documents/mac-work/luykin-chaineye-service/admin-web`  
 > 后端：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`  
@@ -534,12 +534,12 @@ serializeRegistrationWallet(record, campaignConfig, { audience })
 
 ### 8.1 依赖建议
 
-当前 EchoHunt 无钱包 SDK。建议按协议分层：
+本次按最小移动端范围采用轻量协议适配，不引入通用钱包市场：
 
-- Monad / BNB Chain：`wagmi` + `viem`；
-- Solana：`@solana/wallet-adapter-react` 或 Wallet Standard；
-- Sui：`@mysten/dapp-kit`；
-- 移动端扫码和深链：按产品范围接入 WalletConnect/Reown。
+- Monad / BNB Chain：EIP-6963 + EIP-1193 注入钱包；
+- Solana：Phantom / OKX 注入 provider；
+- Sui：Wallet Standard；
+- 移动端：无法在系统浏览器直接连接时，通过钱包官方 Universal Link / Deep Link 打开同一活动页，并在钱包内置浏览器完成连接和签名。
 
 xStable 的公开前端资源同样采用 EVM、Solana、Sui 多 adapter 结构，不能把四条链视为一个钱包协议。公开 npm 当前没有独立的 `@reown/appkit-adapter-sui`，Sui 仍需要单独适配或定制 adapter。
 
@@ -549,9 +549,9 @@ xStable 的公开前端资源同样采用 EVM、Solana、Sui 多 adapter 结构�
 
 | 网络 | 桌面端 | 移动端最小支持 |
 | --- | --- | --- |
-| Monad | MetaMask、OKX Wallet | MetaMask、OKX Wallet，通过 WalletConnect/官方 Universal Link 打开 |
-| BNB Chain | Binance Wallet、MetaMask、OKX Wallet | Binance Wallet、MetaMask、OKX Wallet，通过 WalletConnect/官方 Universal Link 打开 |
-| Solana | Phantom、OKX Wallet | Phantom、OKX Wallet，通过 WalletConnect 或钱包官方 Universal Link 打开 |
+| Monad | MetaMask、OKX Wallet | MetaMask、OKX Wallet，通过官方 Universal Link / Deep Link 打开钱包内置浏览器 |
+| BNB Chain | Binance Wallet、MetaMask、OKX Wallet | Binance Wallet、MetaMask、OKX Wallet，通过官方 Universal Link / Deep Link 打开钱包内置浏览器 |
+| Solana | Phantom、OKX Wallet | Phantom、OKX Wallet，通过钱包官方 Universal Link / Deep Link 打开钱包内置浏览器 |
 | Sui | Slush、OKX Wallet | Slush、OKX Wallet，优先跳转钱包内置浏览器并通过 Wallet Standard 连接 |
 
 该名单的目标是覆盖每条链至少一个主流原生钱包，并复用 OKX Wallet 的多链能力降低移动端适配数量。未列入的钱包可在后续按实际用户需求增加。
@@ -560,7 +560,7 @@ xStable 的公开前端资源同样采用 EVM、Solana、Sui 多 adapter 结构�
 
 移动端纳入一期，但采用最小可用实现：
 
-1. EVM 和 Solana 优先复用 Reown/WalletConnect 的二维码、Universal Link 和已安装钱包唤起能力。
+1. EVM 和 Solana 优先使用注入钱包；移动端系统浏览器未发现 provider 时，通过目标钱包的 Universal Link / Deep Link 打开当前活动页。
 2. Sui 只适配 Slush、OKX Wallet；优先用官方 Deep Link 打开钱包内置 DApp 浏览器，再由 Wallet Standard 完成连接和签名。
 3. 不建设全量钱包搜索、钱包推荐、社交登录、内嵌钱包、法币入口或多账户管理。
 4. 钱包未安装时只展示对应官方安装/打开入口，不实现自建钱包下载市场。

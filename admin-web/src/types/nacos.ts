@@ -56,6 +56,16 @@ export interface CampaignRegistrationItem {
   displayName?: string | null;
   avatar?: string | null;
   evmAddress?: string | null;
+  walletRegistration?: {
+    chain: "solana" | "sui" | "monad" | "bsc";
+    networkName: string;
+    address: string;
+    signatureRequired: boolean;
+    verified: boolean;
+    verifiedAt?: string | null;
+    signatureType?: string | null;
+    walletName?: string | null;
+  } | null;
   email?: string | null;
   registrationUrl?: string | null;
   binanceSquareAccount?: {

@@ -47,10 +47,15 @@ const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
 const { writeAdminAudit } = require("../../admin/services/admin-audit");
+const {
+  getCampaignWalletRegistration,
+  buildEchohuntRegistrationUrl,
+} = require("../services/campaignWalletConfigService");
+const { attachRegistrationWallet } = require("../services/campaignRegistrationSerializer");
 
 const router = express.Router();
 
-const MIN_EXTENSION_VERSION = "0.3.0";
+const MIN_EXTENSION_VERSION = "0.4.5";
 const XHUNT_EXTENSION_UPDATE_URL =
   "https://chromewebstore.google.com/detail/xhunt-%E2%80%93-your-ai-co-pilot/gonmfafjcdkngkbhcpmcphlgfhabkeji";
 
@@ -454,9 +459,9 @@ async function loadBinanceSquareAccountMap(registrationRows) {
   return map;
 }
 
-function serializeCampaignRegistration(record, binanceSquareAccountMap = new Map()) {
+function serializeCampaignRegistration(record, binanceSquareAccountMap = new Map(), audience = "public") {
   if (!record) return null;
-  const json = typeof record.toJSON === "function" ? record.toJSON() : record;
+  const json = attachRegistrationWallet(record, { audience });
   const {
     xHuntUserId: _omit,
     invitedByCode: _invitedByCode,
@@ -537,7 +542,7 @@ router.get(
           total,
           page,
           pageSize,
-          rows: rows.map((row) => serializeCampaignRegistration(row, binanceSquareAccountMap)),
+          rows: rows.map((row) => serializeCampaignRegistration(row, binanceSquareAccountMap, "admin")),
         },
       });
     } catch (err) {
@@ -1010,16 +1015,6 @@ router.post(
       //   );
       // }
 
-      if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
-        console.log(LOG, "reject: extension version too low", { version: extVersion });
-        const isZh = (req.query.x_language || "").toLowerCase() === "zh";
-        return res.status(400).json({
-          error: isZh
-            ? "请升级插件到 0.3.0 及以上版本再试"
-            : "Please upgrade the extension to version 0.3.0 or above and try again",
-        });
-      }
-
       const normalizedCampaign = normalizeCampaignIdentifier(campaign);
       if (!normalizedCampaign) {
         console.log(LOG, "reject: campaign missing or invalid");
@@ -1042,6 +1037,30 @@ router.post(
         viewer: { username: req.user?.username || user.username, twitterId: user.twitterId },
         allowComingSoonWarmup: false,
       });
+      if (getCampaignWalletRegistration(found).enabled) {
+        const redirectUrl = buildEchohuntRegistrationUrl(normalizedCampaign);
+        console.log(LOG, "reject: EchoHunt Web wallet registration required");
+        return res.status(403).json({
+          success: false,
+          error: "ECHOHUNT_WEB_REGISTRATION_REQUIRED",
+          message: "该活动需要连接钱包，请前往 EchoHunt 网页完成报名。",
+          messageEn: "This campaign requires a wallet connection. Continue on EchoHunt to register.",
+          redirectUrl,
+        });
+      }
+
+      if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
+        console.log(LOG, "reject: extension version too low", {
+          version: extVersion,
+          minVersion: MIN_EXTENSION_VERSION,
+        });
+        const isZh = (req.query.x_language || "").toLowerCase() === "zh";
+        return res.status(400).json({
+          error: isZh
+            ? `请升级插件到 ${MIN_EXTENSION_VERSION} 及以上版本再试`
+            : `Please upgrade the extension to version ${MIN_EXTENSION_VERSION} or above and try again`,
+        });
+      }
 
       const fallbackUrl = req.headers["x-window-location-href"]
         ? String(req.headers["x-window-location-href"])
@@ -1074,7 +1093,8 @@ router.post(
         cooldownKey: `campaign:${normalizedCampaign}:register:cd:${user.id}`,
       });
 
-      const { xHuntUserId: _omit, registrationMetadata: _registrationMetadata, ...safeRecord } = result.registration.toJSON();
+      const { xHuntUserId: _omit, registrationMetadata: _registrationMetadata, ...safeRecord } =
+        attachRegistrationWallet(result.registration, { audience: "legacyPlugin" });
       console.log(LOG, "success", { userId: user.id, campaign: normalizedCampaign });
       return res.json({
         success: true,
@@ -1265,7 +1285,7 @@ router.get(
         registered: true,
         invitedCount: 0,
         totalRegistrations,
-        registration: record,
+        registration: attachRegistrationWallet(record, { audience: "legacyPlugin" }),
         hunterData,
       });
     } catch (err) {

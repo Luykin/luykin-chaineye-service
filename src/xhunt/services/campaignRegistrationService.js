@@ -4,6 +4,7 @@ const { CampaignRegistration } = require("../../models/postgres-start");
 const { getManagedCampaignPayloadByKey } = require("./websiteCampaignService");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+const { getCampaignWalletRegistration } = require("./campaignWalletConfigService");
 const {
   RANK_API_BY_DOMAIN,
   evaluateRankEligibility,
@@ -149,23 +150,62 @@ async function validateTwitterProfileQuality(req, twitterId) {
   }
 }
 
-function normalizeRegistrationContact({ evmAddress, email, emil } = {}) {
+function normalizeRegistrationContact({ evmAddress, email, emil, wallet } = {}) {
   const rawEmail = email !== undefined ? email : emil;
   const trimmedAddress = typeof evmAddress === "string" && evmAddress.trim() ? evmAddress.trim() : null;
   const normalizedEmail = normalizeRegistrationEmail(rawEmail);
+  const normalizedWallet = wallet && typeof wallet === "object" && wallet.chain && wallet.address
+    ? wallet
+    : null;
   return {
-    evmAddress: trimmedAddress,
+    evmAddress:
+      trimmedAddress ||
+      (normalizedWallet && ["monad", "bsc"].includes(normalizedWallet.chain) ? normalizedWallet.address : null),
     email: normalizedEmail || null,
     hasEmail: !!normalizedEmail,
+    wallet: normalizedWallet,
+    hasWallet: !!normalizedWallet,
   };
 }
 
 function validateRegistrationContact(campaign, contact) {
   const allowEmailRegistration = campaign?.allowEmailRegistration === true;
+  const walletConfig = getCampaignWalletRegistration(campaign);
   const trimmedAddress = contact?.evmAddress || null;
   const normalizedEmail = contact?.email || "";
   const hasEmail = !!normalizedEmail;
+  const hasWallet = contact?.hasWallet === true;
   const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+
+  if (walletConfig.enabled) {
+    if (trimmedAddress && !hasWallet && !hasEmail) {
+      throw campaignRegistrationError(
+        "ECHOHUNT_WEB_REGISTRATION_REQUIRED",
+        403,
+        "This campaign requires a wallet connection. Continue on EchoHunt to register."
+      );
+    }
+    if (hasEmail && hasWallet) {
+      throw campaignRegistrationError("CONTACT_CONFLICT", 400, "Please provide either wallet or email, not both");
+    }
+    if (hasEmail) {
+      if (!allowEmailRegistration) {
+        throw campaignRegistrationError("EMAIL_NOT_ALLOWED", 400, "Email registration is not allowed for this campaign");
+      }
+      if (!isValidRegistrationEmail(normalizedEmail)) {
+        throw campaignRegistrationError("INVALID_EMAIL", 400, "Invalid email format");
+      }
+      return;
+    }
+    if (!hasWallet) throw campaignRegistrationError("WALLET_ADDRESS_REQUIRED", 400, "Wallet address is required");
+    if (!walletConfig.supportedChains.includes(contact.wallet.chain)) {
+      throw campaignRegistrationError("WALLET_CHAIN_NOT_SUPPORTED", 400, "Wallet chain is not supported by this campaign");
+    }
+    if (walletConfig.signatureRequired && contact.wallet.verified !== true) {
+      throw campaignRegistrationError("WALLET_SIGNATURE_REQUIRED", 400, "Wallet signature is required");
+    }
+    return;
+  }
 
   if (trimmedAddress && !evmAddressRegex.test(trimmedAddress)) {
     throw campaignRegistrationError("INVALID_EVM_ADDRESS", 400, "Invalid EVM address format");
@@ -242,7 +282,18 @@ async function loadCampaignConfigForRegistration(campaignKey, req, options = {})
 }
 
 async function assertUniqueRegistrationContact(campaign, contact) {
-  if (contact?.evmAddress) {
+  if (contact?.wallet?.normalizedAddress) {
+    const existingWallet = await CampaignRegistration.findOne({
+      where: {
+        campaign,
+        walletChain: contact.wallet.chain,
+        walletAddressNormalized: contact.wallet.normalizedAddress,
+      },
+    });
+    if (existingWallet) {
+      throw campaignRegistrationError("WALLET_ADDRESS_ALREADY_USED", 409, "This wallet address is already registered for this campaign");
+    }
+  } else if (contact?.evmAddress) {
     const existingEVM = await CampaignRegistration.findOne({ where: { campaign, evmAddress: contact.evmAddress } });
     if (existingEVM) throw campaignRegistrationError("EVM_ALREADY_USED", 409, "This EVM address is already in use");
   }
@@ -309,6 +360,7 @@ async function registerCampaignParticipant({
   cooldownKey = null,
   updateUserEvmAddress = false,
   notifyInitialize = true,
+  acquireRegistrationGuard = null,
 } = {}) {
   const normalizedCampaign = normalizeCampaignIdentifier(campaign);
   if (!normalizedCampaign) throw campaignRegistrationError("CAMPAIGN_REQUIRED", 400, "campaign is required");
@@ -327,26 +379,54 @@ async function registerCampaignParticipant({
     throw campaignRegistrationError("ALREADY_REGISTERED", 409, "You have already registered for this campaign", existing);
   }
 
-  const record = await CampaignRegistration.create({
-    campaign: normalizedCampaign,
-    xHuntUserId: user.xHuntUserId,
-    authCenterUserId: user.authCenterUserId || null,
-    twitterId: user.twitterId,
-    username: user.username || null,
-    displayName: user.displayName || null,
-    avatar: user.avatar || null,
-    invitedByCode: null,
-    invitedByUserId: null,
-    invitedByTwitterId: null,
-    invitedByUsername: null,
-    invitedByUserInfo: null,
-    evmAddress: normalizedContact.evmAddress || null,
-    email: normalizedContact.email || null,
-    registrationUrl,
-    registrationSource,
-    registrationClient,
-    registrationMetadata,
-  });
+  let record;
+  let rollbackRegistrationGuard = null;
+  try {
+    if (typeof acquireRegistrationGuard === "function") {
+      rollbackRegistrationGuard = await acquireRegistrationGuard();
+    }
+    record = await CampaignRegistration.create({
+      campaign: normalizedCampaign,
+      xHuntUserId: user.xHuntUserId,
+      authCenterUserId: user.authCenterUserId || null,
+      twitterId: user.twitterId,
+      username: user.username || null,
+      displayName: user.displayName || null,
+      avatar: user.avatar || null,
+      invitedByCode: null,
+      invitedByUserId: null,
+      invitedByTwitterId: null,
+      invitedByUsername: null,
+      invitedByUserInfo: null,
+      evmAddress: normalizedContact.evmAddress || null,
+      walletChain: normalizedContact.wallet?.chain || null,
+      walletAddress: normalizedContact.wallet?.address || null,
+      walletAddressNormalized: normalizedContact.wallet?.normalizedAddress || null,
+      walletSignatureRequired: normalizedContact.wallet?.signatureRequired ?? null,
+      walletVerified: normalizedContact.wallet?.verified ?? null,
+      walletVerifiedAt: normalizedContact.wallet?.verifiedAt || null,
+      walletVerification: normalizedContact.wallet?.verification || null,
+      email: normalizedContact.email || null,
+      registrationUrl,
+      registrationSource,
+      registrationClient,
+      registrationMetadata,
+    });
+  } catch (error) {
+    if (typeof rollbackRegistrationGuard === "function") {
+      await rollbackRegistrationGuard().catch((rollbackError) => {
+        console.warn("[CampaignRegistration] registration guard rollback warn:", rollbackError.message || rollbackError);
+      });
+    }
+    if (error?.name === "SequelizeUniqueConstraintError" && normalizedContact.wallet) {
+      throw campaignRegistrationError(
+        "WALLET_ADDRESS_ALREADY_USED",
+        409,
+        "This wallet address is already registered for this campaign"
+      );
+    }
+    throw error;
+  }
 
   if (updateUserEvmAddress && normalizedContact.evmAddress) {
     await updateEvmAddressOnUser(userRecord, normalizedContact.evmAddress);

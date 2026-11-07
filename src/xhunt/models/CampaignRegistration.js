@@ -79,6 +79,41 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "可选：EVM 地址",
       },
+      walletChain: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        comment: "钱包报名网络：solana / sui / monad / bsc",
+      },
+      walletAddress: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+        comment: "钱包报名展示地址",
+      },
+      walletAddressNormalized: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+        comment: "钱包报名唯一性比较地址",
+      },
+      walletSignatureRequired: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        comment: "报名时是否要求钱包签名",
+      },
+      walletVerified: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        comment: "钱包地址所有权是否已验签",
+      },
+      walletVerifiedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: "钱包验签时间",
+      },
+      walletVerification: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: "钱包验签审计信息，不得通过公开接口返回",
+      },
       email: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -137,6 +172,10 @@ module.exports = (sequelize) => {
         {
           name: "idx_campaign_reg_campaign_email",
           fields: ["campaign", "email"],
+        },
+        {
+          name: "idx_campaign_reg_campaign_wallet",
+          fields: ["campaign", "walletChain", "walletAddressNormalized"],
         },
         { name: "idx_campaign_reg_invite_code", fields: ["invitedByCode"] },
         { name: "idx_campaign_reg_invite_user", fields: ["invitedByUserId"] },

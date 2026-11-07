@@ -62,6 +62,16 @@ const {
   getCampaignDisplayDomains,
 } = require("../services/campaignRegistrationService");
 const {
+  getCampaignWalletRegistration,
+  buildPublicWalletRegistration,
+} = require("../services/campaignWalletConfigService");
+const {
+  createWalletRegistrationChallenge,
+  verifyWalletChallenge,
+  consumeWalletChallenge,
+} = require("../services/campaignWalletChallengeService");
+const { attachRegistrationWallet } = require("../services/campaignRegistrationSerializer");
+const {
   fetchCreatorVerification,
   submitCreatorVerification,
 } = require("../services/creatorVerificationService");
@@ -286,7 +296,7 @@ async function checkEchohuntBindingRateLimit(req, action, limit, ttlSeconds) {
 
 function serializeRegistration(record) {
   if (!record) return null;
-  const json = typeof record.toJSON === "function" ? record.toJSON() : record;
+  const json = attachRegistrationWallet(record, { audience: "self" });
   const { xHuntUserId: _omit, authCenterUserId: _auth, registrationMetadata: metadata, ...safe } = json;
   return {
     ...safe,
@@ -616,6 +626,7 @@ function buildEchohuntCampaignListItem(record, lang, viewer) {
       allowEmailRegistration: plugin.allowEmailRegistration === true,
       threshold: plugin.threshold ?? null,
       includeCreator: !!plugin.includeCreator,
+      walletRegistration: buildPublicWalletRegistration(plugin, plugin.campaignKey),
     },
     leaderboardConfig: {
       leaderboardMode: plugin.leaderboardMode || "traditional",
@@ -1102,6 +1113,13 @@ function buildEchohuntCampaignDetail(record, lang) {
       allowEmailRegistration: plugin.allowEmailRegistration === true,
       threshold: plugin.threshold ?? null,
       includeCreator: !!plugin.includeCreator,
+      walletRegistration: buildPublicWalletRegistration(plugin, plugin.campaignKey),
+    },
+    registrationConfig: {
+      allowEmailRegistration: plugin.allowEmailRegistration === true,
+      threshold: plugin.threshold ?? null,
+      includeCreator: !!plugin.includeCreator,
+      walletRegistration: buildPublicWalletRegistration(plugin, plugin.campaignKey),
     },
     leaderboardConfig: {
       leaderboardMode: plugin.leaderboardMode || "traditional",
@@ -1991,6 +2009,40 @@ router.post(
   }
 );
 
+router.post(
+  "/campaigns/:campaignKey/wallet-registration/challenge",
+  authenticateAuthCenterToken(),
+  async (req, res) => {
+    try {
+      const record = await findCampaignRecord(req.params.campaignKey);
+      if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
+      const normalizedCampaign = record?.campaignKey || normalizeCampaign(req.params.campaignKey);
+      const twitterIdentity = getTwitterIdentityFromAuth(req);
+      if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400);
+      const campaignConfig = await loadCampaignConfigForRegistration(normalizedCampaign, req, {
+        channel: "echohunt",
+        viewer: { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId },
+        allowComingSoonWarmup: String(record.webStatus || "").toLowerCase() === "coming_soon",
+      });
+      const data = await createWalletRegistrationChallenge({
+        redisClient: req.redisClient,
+        campaignKey: normalizedCampaign,
+        campaignConfig,
+        user: {
+          authCenterUserId: req.authCenter?.user?.id,
+          twitterId: twitterIdentity.twitterId,
+        },
+        chain: req.body?.chain,
+        address: req.body?.address,
+      });
+      res.set("Cache-Control", "no-store");
+      return res.json({ success: true, data });
+    } catch (error) {
+      return sendError(res, error, "ECHOHUNT_WALLET_CHALLENGE_FAILED");
+    }
+  }
+);
+
 // EchoHunt Web 活动报名接口：
 // 1. 使用 Auth Center token 校验登录态，并从登录身份中读取 Twitter 身份；
 // 2. EchoHunt 入口负责把 Auth Center 用户关联/创建为原 XHuntUser；
@@ -2038,11 +2090,35 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
       allowComingSoonWarmup: String(record.webStatus || "").toLowerCase() === "coming_soon",
     });
     const rawEmail = req.body?.email !== undefined ? req.body.email : req.body?.emil;
-    const contact = normalizeRegistrationContact({ evmAddress: req.body?.evmAddress, email: rawEmail });
-
+    const walletConfig = getCampaignWalletRegistration(found);
+    const hasEmail = typeof rawEmail === "string" && rawEmail.trim().length > 0;
     if (req.body?.agreements && (req.body.agreements.terms === false || req.body.agreements.disclosure === false)) {
       throw publicError("AGREEMENT_REQUIRED", 400, "Please accept campaign terms and disclosure policy");
     }
+    if (walletConfig.enabled && hasEmail && req.body?.wallet) {
+      throw publicError("CONTACT_CONFLICT", 400, "Please provide either wallet or email, not both");
+    }
+    let verifiedWallet = null;
+    let challengeReservation = null;
+    if (walletConfig.enabled && !hasEmail) {
+      const verification = await verifyWalletChallenge({
+        redisClient: req.redisClient,
+        campaignKey: normalizedCampaign,
+        campaignConfig: found,
+        user: {
+          authCenterUserId: req.authCenter?.user?.id,
+          twitterId: twitterIdentity.twitterId,
+        },
+        wallet: req.body?.wallet,
+      });
+      verifiedWallet = verification.wallet;
+      challengeReservation = verification.challengeReservation;
+    }
+    const contact = normalizeRegistrationContact({
+      evmAddress: walletConfig.enabled ? undefined : req.body?.evmAddress,
+      email: rawEmail,
+      wallet: verifiedWallet,
+    });
 
     const registrationUrl = typeof req.body?.registrationUrl === "string" ? req.body.registrationUrl : (req.headers["x-xhunt-web-page-url"] || req.headers.referer || null);
     const result = await registerCampaignParticipant({
@@ -2070,7 +2146,10 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
         source: "echohunt_web",
       },
       cooldownKey: `echohunt:campaign:${normalizedCampaign}:register:cd:${req.authCenter.user.id}`,
-      updateUserEvmAddress: true,
+      updateUserEvmAddress: !walletConfig.enabled,
+      acquireRegistrationGuard: challengeReservation
+        ? () => consumeWalletChallenge({ redisClient: req.redisClient, reservation: challengeReservation })
+        : null,
     });
 
     return res.json({ success: true, registration: serializeRegistration(result.registration) });

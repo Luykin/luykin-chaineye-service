@@ -7,9 +7,14 @@ function cleanUrlOrNull(val) {
 
 const crypto = require("crypto");
 const { Op } = require("sequelize");
-const { XHuntWebsiteCampaign, pgInstance } = require("../../models/postgres-start");
+const { XHuntWebsiteCampaign, CampaignRegistration, pgInstance } = require("../../models/postgres-start");
 const LEGACY_WEBSITE_CAMPAIGNS = require("../constants/legacyWebsiteCampaigns");
 const { getNacosConfigContent } = require("./nacosConfigClient");
+const {
+  buildPublicWalletRegistration,
+  normalizeCampaignWalletRegistration,
+  getCampaignEnglishTitle,
+} = require("./campaignWalletConfigService");
 
 const WEBSITE_STATUS_VALUES = new Set([
   "draft",
@@ -472,6 +477,21 @@ async function saveManagedCampaignsConfig(configLike, expectedRevision) {
 
   const incomingIds = new Set(campaigns.map((item) => String(item.nacosCampaignId)));
 
+  for (const campaign of campaigns) {
+    const walletConfig = normalizeCampaignWalletRegistration(campaign.nacosPayload?.walletRegistration);
+    if (walletConfig.enabled && !walletConfig.supportedChains.length) {
+      const error = new Error(`活动 ${campaign.campaignKey} 启用钱包报名后至少需要选择一条支持网络`);
+      error.status = 400;
+      throw error;
+    }
+    if (walletConfig.enabled && !getCampaignEnglishTitle(campaign.nacosPayload)) {
+      const error = new Error(`活动 ${campaign.campaignKey} 启用钱包报名后必须填写 English 标题`);
+      error.status = 400;
+      throw error;
+    }
+    campaign.nacosPayload.walletRegistration = walletConfig;
+  }
+
   const summary = {
     total: campaigns.length,
     created: 0,
@@ -513,6 +533,26 @@ async function saveManagedCampaignsConfig(configLike, expectedRevision) {
         );
         summary.created += 1;
         continue;
+      }
+
+      const currentWalletConfig = normalizeCampaignWalletRegistration(
+        existing.nacosPayload?.walletRegistration
+      );
+      const nextWalletConfig = normalizeCampaignWalletRegistration(
+        campaign.nacosPayload?.walletRegistration
+      );
+      if (JSON.stringify(currentWalletConfig) !== JSON.stringify(nextWalletConfig)) {
+        const registrationCount = await CampaignRegistration.count({
+          where: { campaign: existing.campaignKey || campaign.campaignKey },
+          transaction,
+        });
+        if (registrationCount > 0) {
+          const error = new Error(
+            `活动 ${campaign.campaignKey} 已有报名记录，不能修改钱包报名开关、支持网络或签名要求`
+          );
+          error.status = 400;
+          throw error;
+        }
       }
 
       const wasDeleted = !!existing.isDeleted;
@@ -890,6 +930,10 @@ function buildPluginCampaign(record, options = {}) {
     includeCreator: !!payload.includeCreator,
     threshold: payload.threshold,
     allowEmailRegistration: payload.allowEmailRegistration === true,
+    walletRegistration: buildPublicWalletRegistration(
+      { ...payload, walletRegistration: payload.walletRegistration },
+      payload.campaignKey || record.campaignKey
+    ),
     showExtraComponents: payload.showExtraComponents !== false,
     showSponsoredPolicy: payload.showSponsoredPolicy !== false,
     riskConfirmHtml: payload.riskConfirmHtml || null,
