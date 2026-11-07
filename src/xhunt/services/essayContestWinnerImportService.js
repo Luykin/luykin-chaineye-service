@@ -49,7 +49,17 @@ const FIELD_ALIASES = {
     "content",
     "description",
   ],
-  reward: ["奖励", "奖金", "奖金 / USDT", "奖励金额", "金额", "reward", "prize", "amount"],
+  reward: [
+    "奖励",
+    "奖金",
+    "奖金 / USDT",
+    "Gemini API额度",
+    "奖励金额",
+    "金额",
+    "reward",
+    "prize",
+    "amount",
+  ],
   award: ["奖项", "名次", "排名", "获奖等级", "award", "rank", "place"],
 };
 
@@ -133,6 +143,22 @@ function makeRowIssue(message, level = "warning") {
   return { level, message };
 }
 
+function formatImportedRewardPart(header, value) {
+  const raw = cleanCell(value, 300);
+  if (!raw) return "";
+  const normalizedHeader = normalizeHeader(header);
+  if (normalizedHeader === normalizeHeader("奖金 / USDT")) {
+    return /^\d[\d,]*(\.\d+)?$/.test(raw) ? `${raw} USDT` : raw;
+  }
+  if (normalizedHeader === normalizeHeader("Gemini API额度")) {
+    if (/gemini\s*credits?/i.test(raw)) return raw;
+    let amount = raw.replace(/^等值\s*/, "").replace(/\s*USDT$/i, "U");
+    if (/^\d[\d,]*(\.\d+)?$/.test(amount)) amount = `${amount}U`;
+    return `${amount} Gemini Credits`;
+  }
+  return raw;
+}
+
 function normalizeImportedRows(matrix) {
   const rows = Array.isArray(matrix) ? matrix : [];
   if (!rows.length) {
@@ -153,11 +179,16 @@ function normalizeImportedRows(matrix) {
     const url = get("url", 2000);
     const rawHandler = get("handler", 300);
     const handler = normalizeHandler(rawHandler) || extractHandlerFromUrl(url);
+    const reward = columns
+      .filter((column) => column.field === "reward")
+      .map((column) => formatImportedRewardPart(column.source, cells[column.index]))
+      .filter(Boolean)
+      .join("\n");
     const winner = {
       name: get("name", 300),
       handler,
       avatar: get("avatar", 2000),
-      reward: get("reward", 300),
+      reward,
       award: get("award", 300),
       post: get("post", MAX_CELL_LENGTH),
       url,

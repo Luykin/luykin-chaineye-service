@@ -54,12 +54,27 @@ test("finds a header after introductory rows and prefers the explicit X account 
     name: "",
     handler: "real_x_handle",
     avatar: "",
-    reward: "1000",
+    reward: "1000 USDT",
     award: "一等奖",
     post: "获奖作品标题",
     url: "https://x.com/real_x_handle/status/123",
   });
   assert.equal(parsed.rows[0].profileLookup, "pending");
+});
+
+test("combines USDT and Gemini credits into separate custom reward lines", () => {
+  const parsed = normalizeImportedRows([
+    ["奖项", "X账号", "作品链接", "奖金 / USDT", "Gemini API额度"],
+    [
+      "视频特别奖",
+      "@video_winner",
+      "https://x.com/video_winner/status/456",
+      "200",
+      "等值200 USDT",
+    ],
+  ]);
+
+  assert.equal(parsed.rows[0].winner.reward, "200 USDT\n200U Gemini Credits");
 });
 
 test("extracts handler from an X post URL and reports duplicate rows", () => {

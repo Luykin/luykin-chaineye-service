@@ -4024,14 +4024,22 @@ function CustomLeaderboards({
                               <Input value={winner.handler || ""} onChange={(e) => updateWinnerField("handler", e.target.value)} placeholder="例如：captain_kent" />
                             </Field>
                           </Col>
-                          <Col xs={24} md={8}>
+                          <Col xs={24} md={6}>
                             <Field label="头像 URL">
                               <Input value={winner.avatar || ""} onChange={(e) => updateWinnerField("avatar", e.target.value)} placeholder="https://pbs.twimg.com/..." />
                             </Field>
                           </Col>
-                          <Col xs={24} md={4}>
-                            <Field label="奖励">
-                              <Input value={winner.reward || ""} onChange={(e) => updateWinnerField("reward", e.target.value)} placeholder="1,000 USDC" />
+                          <Col xs={24} md={6}>
+                            <Field
+                              label="奖励（每行一项）"
+                              hint="支持换行或 + 分隔；网页按多行展示，第一行仍用于自动奖项分档。"
+                            >
+                              <TextArea
+                                autoSize={{ minRows: 2, maxRows: 4 }}
+                                value={winner.reward || ""}
+                                onChange={(e) => updateWinnerField("reward", e.target.value)}
+                                placeholder={"200 USDT\n200U Gemini Credits"}
+                              />
                             </Field>
                           </Col>
                           <Col xs={24} md={6}>

@@ -1,5 +1,9 @@
 const axios = require("axios");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+const {
+  formatManualWinnerReward,
+  splitManualWinnerRewardLines,
+} = require("../utils/winner-reward");
 const { getPublishedLeaderboard } = require("./externalLeaderboardAdapterService");
 
 const CUSTOM_LEADERBOARD_TIMEOUT_MS = 10000;
@@ -446,17 +450,6 @@ function defaultAwardByRank(rank) {
   return medal ? `${medal} ${prize}` : prize;
 }
 
-function formatManualWinnerReward(reward, unit) {
-  const raw = String(reward ?? "").trim();
-  if (!raw) return null;
-  const cleanUnit = String(unit || "").trim();
-  if (!cleanUnit) return raw;
-  if (/^\d[\d,]*(\.\d+)?$/.test(raw)) {
-    return `${raw} ${cleanUnit}`;
-  }
-  return raw;
-}
-
 function parseRewardNumericValue(reward) {
   if (reward === null || reward === undefined) return null;
   const cleaned = String(reward).replace(/,/g, "").trim();
@@ -584,6 +577,7 @@ function buildManualEssayLeaderboardRows(item = {}) {
     const author = rawName || handle || `Winner #${order}`;
     const displayName = rawName || username || author;
     const reward = formatManualWinnerReward(row.reward, unit);
+    const rewardLines = splitManualWinnerRewardLines(row.reward, unit);
     const post = String(row.post || row.title || "").trim();
     const url = row.url && String(row.url).trim() ? String(row.url).trim() : null;
     const share =
@@ -610,6 +604,7 @@ function buildManualEssayLeaderboardRows(item = {}) {
       title: post,
       url,
       reward,
+      rewardLines,
       score: null,
       share,
       shareText: `${(share * 100).toFixed(2)}%`,

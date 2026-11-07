@@ -284,7 +284,13 @@ export function EssayWinnerImportModal({
       width: 220,
       render: (_: unknown, row: EssayWinnerImportRow) => (
         <Space direction="vertical" size={4} style={{ width: "100%" }}>
-          <Input size="small" value={row.winner.reward} placeholder="例如 1,000 USDC" onChange={(event) => updateWinner(row.id, "reward", event.target.value)} />
+          <Input.TextArea
+            size="small"
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            value={row.winner.reward}
+            placeholder={"200 USDT\n200U Gemini Credits"}
+            onChange={(event) => updateWinner(row.id, "reward", event.target.value)}
+          />
           <Input size="small" value={row.winner.award} placeholder="例如 🥇 1st Prize" onChange={(event) => updateWinner(row.id, "award", event.target.value)} />
         </Space>
       ),
@@ -421,7 +427,16 @@ export function EssayWinnerImportModal({
               </Col>
               <Col xs={24} md={6}>
                 <Typography.Text strong>批量奖励（可选）</Typography.Text>
-                <Input value={batchReward} onChange={(event) => setBatchReward(event.target.value)} placeholder="例如 500 USDC" style={{ marginTop: 8 }} />
+                <Input.TextArea
+                  autoSize={{ minRows: 2, maxRows: 4 }}
+                  value={batchReward}
+                  onChange={(event) => setBatchReward(event.target.value)}
+                  placeholder={"200 USDT\n200U Gemini Credits"}
+                  style={{ marginTop: 8 }}
+                />
+                <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
+                  每行一项，也支持使用 + 分隔。
+                </Typography.Text>
               </Col>
               <Col xs={24} md={6}>
                 <Typography.Text strong>批量奖项（可选）</Typography.Text>

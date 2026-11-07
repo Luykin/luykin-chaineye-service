@@ -9,6 +9,10 @@ const fs = require("fs/promises");
 const path = require("path");
 const axios = require("axios");
 const { getCustomLeaderboardAdapterKey } = require("../utils/custom-leaderboard-key");
+const {
+  formatManualWinnerReward,
+  splitManualWinnerRewardLines,
+} = require("../utils/winner-reward");
 
 const STATIC_ROOT = path.join(__dirname, "../static/echohunt-leaderboard");
 const STATIC_CAMPAIGNS_DIR = path.join(STATIC_ROOT, "campaigns");
@@ -89,17 +93,6 @@ function defaultAwardByRank(rank) {
   const medal = defaultMedalByRank(rank);
   const prize = defaultPrizeByRank(rank);
   return medal ? `${medal} ${prize}` : prize;
-}
-
-function formatManualWinnerReward(reward, unit) {
-  const raw = String(reward ?? "").trim();
-  if (!raw) return null;
-  const cleanUnit = String(unit || "").trim();
-  if (!cleanUnit) return raw;
-  if (/^\d[\d,]*(\.\d+)?$/.test(raw)) {
-    return `${raw} ${cleanUnit}`;
-  }
-  return raw;
 }
 
 function parseRewardNumericValue(reward) {
@@ -213,6 +206,7 @@ function normalizeManualWinnerRow(item, index, unit, distinctRewards = [], curre
   const post = String(item?.post || item?.title || "").trim();
   const url = cleanUrlOrNull(item?.url);
   const reward = formatManualWinnerReward(item?.reward, unit);
+  const rewardLines = splitManualWinnerRewardLines(item?.reward, unit);
   return {
     rank,
     order,
@@ -231,6 +225,7 @@ function normalizeManualWinnerRow(item, index, unit, distinctRewards = [], curre
     title: post,
     url,
     reward,
+    rewardLines,
     score: null,
     gpt: null,
     gemini: null,
@@ -676,6 +671,7 @@ function simplifyWinnerRow(row, track) {
     post: row.post || row.title || null,
     url: row.url || null,
     reward: row.reward || null,
+    rewardLines: Array.isArray(row.rewardLines) ? row.rewardLines : splitManualWinnerRewardLines(row.reward),
     trackReward: track?.reward || null,
     raw: row,
   };
