@@ -9,14 +9,6 @@ function isLeaderboardSubmissionAddressMode(campaign) {
   return campaign?.addressCollectionMode === "leaderboard_submission";
 }
 
-function normalizeLocalizedPrompt(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { zh: "", en: "" };
-  return {
-    zh: typeof value.zh === "string" ? value.zh.trim() : "",
-    en: typeof value.en === "string" ? value.en.trim() : "",
-  };
-}
-
 function normalizeAddressInputConfig(value) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const supportedChains = Array.from(new Set(
@@ -28,10 +20,6 @@ function normalizeAddressInputConfig(value) {
   return {
     supportedChains,
     recommendedChain: supportedChains.includes(recommendedChainValue) ? recommendedChainValue : null,
-    label: normalizeLocalizedPrompt(source.label),
-    placeholder: normalizeLocalizedPrompt(source.placeholder),
-    helpText: normalizeLocalizedPrompt(source.helpText),
-    confirmationText: normalizeLocalizedPrompt(source.confirmationText),
   };
 }
 
@@ -49,10 +37,6 @@ function getAddressInputConfigErrors(value) {
   const rawRecommendedChain = String(source.recommendedChain || "").trim().toLowerCase();
   if (rawRecommendedChain && !config.supportedChains.includes(rawRecommendedChain)) {
     errors.push("recommendedChain");
-  }
-  for (const field of ["label", "placeholder", "helpText", "confirmationText"]) {
-    if (!config[field].zh || !config[field].en) errors.push(`${field}.zh/en`);
-    if (config[field].zh.length > 500 || config[field].en.length > 500) errors.push(`${field}.maxLength`);
   }
   return { config, errors };
 }

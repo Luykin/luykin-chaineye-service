@@ -19,6 +19,9 @@ const {
   getAddressInputConfigErrors,
   isLeaderboardSubmissionAddressMode,
 } = require("../utils/leaderboard-address");
+const {
+  assertUniqueManagedCampaignIdentities,
+} = require("../utils/managed-campaign-identities");
 
 const WEBSITE_STATUS_VALUES = new Set([
   "draft",
@@ -554,8 +557,8 @@ async function setWebsiteCampaignArchived(identifier, archived, expectedRevision
 async function saveManagedCampaignsConfig(configLike, expectedRevision) {
   const config = toSafeObject(configLike, {});
   const campaigns = toSafeArray(config.campaigns)
-    .map(normalizeManagedCampaign)
-    .filter((item) => item.nacosCampaignId && item.campaignKey);
+    .map(normalizeManagedCampaign);
+  assertUniqueManagedCampaignIdentities(campaigns);
   campaigns.forEach(validateManagedCampaignAddressConfig);
 
   const incomingIds = new Set(campaigns.map((item) => String(item.nacosCampaignId)));

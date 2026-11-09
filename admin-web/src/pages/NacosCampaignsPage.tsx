@@ -229,10 +229,6 @@ function normalizeTweetSubmissionEditorConfig(value: unknown) {
     output.addressInput = {
       supportedChains,
       recommendedChain: supportedChains.includes(recommendedChain) ? recommendedChain : undefined,
-      label: normalizeI18nText(addressInput.label),
-      placeholder: normalizeI18nText(addressInput.placeholder),
-      helpText: normalizeI18nText(addressInput.helpText),
-      confirmationText: normalizeI18nText(addressInput.confirmationText),
     };
   }
   return output;
@@ -287,10 +283,6 @@ export interface CustomLeaderboardConfig {
     addressInput?: {
       supportedChains?: string[];
       recommendedChain?: string;
-      label?: { zh?: string; en?: string };
-      placeholder?: { zh?: string; en?: string };
-      helpText?: { zh?: string; en?: string };
-      confirmationText?: { zh?: string; en?: string };
     };
   };
 }
@@ -1138,6 +1130,8 @@ export function NacosCampaignsPage() {
   const [newCampaignSourceIndex, setNewCampaignSourceIndex] = useState<
     number | null
   >(null);
+  const [newCampaignKeyDraft, setNewCampaignKeyDraft] = useState("");
+  const [newCampaignKeyTouched, setNewCampaignKeyTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [archiveChanging, setArchiveChanging] = useState(false);
@@ -1173,6 +1167,14 @@ export function NacosCampaignsPage() {
   const websiteConfigKey = selectedWebsiteRecord
     ? selectedWebsiteRecord.nacosCampaignId || selectedWebsiteRecord.id
     : selectedCampaign?.id || selectedCampaign?.nacosCampaignId;
+  const normalizedNewCampaignKey = newCampaignKeyDraft.trim();
+  const newCampaignKeyError = !normalizedNewCampaignKey
+    ? "请输入新活动的 campaignKey"
+    : !/^[a-z0-9][a-z0-9_-]{0,127}$/.test(normalizedNewCampaignKey)
+      ? "只能使用小写字母、数字、下划线和连字符，并以字母或数字开头"
+      : config.campaigns.some((item) => String(item.campaignKey || "").trim() === normalizedNewCampaignKey)
+        ? `campaignKey 已存在：${normalizedNewCampaignKey}`
+        : "";
 
   function showToast(
     message: string,
@@ -1450,6 +1452,8 @@ export function NacosCampaignsPage() {
     )
       return;
     setNewCampaignMode("blank");
+    setNewCampaignKeyDraft("");
+    setNewCampaignKeyTouched(false);
     setNewCampaignSourceIndex(
       selection?.type === "nacos" ? selection.index : null,
     );
@@ -1470,17 +1474,43 @@ export function NacosCampaignsPage() {
     return normalizeCampaign(copy);
   }
 
+  function suggestCopyCampaignKey(source: AnyObj) {
+    const base = `${String(source.campaignKey || "campaign").trim() || "campaign"}-copy`;
+    const used = new Set(config.campaigns.map((item) => String(item.campaignKey || "").trim()));
+    if (!used.has(base)) return base;
+    let suffix = 2;
+    while (used.has(`${base}-${suffix}`)) suffix += 1;
+    return `${base}-${suffix}`;
+  }
+
   function confirmNewCampaign() {
+    const campaignKey = normalizedNewCampaignKey;
+    if (newCampaignKeyError) {
+      setNewCampaignKeyTouched(true);
+      window.setTimeout(() => document.getElementById("new-campaign-key")?.focus(), 0);
+      return;
+    }
     const c =
       newCampaignMode === "copy"
         ? makeCampaignFromTemplate(newCampaignSourceIndex)
         : makeNewCampaign();
+    c.campaignKey = campaignKey;
+    c.hotTweetsKey = campaignKey;
+    c.id = `${campaignKey}-hunter`;
+    if (Array.isArray(c.tasks)) {
+      c.tasks = c.tasks.map((task: AnyObj) => ({
+        ...task,
+        id: generateTaskId(campaignKey, task.type || "", task.url || ""),
+      }));
+    }
     setConfig((prev) => ({ ...prev, campaigns: [c, ...prev.campaigns] }));
     setSelection({ type: "nacos", index: 0 });
     setDirty(true);
     setWebsiteForm(makeWebsiteForm(null, c));
     setWebsiteMeta("新活动尚未发布到数据库");
     setNewCampaignOpen(false);
+    setNewCampaignKeyDraft("");
+    setNewCampaignKeyTouched(false);
     showToast(
       newCampaignMode === "copy"
         ? "已从模板新增一条活动（未发布）"
@@ -1496,18 +1526,11 @@ export function NacosCampaignsPage() {
       !confirmDiscardWebsite()
     )
       return;
-    const copy = clone(selectedCampaign);
-    copy.id = "";
-    copy.enabled = false;
-    copy.testingPhase = false;
-    setConfig((prev) => {
-      const next = clone(prev);
-      next.campaigns.splice(selection.index + 1, 0, copy);
-      return next;
-    });
-    setSelection({ type: "nacos", index: selection.index + 1 });
-    setDirty(true);
-    showToast("已复制活动（未发布）", "info");
+    setNewCampaignMode("copy");
+    setNewCampaignSourceIndex(selection.index);
+    setNewCampaignKeyDraft(suggestCopyCampaignKey(selectedCampaign));
+    setNewCampaignKeyTouched(false);
+    setNewCampaignOpen(true);
   }
 
   async function deleteCampaign() {
@@ -1598,12 +1621,25 @@ export function NacosCampaignsPage() {
 
   function validateCampaigns(configToValidate: CampaignConfig = config) {
     const errors: string[] = [];
+    const campaignKeys = new Set<string>();
+    const campaignIds = new Set<string>();
     if (!configToValidate.campaigns.length) errors.push("至少需要配置一个活动");
     configToValidate.campaigns.forEach((c, idx) => {
       const prefix = `活动 #${idx + 1} (id: ${c.id || "未设置"})`;
-      if (!c.campaignKey?.trim())
+      const normalizedCampaignKey = String(c.campaignKey || "").trim();
+      if (!normalizedCampaignKey)
         errors.push(`${prefix}: campaignKey 不能为空`);
-      else c.id = `${c.campaignKey.trim()}-hunter`;
+      else {
+        c.campaignKey = normalizedCampaignKey;
+        c.hotTweetsKey = normalizedCampaignKey;
+        c.id = `${normalizedCampaignKey}-hunter`;
+        if (campaignKeys.has(normalizedCampaignKey))
+          errors.push(`${prefix}: campaignKey 重复：${normalizedCampaignKey}`);
+        else campaignKeys.add(normalizedCampaignKey);
+        if (campaignIds.has(c.id))
+          errors.push(`${prefix}: 活动 ID 重复：${c.id}`);
+        else campaignIds.add(c.id);
+      }
       if (!c.displayName?.zh?.trim() && !c.displayName?.en?.trim())
         errors.push(`${prefix}: displayName 至少需要填写中文或英文`);
       if (!c.enrollmentWindow?.startAt || !c.enrollmentWindow?.endAt)
@@ -1738,10 +1774,6 @@ export function NacosCampaignsPage() {
                   errors.push(`${label} 至少需要选择一个支持的地址链类型`);
                 if (addressInput.recommendedChain && !addressInput.supportedChains?.includes(addressInput.recommendedChain))
                   errors.push(`${label} 推荐链必须包含在支持的链类型中`);
-                (["label", "placeholder", "helpText", "confirmationText"] as const).forEach((field) => {
-                  if (!String(addressInput[field]?.zh || "").trim() || !String(addressInput[field]?.en || "").trim())
-                    errors.push(`${label} 地址配置 ${field} 必须同时填写中文和英文`);
-                });
               }
             }
             item.isEssayContest = item.isEssayContest === true;
@@ -2711,13 +2743,13 @@ export function NacosCampaignsPage() {
 
       <Modal
         open={newCampaignOpen}
-        title="新增活动"
+        title={newCampaignMode === "copy" ? "复制为新活动" : "新增活动"}
         okText="创建"
         cancelText="取消"
         onCancel={() => setNewCampaignOpen(false)}
         onOk={confirmNewCampaign}
         okButtonProps={{
-          disabled: newCampaignMode === "copy" && newCampaignSourceIndex == null,
+          disabled: !!newCampaignKeyError || (newCampaignMode === "copy" && newCampaignSourceIndex == null),
         }}
       >
         <div className="field-row field-row-1">
@@ -2727,8 +2759,14 @@ export function NacosCampaignsPage() {
               onChange={(value) => {
                 const mode = String(value) as "blank" | "copy";
                 setNewCampaignMode(mode);
-                if (mode === "copy" && newCampaignSourceIndex == null) {
-                  setNewCampaignSourceIndex(config.campaigns.length ? 0 : null);
+                setNewCampaignKeyDraft("");
+                setNewCampaignKeyTouched(false);
+                if (mode === "copy") {
+                  const sourceIndex = newCampaignSourceIndex ?? (config.campaigns.length ? 0 : null);
+                  setNewCampaignSourceIndex(sourceIndex);
+                  if (sourceIndex != null && config.campaigns[sourceIndex]) {
+                    setNewCampaignKeyDraft(suggestCopyCampaignKey(config.campaigns[sourceIndex]));
+                  }
                 }
               }}
               options={[
@@ -2746,11 +2784,17 @@ export function NacosCampaignsPage() {
           <div className="field-row field-row-1">
             <Field
               label="选择模板活动"
-              hint="会复制活动内容，但清空活动ID，并默认关闭展示。"
+              hint="只复制活动内容；新活动会使用下方的新 ID，默认关闭展示并进入测试阶段。"
             >
               <Select
                 value={newCampaignSourceIndex ?? undefined}
-                onChange={(value) => setNewCampaignSourceIndex(Number(value))}
+                onChange={(value) => {
+                  const sourceIndex = Number(value);
+                  setNewCampaignSourceIndex(sourceIndex);
+                  const source = config.campaigns[sourceIndex];
+                  if (source) setNewCampaignKeyDraft(suggestCopyCampaignKey(source));
+                  setNewCampaignKeyTouched(false);
+                }}
                 placeholder="请选择要复制的活动"
                 options={config.campaigns.map((item, index) => ({
                   value: index,
@@ -2769,6 +2813,29 @@ export function NacosCampaignsPage() {
             将创建一条空白活动，带默认任务、Logo 和基础文案。
           </div>
         )}
+        <div className="field-row field-row-1" style={{ marginTop: 14 }}>
+          <Field
+            label="新活动 campaignKey"
+            hint="必填。系统会据此生成全新的活动 ID 和 hotTweetsKey；不能与已有活动重复。"
+          >
+            <Input
+              id="new-campaign-key"
+              value={newCampaignKeyDraft}
+              onChange={(event) => setNewCampaignKeyDraft(event.target.value)}
+              onBlur={() => setNewCampaignKeyTouched(true)}
+              placeholder="例如：yzilabs2"
+              status={newCampaignKeyTouched && newCampaignKeyError ? "error" : undefined}
+              aria-invalid={newCampaignKeyTouched && !!newCampaignKeyError}
+              aria-describedby={newCampaignKeyTouched && newCampaignKeyError ? "new-campaign-key-error" : undefined}
+              autoFocus
+            />
+            {newCampaignKeyTouched && newCampaignKeyError ? (
+              <div id="new-campaign-key-error" role="alert" style={{ marginTop: 6, color: "#b42318", fontSize: 12 }}>
+                {newCampaignKeyError}
+              </div>
+            ) : null}
+          </Field>
+        </div>
       </Modal>
 
       <CampaignRegistrationsModal
@@ -4047,23 +4114,6 @@ function CustomLeaderboards({
                       />
                     </Field>
                   </Col>
-                  {([
-                    ["label", "输入框名称", "例如：活动奖励收款地址"],
-                    ["placeholder", "占位文案", "例如：请输入奖励收款地址"],
-                    ["helpText", "提示语", "例如：获奖后奖励将发放至此地址"],
-                    ["confirmationText", "确认文案", "例如：我已核对地址，提交后不可修改"],
-                  ] as const).flatMap(([field, fieldLabel, placeholder]) => ([
-                    <Col xs={24} md={12} key={`${field}-zh`}>
-                      <Field label={`${fieldLabel}（中文）`}>
-                        <Input value={it.tweetSubmission?.addressInput?.[field]?.zh || ""} placeholder={placeholder} onChange={(event) => update("customLeaderboards", i, `tweetSubmission.addressInput.${field}.zh`, event.target.value)} />
-                      </Field>
-                    </Col>,
-                    <Col xs={24} md={12} key={`${field}-en`}>
-                      <Field label={`${fieldLabel}（English）`}>
-                        <Input value={it.tweetSubmission?.addressInput?.[field]?.en || ""} placeholder="Required" onChange={(event) => update("customLeaderboards", i, `tweetSubmission.addressInput.${field}.en`, event.target.value)} />
-                      </Field>
-                    </Col>,
-                  ]))}
                 </Row>
               </div>
             ) : null}

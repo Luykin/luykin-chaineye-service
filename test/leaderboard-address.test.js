@@ -11,10 +11,6 @@ const {
 const completeConfig = {
   supportedChains: ["bsc", "solana", "sui"],
   recommendedChain: "bsc",
-  label: { zh: "地址", en: "Address" },
-  placeholder: { zh: "请输入地址", en: "Enter address" },
-  helpText: { zh: "奖励地址", en: "Reward address" },
-  confirmationText: { zh: "确认后不可修改", en: "Cannot be changed after confirmation" },
 };
 
 test("只有显式 leaderboard_submission 才开启投稿地址模式", () => {
@@ -38,7 +34,7 @@ test("校验 BSC、Solana 和 Sui 地址并生成稳定规范值", () => {
   assert.equal(sui.addressNormalized, `0x${"2".padStart(64, "0")}`);
 });
 
-test("拒绝无效地址、未配置链和缺少双语提示的配置", () => {
+test("拒绝无效地址和未配置链，忽略旧版自定义话术", () => {
   assert.equal(normalizeChainAddress("bsc", "0x1234").valid, false);
   assert.equal(normalizeChainAddress("solana", "0OIl").valid, false);
   assert.equal(normalizeChainAddress("sui", "not-an-address").valid, false);
@@ -57,6 +53,5 @@ test("拒绝无效地址、未配置链和缺少双语提示的配置", () => {
   });
   assert.ok(invalidConfig.errors.includes("supportedChains.unsupported"));
   assert.ok(invalidConfig.errors.includes("recommendedChain"));
-  assert.ok(invalidConfig.errors.includes("label.zh/en"));
-  assert.ok(invalidConfig.errors.includes("confirmationText.zh/en"));
+  assert.deepEqual(Object.keys(invalidConfig.config).sort(), ["recommendedChain", "supportedChains"]);
 });

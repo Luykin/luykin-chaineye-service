@@ -250,23 +250,7 @@ function isLeaderboardSubmissionAddressEnabled(campaign) {
         "totalLimit": 20,
         "addressInput": {
           "supportedChains": ["bsc"],
-          "recommendedChain": "bsc",
-          "label": {
-            "zh": "Nym 收款地址",
-            "en": "Nym reward address"
-          },
-          "placeholder": {
-            "zh": "请输入活动奖励收款地址",
-            "en": "Enter your reward address"
-          },
-          "helpText": {
-            "zh": "获奖后，奖励将发放至此地址。",
-            "en": "Rewards will be sent to this address."
-          },
-          "confirmationText": {
-            "zh": "我已核对收款地址，提交后不可修改。",
-            "en": "I have checked this address and understand it cannot be changed after submission."
-          }
+          "recommendedChain": "bsc"
         }
       }
     },
@@ -280,23 +264,7 @@ function isLeaderboardSubmissionAddressEnabled(campaign) {
         "totalLimit": 20,
         "addressInput": {
           "supportedChains": ["bsc", "solana", "sui"],
-          "recommendedChain": "bsc",
-          "label": {
-            "zh": "XStable 交互及收款地址",
-            "en": "XStable interaction and reward address"
-          },
-          "placeholder": {
-            "zh": "请输入你在 XStable 参与交易的钱包地址",
-            "en": "Enter the address used for XStable trading"
-          },
-          "helpText": {
-            "zh": "交互地址与奖励收款地址须一致，获奖资格将由 XStable 核验。",
-            "en": "The interaction and reward address must be the same. Eligibility will be verified by XStable."
-          },
-          "confirmationText": {
-            "zh": "我确认地址无误，提交后不可修改。",
-            "en": "I confirm this address is correct and cannot be changed after submission."
-          }
+          "recommendedChain": "bsc"
         }
       }
     }
@@ -310,10 +278,8 @@ function isLeaderboardSubmissionAddressEnabled(campaign) {
 | --- | --- | --- | --- |
 | `supportedChains` | string[] | 是 | 当前榜单允许选择的链，至少一项，只接受系统链注册表中的枚举值 |
 | `recommendedChain` | string/null | 否 | 前端标记为“推荐”的链，必须包含在 `supportedChains` 中 |
-| `label` | 多语言文本 | 是 | 输入框标题 |
-| `placeholder` | 多语言文本 | 否 | 输入框未填写时的占位提示 |
-| `helpText` | 多语言文本 | 是 | 解释应填写什么以及地址用途 |
-| `confirmationText` | 多语言文本 | 是 | 第一次投稿前的不可修改确认文案 |
+
+输入框标题、占位文案、提示语和不可修改确认文案不属于活动配置。EchoHunt 前端按当前语言统一展示通用文案，避免运营为每个活动重复填写，也避免不同活动对“不可修改”的描述不一致。
 
 输入配置不包含以下钱包接入字段：
 
@@ -334,13 +300,10 @@ function isLeaderboardSubmissionAddressEnabled(campaign) {
 
 保存配置时校验：
 
-1. 新模式下，每个开启主动投稿的榜单都必须配置至少一个 `supportedChains`，以及 `label`、`helpText` 和 `confirmationText`。
+1. 新模式下，每个开启主动投稿的榜单都必须配置至少一个 `supportedChains`。
 2. `supportedChains` 去重后只允许系统链注册表中的枚举值。
 3. `recommendedChain` 为空或属于当前 `supportedChains`。
-4. 多语言字段按活动实际支持的语言校验，不把中文或英文文案写死在代码中。
-5. 文案去除首尾空白并限制合理长度，避免异常配置撑坏页面。
-6. 已有投稿地址绑定后，不能删除当前榜单、修改榜单 ID，或删除已有绑定使用的链。
-7. 修改提示语只影响尚未首次投稿的用户；已绑定记录保留首次投稿时的文案快照用于审计。
+4. 已有投稿地址绑定后，不能删除当前榜单、修改榜单 ID，或删除已有绑定使用的链。
 
 ### 5.4 统一链注册表与地址校验器
 
@@ -439,7 +402,7 @@ POST /api/xhunt/echohunt/campaigns/:campaignKey/leaderboards/:leaderboardKey/twe
 }
 ```
 
-服务端接收用户选择的 `chain`，但链是否允许、使用哪种地址校验器以及展示文案全部以服务端活动配置和统一链注册表为准。服务端不接收钱包类型、客户端自定义正则或提示语。
+服务端接收用户选择的 `chain`，但链是否允许以及使用哪种地址校验器以服务端活动配置和统一链注册表为准。展示文案由 EchoHunt 前端统一维护；服务端不接收钱包类型、客户端自定义正则或提示语。
 
 第一次投稿流程：
 
@@ -498,22 +461,14 @@ GET /api/xhunt/echohunt/campaigns/:campaignKey/tweet-submissions
   "config": {
     "period": "day",
     "periodLimit": 3,
-    "totalLimit": 20,
-    "addressInput": {
-      "supportedChains": [
-        { "key": "bsc", "name": "BSC", "recommended": true },
-        { "key": "solana", "name": "Solana", "recommended": false },
-        { "key": "sui", "name": "Sui", "recommended": false }
-      ],
-      "label": "XStable 交互及收款地址",
-      "placeholder": "请输入你在 XStable 参与交易的钱包地址",
-      "helpText": "交互地址与奖励收款地址须一致，获奖资格将由 XStable 核验。",
-      "confirmationText": "我确认地址无误，提交后不可修改。"
-    }
+    "totalLimit": 20
+  },
+  "addressInput": {
+    "supportedChains": ["bsc", "solana", "sui"],
+    "recommendedChain": "bsc"
   },
   "addressBinding": {
     "chain": "bsc",
-    "networkName": "BSC",
     "address": "0x...",
     "lockedAt": "2026-11-09T10:00:00.000Z"
   },
@@ -524,7 +479,7 @@ GET /api/xhunt/echohunt/campaigns/:campaignKey/tweet-submissions
 
 规则：
 
-- 接口根据请求语言返回已经本地化的文案，不要求前端自行选择语言对象。
+- 接口只返回链配置，不返回输入框文案；前端使用自身中英文通用文案。
 - 尚未第一次投稿时返回 `addressBinding: null`。
 - 以上新字段只在活动明确开启新模式时返回；旧模式保持当前响应结构，不增加 `addressInput` 或 `addressBinding` 字段。
 - 新模式中未开启主动投稿的榜单不构造地址配置。
@@ -582,24 +537,12 @@ updatedAt                  TIMESTAMPTZ  NOT NULL
 
 该表按不可变记录处理：`updatedAt` 创建时与 `createdAt` 相同，正常业务流程中不再变化。
 
-`promptSnapshot` 保存第一次投稿时实际展示的配置文案，例如：
+`promptSnapshot` 保存第一次投稿时实际使用的链配置，例如：
 
 ```json
 {
   "supportedChains": ["bsc", "solana", "sui"],
-  "recommendedChain": "bsc",
-  "label": {
-    "zh": "XStable 交互及收款地址",
-    "en": "XStable interaction and reward address"
-  },
-  "helpText": {
-    "zh": "交互地址与奖励收款地址须一致，获奖资格将由 XStable 核验。",
-    "en": "The interaction and reward address must be the same. Eligibility will be verified by XStable."
-  },
-  "confirmationText": {
-    "zh": "我确认地址无误，提交后不可修改。",
-    "en": "I confirm this address is correct and cannot be changed after submission."
-  }
+  "recommendedChain": "bsc"
 }
 ```
 
@@ -722,11 +665,11 @@ chain, submissionAddress, lockedAt, tweetId, tweetUrl, submittedAt
 
 ```text
 选择榜单
-  -> 展示后台配置的支持链、label、placeholder、helpText
+  -> 展示后台配置的支持链和前端统一维护的通用文案
   -> 用户选择链；只有一条链时可直接展示并默认选中
   -> 用户填写文本地址
   -> 前端按所选链执行即时格式校验
-  -> 勾选后台配置的 confirmationText
+  -> 勾选前端统一的“地址确认后不可修改”文案
   -> 填写推文链接
   -> 一次提交地址与推文
 ```
@@ -907,7 +850,7 @@ chain, submissionAddress, lockedAt, tweetId, tweetUrl, submittedAt
 
 1. 增加活动级 `addressCollectionMode` 的归一化、管理后台选项和依赖校验。
 2. 增加共享链注册表、后端地址校验器、前端即时校验器和共享测试向量。
-3. 在现有榜单 `tweetSubmission` 配置中增加支持链、推荐链和 `addressInput` 多语言文案编辑。
+3. 在现有榜单 `tweetSubmission` 配置中增加支持链和推荐链编辑；输入框与确认话术由 EchoHunt 前端统一维护。
 4. 增加榜单地址绑定表、投稿表 `addressBindingId` 和数据库迁移。
 5. 改造报名服务，按活动模式决定是否要求 EVM 地址。
 6. 在投稿服务中实现链校验、地址规范化、第一次投稿原子创建绑定、后续复用和锁定检查。

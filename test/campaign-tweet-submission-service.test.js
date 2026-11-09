@@ -252,10 +252,6 @@ function submissionCampaignConfig(addressCollectionMode) {
         addressInput: {
           supportedChains: ["bsc"],
           recommendedChain: "bsc",
-          label: { zh: "地址", en: "Address" },
-          placeholder: { zh: "请输入地址", en: "Enter address" },
-          helpText: { zh: "奖励地址", en: "Reward address" },
-          confirmationText: { zh: "确认后不可修改", en: "Cannot be changed" },
         },
       },
     }],
