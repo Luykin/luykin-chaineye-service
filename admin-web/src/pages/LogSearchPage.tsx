@@ -18,9 +18,8 @@ import {
   Typography,
 } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { PermissionGuard } from "@/components/permission/PermissionGuard";
-import { SensitivePageTotpGate } from "@/components/security/SensitivePageTotpGate";
 import { PageSection } from "@/components/ui/PageSection";
+import { NoPermissionPage } from "@/pages/NoPermissionPage";
 import { fetchErrorLogs, fetchLogRequestHandlers, fetchLogRequests, fetchLogSearch } from "@/services/stats";
 import type { LogRequestResultItem, LogSearchResultItem } from "@/types/stats";
 import { useAuth } from "@/app/auth";
@@ -628,15 +627,13 @@ function LogSearchContent() {
 }
 
 export function LogSearchPage() {
+  const { user } = useAuth();
+
+  if (user?.role !== "super") {
+    return <NoPermissionPage />;
+  }
+
   return (
-    <PermissionGuard permission="log-search:read">
-      <SensitivePageTotpGate
-        scope="log-search"
-        title="验证后进入日志搜索"
-        description="日志可能包含敏感运行信息，进入页面及读取日志接口前必须完成 Authenticator 验证。"
-      >
-        <LogSearchContent />
-      </SensitivePageTotpGate>
-    </PermissionGuard>
+    <LogSearchContent />
   );
 }

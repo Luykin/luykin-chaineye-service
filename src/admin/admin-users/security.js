@@ -37,7 +37,6 @@ const ADMIN_TOTP_VERIFICATION_SCOPES = [
   "admin-users",
   "db-admin",
   "server-command",
-  "log-search",
   "nacos-admin",
 ];
 

@@ -68,7 +68,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/binance-square", icon: <BlockOutlined />, label: "币安广场", permission: "binance-square", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
   { key: "/binance-square-binding", icon: <LinkOutlined />, label: "BS绑定监控", permission: "binance-square", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
   { key: "/notes", icon: <FileTextOutlined />, label: "备注查看", permission: "notes", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
-  { key: "/log-search", icon: <FileSearchOutlined />, label: "日志搜索", permission: "log-search:read", group: "main", sidebarGroup: "dev", implemented: true, section: "primary" },
+  { key: "/log-search", icon: <FileSearchOutlined />, label: "日志搜索", permission: "log-search:read", group: "main", sidebarGroup: "dev", implemented: true, section: "primary", superOnly: true },
   { key: "/device-monitor", icon: <DesktopOutlined />, label: "设备监控", permission: "device-status:read", group: "main", sidebarGroup: "monitor", implemented: true, section: "primary" },
   { key: "/version-stats", icon: <AppstoreAddOutlined />, label: "版本统计", permission: "version-stats", group: "main", sidebarGroup: "monitor", implemented: true, section: "primary" },
   { key: "/url-stats", icon: <ApiOutlined />, label: "接口统计", permission: "url-stats", group: "main", sidebarGroup: "monitor", implemented: true, section: "primary" },

@@ -17,13 +17,6 @@ const PAGE_CONFIGS = {
       parseInt(process.env.ADMIN_SERVER_COMMAND_TOTP_TTL_SECONDS || "600", 10) || 600,
     ),
   },
-  "log-search": {
-    permission: ["log-search:read", "error-logs:read"],
-    ttlSeconds: Math.max(
-      60,
-      parseInt(process.env.ADMIN_LOG_SEARCH_TOTP_TTL_SECONDS || "600", 10) || 600,
-    ),
-  },
   "nacos-admin": {
     permission: "nacos-admin",
     role: "super",

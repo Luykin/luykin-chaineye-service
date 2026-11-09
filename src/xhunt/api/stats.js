@@ -3,6 +3,7 @@ const path = require("path");
 const {
   adminAuth,
   requirePermission,
+  requireRole,
 } = require("../../admin/middleware/adminAuth");
 const {
   requireSensitivePageTotp,
@@ -46,7 +47,6 @@ const {
 const { isDeadFingerprint } = require("../utils/request-identity");
 
 const router = express.Router();
-const requireLogSearchTotp = requireSensitivePageTotp("log-search");
 const requireServerCommandTotp = requireSensitivePageTotp("server-command");
 router.use(twitterIdHandlerLookupRouter);
 router.use(essayContestWinnerImportRouter);
@@ -1101,8 +1101,7 @@ router.get("/export/active-users/js", adminAuth, async (req, res) => {
 router.get(
   "/log-request-handlers",
   adminAuth,
-  requirePermission("log-search:read"),
-  requireLogSearchTotp,
+  requireRole("super"),
   async (req, res) => {
     try {
       const { XhuntVipTestUser } = require("../../models/postgres-start");
@@ -1137,8 +1136,7 @@ router.get(
 router.get(
   "/log-requests",
   adminAuth,
-  requirePermission("log-search:read"),
-  requireLogSearchTotp,
+  requireRole("super"),
   async (req, res) => {
     try {
       const handler = normalizeLogRequestHandler(req.query.handler);
@@ -1212,13 +1210,12 @@ router.get(
 
 /**
  * GET /log-search
- * 日志搜索接口（需要认证，仅 luykin 用户）- 优化版本
+ * 日志搜索接口（仅超级管理员）- 优化版本
  */
 router.get(
   "/log-search",
   adminAuth,
-  requirePermission("log-search:read"),
-  requireLogSearchTotp,
+  requireRole("super"),
   async (req, res) => {
     try {
       console.log(`[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}`);
@@ -1313,8 +1310,7 @@ router.get(
 router.get(
   "/error-logs",
   adminAuth,
-  requirePermission("error-logs:read"),
-  requireLogSearchTotp,
+  requireRole("super"),
   async (req, res) => {
     try {
       const { lines = 1000 } = req.query;

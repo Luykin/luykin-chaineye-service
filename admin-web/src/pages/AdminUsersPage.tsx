@@ -43,7 +43,6 @@ const PERMISSION_OPTIONS = [
   { label: "留存分析", value: "cohorts" },
   { label: "币安广场", value: "binance-square" },
   { label: "备注查看", value: "notes" },
-  { label: "日志搜索", value: "log-search:read" },
   { label: "设备监控", value: "device-status:read" },
   { label: "版本统计", value: "version-stats" },
   { label: "接口统计", value: "url-stats" },

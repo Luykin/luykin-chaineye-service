@@ -1,6 +1,6 @@
 import { apiRequest } from "./apiClient";
 
-export type SensitivePageTotpScope = "server-command" | "log-search" | "nacos-admin";
+export type SensitivePageTotpScope = "server-command" | "nacos-admin";
 
 export interface SensitivePageTotpStatus {
   enrolled: boolean;
