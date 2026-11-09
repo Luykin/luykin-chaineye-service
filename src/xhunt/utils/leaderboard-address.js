@@ -69,7 +69,7 @@ function normalizeChainAddress(chain, rawAddress) {
     return { valid: false, code: "INVALID_SUBMISSION_ADDRESS" };
   }
 
-  if (normalizedChain === "bsc") {
+  if (normalizedChain === "bsc" || normalizedChain === "monad") {
     try {
       return { valid: true, chain: normalizedChain, address, addressNormalized: ethersUtils.getAddress(address) };
     } catch (_) {

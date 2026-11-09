@@ -21,6 +21,13 @@
         "zh": "Sui",
         "en": "Sui"
       }
+    },
+    {
+      "id": "monad",
+      "label": {
+        "zh": "Monad",
+        "en": "Monad"
+      }
     }
   ]
 }
