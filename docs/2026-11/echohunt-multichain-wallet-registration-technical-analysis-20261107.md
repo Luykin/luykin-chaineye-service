@@ -1,70 +1,90 @@
-# EchoHunt 活动多链钱包报名技术分析
+# EchoHunt 活动分榜单投稿地址技术分析
 
-> 状态：实施范围已确认，待评审与排期，未实施  
-> 日期：2026-11-07  
-> 管理后台：`/Users/luykin/Documents/mac-work/luykin-chaineye-service/admin-web`  
-> 后端：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`  
+> 状态：需求变更版，待评审与排期，未实施
+> 初始日期：2026-11-07
+> 修订日期：2026-11-09
+> 原型：https://yzi-s2.alphahan.win/
+> 管理后台：`/Users/luykin/Documents/mac-work/luykin-chaineye-service/admin-web`
+> 后端：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`
 > EchoHunt 前端：`/Users/luykin/Documents/mac-work-new/XHunt.website/apps/echohunt`
 
-## 1. 目标与已确认规则
+## 1. 需求结论
 
-本次改造为活动报名增加多链钱包能力，支持以下主网：
+本需求不是多链钱包接入，也不是针对 Nym、XStable 或某种钱包开发专用逻辑，而是一个可供管理人员配置的通用活动能力：**决定地址是在报名阶段填写，还是在投稿阶段按榜单分别填写。**
 
-| 配置值 | 展示名称 | 钱包协议 | 地址类型 |
-| --- | --- | --- | --- |
-| `solana` | Solana | Solana Wallet Standard | Base58 公钥 |
-| `sui` | Sui | Sui Wallet Standard | 32 字节十六进制地址 |
-| `monad` | Monad | EVM / EIP-1193 | 20 字节 EVM 地址 |
-| `bsc` | BNB Chain | EVM / EIP-1193 | 20 字节 EVM 地址 |
+管理后台提供两种模式：
 
-已确认的产品与技术规则：
+| 模式 | 含义 | 行为 |
+| --- | --- | --- |
+| 报名时填写地址（旧模式） | 保持现有活动行为 | 用户报名时填写 EVM 地址，地址保存在 `CampaignRegistration.evmAddress` |
+| 投稿时按榜单填写地址（新模式） | 地址与投稿榜单绑定 | 报名时不填写地址；用户第一次向某个榜单投稿时，填写该榜单自己的地址 |
 
-1. 每个活动可独立配置支持哪些链。
-2. 每个活动可独立配置报名时是否必须签名。
-3. 启用多链钱包报名后，用户先选择网络，再连接该网络对应的钱包。
-4. 最终提交前明确提示：`本次活动绑定后不可更换`。
-5. 签名消息中的活动名称展示活动英文标题 `displayName.en`，不向用户展示 `campaignKey`。
-6. 服务端仍以 `campaignKey` 作为真实活动标识；一次性 `challengeId` 在服务端关联 `campaignKey`，避免仅靠可重复或可修改的英文标题识别活动。
-7. 报名查询接口在活动启用 `walletRegistration.enabled` 时返回链、钱包地址和验证状态等对应数据。
-8. 配置字段统一使用正确拼写 `walletRegistration.enabled`；不引入 `enabel` 兼容字段。
-9. 一期只在 EchoHunt Web 实现钱包报名；插件统一跳转 EchoHunt，插件报名接口对启用新模式的活动强制拒绝。
-10. 移动端纳入一期，但只覆盖本期明确的钱包和四条目标链，不建设通用钱包市场或尽可能多的钱包兼容。
-11. 报名查询接口按现有产品决定返回完整钱包地址，不做地址掩码。
-12. 链 ID、CAIP 标识、RPC 和钱包切链参数由统一链常量维护，上线前以各链官方主网配置复核。
+新模式必须满足以下前置条件：
 
-本期仅改造通用活动报名，不包含 E2E 互动任务的独立报名表，也不包含发奖交易、代用户发起链上交易或托管私钥。
+1. 活动使用自定义榜单。
+2. 至少一个榜单开启“主动投稿”。
+3. 只有开启主动投稿的榜单才显示地址输入配置。
+4. 每个开启投稿的榜单分别配置支持的链、输入框名称、占位文案、提示语和确认文案。
+5. 前后端根据榜单配置的链类型执行对应的地址格式校验，后端校验结果为准。
+6. 每个榜单的地址独立保存，不从另一个榜单自动复制。
 
-### 1.1 评估结论
+新模式仍然是普通地址输入，不接入具体钱包。系统只对管理员配置的链类型和地址格式负责：
 
-结论：**技术上可行，没有架构级阻塞；整体难度中高，主要成本在多协议签名验证、移动端钱包返回链路和新旧报名兼容，不在管理后台配置本身。**
+- 不连接钱包；
+- 不请求签名；
+- 可以配置并选择系统已支持的链类型；
+- 可以按链类型校验和规范化地址；
+- 不根据项目名称写任何业务分支；
+- 不校验用户是否拥有该地址；
+- 不校验用户是否在第三方平台完成交互。
+
+系统负责展示后台配置的链选项和提示语、接收用户输入、执行前后端地址格式校验、按活动和榜单保存，并保证首次投稿后不可由用户修改。链地址校验与钱包接入是两件事：校验地址格式不需要连接钱包、签名或切换网络。
+
+### 1.1 典型配置效果
+
+Nym 榜单可以配置：
+
+```text
+输入框名称：Nym 收款地址
+支持链：BSC
+占位文案：请输入活动奖励收款地址
+提示语：获奖后，奖励将发放至此地址。
+确认文案：我已核对收款地址，提交后不可修改。
+```
+
+XStable 榜单可以配置：
+
+```text
+输入框名称：XStable 交互及收款地址
+支持链：BSC、Solana、Sui；推荐 BSC
+占位文案：请输入你在 XStable 参与交易的钱包地址
+提示语：交互地址与奖励收款地址须一致，获奖资格将由 XStable 核验。
+确认文案：我确认地址无误，提交后不可修改。
+```
+
+这些都是普通配置文案。后端不理解“Nym”“XStable”“交互地址”或“收款地址”的业务含义。
+
+### 1.2 评估结论
+
+结论：**现有投稿服务已经使用 `campaignKey + leaderboardKey` 区分榜单，适合扩展为通用的分榜单地址采集。地址不应继续扩展在报名表中，也不应重复写进每条投稿，而应建立一条用户在某活动、某榜单下的地址绑定记录。**
 
 | 范围 | 难度 | 判断 |
 | --- | --- | --- |
-| 管理后台活动配置 | 低到中 | `nacosPayload` 已是 JSONB，可扩展配置；重点是发布校验和已有报名后的配置锁定 |
-| 数据模型与查询兼容 | 中 | 需要新增通用钱包字段、部分唯一索引，并同时保留历史 `evmAddress` 消费者 |
-| EVM（Monad、BNB Chain） | 中 | 两条链可复用 EIP-1193、切链和 `personal_sign` 验证，差异集中在统一链参数 |
-| Solana | 中 | 需要独立 Wallet Standard/签名验证适配，不能复用 EVM adapter |
-| Sui | 中高 | 使用独立钱包协议和 personal-message 验证，移动端 Deep Link/内置浏览器联调风险最高 |
-| EchoHunt 移动端最小方案 | 中高 | WalletConnect、Universal Link/Deep Link 受钱包版本与系统返回行为影响，必须真机联调 |
-| 插件兼容与发布 | 中 | 服务端先拒绝新模式旧接口、插件再更新跳转，可避免旧插件绕过签名规则 |
+| 活动级模式选择 | 低到中 | 增加配置和历史默认值，旧活动行为保持不变 |
+| 榜单链类型与文案配置 | 低到中 | 依附于现有 `tweetSubmission` 配置，仅投稿开启时展示 |
+| 统一地址校验器 | 中 | 前后端共享链枚举和测试向量，后端负责最终校验与规范化 |
+| 榜单地址绑定 | 中 | 需要迁移、唯一约束、首次投稿原子写入和不可修改规则 |
+| 投稿服务改造 | 中 | 在现有投稿事务中创建或复用地址绑定 |
+| EchoHunt 前端 | 中 | 报名表和投稿表根据模式切换，不涉及钱包 SDK |
+| 管理后台与导出 | 中 | 展示配置、用户填写值和绑定时间 |
 
-关键风险已有明确收敛手段：钱包 SDK 按协议隔离并动态加载；签名消息由服务端生成并用一次性 challenge 验证；重复报名由数据库唯一约束兜底；移动端只承诺首批钱包；后端拒绝逻辑先于插件跳转发布。按本文限定范围实施，预计 10–14 人日可以完成开发和首轮联调，第三方钱包兼容性仍需保留发布缓冲。
+预计开发与首轮联调约 4–6 人日。
 
 ## 2. 当前实现与改造原因
 
-### 2.1 活动配置
+### 2.1 报名服务
 
-当前数据库版活动编辑页为 `admin-web/src/pages/NacosCampaignsPage.tsx`。新活动默认：
-
-- `allowEmailRegistration: false`；
-- 未开启 Email 报名时必须填写 EVM 地址；
-- 开启 Email 报名后允许 EVM 地址和 Email 二选一。
-
-活动主配置保存在 `XHuntWebsiteCampaign.nacosPayload` JSONB 中。新增 `walletRegistration` 属于 JSON 配置扩展，不需要为活动表增加列。
-
-### 2.2 报名服务
-
-当前 `src/xhunt/services/campaignRegistrationService.js` 仅接收：
+当前 `src/xhunt/services/campaignRegistrationService.js` 使用以下联系方式报名：
 
 ```json
 {
@@ -73,243 +93,283 @@
 }
 ```
 
-地址校验固定为 `^0x[a-fA-F0-9]{40}$`，数据库写入 `CampaignRegistration.evmAddress`。该结构不能表达 Solana、Sui，也不能区分同一个 EVM 地址来自 Monad 还是 BNB Chain。
+未开启 Email 报名时，服务端强制要求 EVM 地址，并把地址写入 `CampaignRegistration.evmAddress`。这就是需要保留的旧模式。
 
-### 2.3 EchoHunt 前端
+新模式下，报名服务不再要求 `evmAddress`。地址延后到用户向具体榜单投稿时填写，因此：
 
-当前 `components/campaign/SignupPanel.tsx` 是手动输入 `evmAddress`，没有通用活动钱包连接和签名流程。`本次活动绑定后不可更换` 的确认弹窗只存在于独立的 E2E 页面，不能直接覆盖通用活动报名。
+- 报名记录中没有本次投稿地址；
+- Nym 和 XStable 等不同榜单可以填写不同的值；
+- 地址字段的显示含义由榜单配置文案决定；
+- 投稿地址不写入 `XHuntUser.evmAddresses`。
 
-EchoHunt 当前也没有 EVM、Solana、Sui 钱包 SDK，需要新增客户端钱包适配层。
+### 2.2 投稿服务
 
-### 2.4 报名查询
+当前 `src/xhunt/services/campaignTweetSubmissionService.js` 已经具备：
 
-当前报名数据主要经以下接口返回：
+- 按 `customLeaderboards[].id` 识别 `leaderboardKey`；
+- 校验用户已经报名；
+- 校验推文属于当前登录的 X 账号；
+- 按榜单执行周期和累计投稿限额；
+- 在 `XhuntCampaignTweetSubmissions` 中保存投稿记录。
 
-| 接口 | 使用方 | 当前报名数据来源 |
-| --- | --- | --- |
-| `GET /api/xhunt/echohunt/campaigns/:campaignKey/me` | EchoHunt 当前用户 | `serializeRegistration` |
-| `POST /api/xhunt/echohunt/campaigns/:campaignKey/register` | EchoHunt 报名结果 | `serializeRegistration` |
-| `GET /api/xhunt/campaign/registrations` | 现有报名列表消费者 | `serializeCampaignRegistration` |
-| `GET /api/xhunt/campaign/me?campaign=...` | 插件当前用户 | Sequelize 报名记录 |
-| `GET /api/xhunt/campaign/internal/registrations` | 管理后台 | `serializeCampaignRegistration` |
+同一用户可以向一个榜单投稿多次。地址只需在第一次投稿时填写一次，后续投稿复用，因此不应把地址值重复保存到每条投稿记录中。
 
-管理后台报名名单目前只有 `EVM` 和 `Email` 列，无法展示链、通用地址或签名状态。
+## 3. 领域关系与锁定粒度
 
-## 3. 活动配置契约
+```text
+CampaignRegistration（活动报名）
+  ├── LeaderboardAddressBinding（榜单 A 的地址）
+  │     ├── TweetSubmission 1
+  │     └── TweetSubmission 2
+  └── LeaderboardAddressBinding（榜单 B 的地址）
+        ├── TweetSubmission 3
+        └── TweetSubmission 4
+```
 
-在活动 `nacosPayload` 顶层新增：
+地址绑定唯一键：
+
+```text
+campaignKey + leaderboardKey + xHuntUserId
+```
+
+由此保证：
+
+- 一个用户在一个活动的一个榜单下只有一个地址；
+- 不同榜单必须分别填写，不自动继承或复制；
+- 同一榜单的后续投稿复用首次投稿保存的地址；
+- 地址不是用户账号级钱包，也不是整场活动共用字段；
+- 用户不能通过修改请求替换已经绑定的地址。
+
+本期不要求不同榜单的地址值在文本上必须不同。业务要求是“分别填写、分别保存”，不是强制两个字符串不相等。
+
+### 3.1 地址绑定是不可变数据
+
+地址绑定一旦创建即永久锁定，这是固定业务规则，不提供活动配置开关：
+
+1. 锁定范围为 `campaignKey + leaderboardKey + xHuntUserId`。
+2. `chain`、`address`、`addressNormalized`、所属活动、所属榜单和所属用户均不可修改。
+3. 用户端、管理后台和内部业务接口都不提供修改、重新绑定或删除能力。
+4. 后续投稿只能读取并复用已有绑定；请求携带不同链或地址时必须返回 `LEADERBOARD_ADDRESS_LOCKED`。
+5. 用户切换到另一个榜单时创建另一条独立绑定，不影响已绑定榜单。
+6. 前端隐藏编辑入口只是交互表现，真正约束必须由后端和数据库共同保证。
+
+如果用户首次填写错误，本期也不能自行修改，应在提交前通过完整链、完整地址和确认文案让用户二次核对。任何人工纠错能力都属于新的产品需求，不能通过管理后台直接编辑数据库记录实现。
+
+## 4. 活动配置契约
+
+### 4.1 活动级地址填写模式
+
+在活动配置顶层增加：
 
 ```json
 {
-  "walletRegistration": {
-    "enabled": true,
-    "supportedChains": ["solana", "sui", "monad", "bsc"],
-    "signatureRequired": true
-  }
+  "addressCollectionMode": "leaderboard_submission"
 }
 ```
 
-字段定义：
+支持值：
 
-| 字段 | 类型 | 默认值 | 规则 |
-| --- | --- | --- | --- |
-| `enabled` | boolean | `false` | 是否启用连接钱包报名 |
-| `supportedChains` | string[] | `[]` | 只接受 `solana`、`sui`、`monad`、`bsc`，去重后至少一项 |
-| `signatureRequired` | boolean | `true` | 是否要求地址所有权签名 |
+| 配置值 | 管理后台文案 | 行为 |
+| --- | --- | --- |
+| `registration_evm` | 报名时填写 EVM 地址（旧模式） | 使用现有报名 EVM/Email 逻辑 |
+| `leaderboard_submission` | 投稿时按榜单填写地址 | 报名不要求 EVM，第一次向各榜单投稿时填写 |
 
 兼容规则：
 
-- `walletRegistration` 缺失或 `enabled !== true`：继续使用原有 EVM/Email 报名。
-- `walletRegistration.enabled === true`：钱包路径只接受新的通用钱包结构，不接受把 Solana/Sui 地址放入 `evmAddress`。
-- `allowEmailRegistration === true` 时，Email 仍可作为独立报名方式；选择 Email 时不要求连接钱包或签名。
-- `signatureRequired` 只作用于钱包报名路径，不作用于 Email 报名路径。
-- 不把历史 `evmAddress` 自动判断为 Monad 或 BNB Chain，因为仅凭地址无法确定来源网络。
+- 字段缺失时按 `registration_evm` 处理，确保历史活动不变。
+- `allowEmailRegistration` 继续只服务旧模式的现有 Email 报名逻辑。
+- 新模式不把投稿地址当作报名联系方式，也不写入报名表 `evmAddress`。
+- 活动产生第一条报名记录后锁定 `addressCollectionMode`，避免同一活动同时存在两种含义的报名记录。
 
-### 3.1 管理后台校验
+### 4.2 选择新模式的前置校验
 
-发布配置前必须校验：
+管理后台只有同时满足以下条件时才允许选择 `leaderboard_submission`：
 
-1. `enabled === true` 时 `supportedChains` 至少包含一条合法链。
-2. 支持链数组去重并使用稳定枚举值，不保存展示文案。
-3. 启用多链钱包报名时，`displayName.en` 必填；该字段是签名消息的活动展示标题。
-4. 新启用的活动默认 `signatureRequired: true`。
-5. 关闭签名时显示提示：`未签名只能校验地址格式，无法证明报名用户拥有该地址。`
-6. 活动已有报名记录后，锁定 `enabled`、`supportedChains` 和 `signatureRequired`；如确需迁移，走单独的数据迁移流程，避免同一活动同时存在含义不一致的报名记录。
+```text
+leaderboardMode === "custom"
+并且
+至少一个 customLeaderboards[].tweetSubmission.enabled === true
+```
 
-### 3.2 对外活动配置
+交互规则：
 
-EchoHunt 活动列表和详情中的 `registrationConfig` 扩展为：
+1. 尚未开启任何主动投稿榜单时，新模式选项置灰，并提示“请先开启至少一个榜单的主动投稿”。
+2. 已选择新模式后，如果管理员关闭最后一个主动投稿榜单，阻止保存并提示恢复投稿或切回旧模式。
+3. 传统榜单模式不能选择新模式。
+4. 关闭某个榜单的主动投稿时，该榜单的地址输入配置不再生效；如已有地址绑定或投稿记录，应阻止直接关闭并提示先处理历史数据。
+
+## 5. 榜单地址输入配置
+
+### 5.1 配置位置
+
+地址输入配置放在每个榜单自己的 `tweetSubmission` 下：
 
 ```json
 {
-  "registrationConfig": {
-    "allowEmailRegistration": false,
-    "threshold": 200000,
-    "includeCreator": false,
-    "walletRegistration": {
-      "enabled": true,
-      "supportedChains": ["solana", "sui", "monad", "bsc"],
-      "signatureRequired": true,
-      "echohuntRegistrationUrl": "https://app.echohunt.ai/campaigns/example-campaign"
+  "addressCollectionMode": "leaderboard_submission",
+  "leaderboardMode": "custom",
+  "customLeaderboards": [
+    {
+      "id": "nym",
+      "name": { "zh": "Nym", "en": "Nym" },
+      "tweetSubmission": {
+        "enabled": true,
+        "period": "day",
+        "periodLimit": 3,
+        "totalLimit": 20,
+        "addressInput": {
+          "supportedChains": ["bsc"],
+          "recommendedChain": "bsc",
+          "label": {
+            "zh": "Nym 收款地址",
+            "en": "Nym reward address"
+          },
+          "placeholder": {
+            "zh": "请输入活动奖励收款地址",
+            "en": "Enter your reward address"
+          },
+          "helpText": {
+            "zh": "获奖后，奖励将发放至此地址。",
+            "en": "Rewards will be sent to this address."
+          },
+          "confirmationText": {
+            "zh": "我已核对收款地址，提交后不可修改。",
+            "en": "I have checked this address and understand it cannot be changed after submission."
+          }
+        }
+      }
+    },
+    {
+      "id": "xstable",
+      "name": { "zh": "XStable", "en": "XStable" },
+      "tweetSubmission": {
+        "enabled": true,
+        "period": "day",
+        "periodLimit": 3,
+        "totalLimit": 20,
+        "addressInput": {
+          "supportedChains": ["bsc", "solana", "sui"],
+          "recommendedChain": "bsc",
+          "label": {
+            "zh": "XStable 交互及收款地址",
+            "en": "XStable interaction and reward address"
+          },
+          "placeholder": {
+            "zh": "请输入你在 XStable 参与交易的钱包地址",
+            "en": "Enter the address used for XStable trading"
+          },
+          "helpText": {
+            "zh": "交互地址与奖励收款地址须一致，获奖资格将由 XStable 核验。",
+            "en": "The interaction and reward address must be the same. Eligibility will be verified by XStable."
+          },
+          "confirmationText": {
+            "zh": "我确认地址无误，提交后不可修改。",
+            "en": "I confirm this address is correct and cannot be changed after submission."
+          }
+        }
+      }
     }
-  }
+  ]
 }
 ```
 
-历史活动也返回归一化后的配置：
+### 5.2 字段定义
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `supportedChains` | string[] | 是 | 当前榜单允许选择的链，至少一项，只接受系统链注册表中的枚举值 |
+| `recommendedChain` | string/null | 否 | 前端标记为“推荐”的链，必须包含在 `supportedChains` 中 |
+| `label` | 多语言文本 | 是 | 输入框标题 |
+| `placeholder` | 多语言文本 | 否 | 输入框未填写时的占位提示 |
+| `helpText` | 多语言文本 | 是 | 解释应填写什么以及地址用途 |
+| `confirmationText` | 多语言文本 | 是 | 第一次投稿前的不可修改确认文案 |
+
+输入配置不包含以下钱包接入字段：
+
+- 钱包类型；
+- RPC、chain ID 或 CAIP 标识；
+- 钱包连接或签名方式；
+- 项目专用代码标识。
+
+### 5.3 管理后台展示条件
+
+榜单内的“投稿地址输入”配置区域只在以下条件全部成立时展示：
+
+```text
+活动 addressCollectionMode === "leaderboard_submission"
+并且
+当前榜单 tweetSubmission.enabled === true
+```
+
+保存配置时校验：
+
+1. 新模式下，每个开启主动投稿的榜单都必须配置至少一个 `supportedChains`，以及 `label`、`helpText` 和 `confirmationText`。
+2. `supportedChains` 去重后只允许系统链注册表中的枚举值。
+3. `recommendedChain` 为空或属于当前 `supportedChains`。
+4. 多语言字段按活动实际支持的语言校验，不把中文或英文文案写死在代码中。
+5. 文案去除首尾空白并限制合理长度，避免异常配置撑坏页面。
+6. 已有投稿地址绑定后，不能删除当前榜单、修改榜单 ID，或删除已有绑定使用的链。
+7. 修改提示语只影响尚未首次投稿的用户；已绑定记录保留首次投稿时的文案快照用于审计。
+
+### 5.4 统一链注册表与地址校验器
+
+链能力由一份受控的共享注册表维护，例如 `shared/xhunt/submission-address-chains.json`。活动配置只保存链 key，不保存正则、RPC 或钱包参数：
 
 ```json
 {
-  "walletRegistration": {
-    "enabled": false,
-    "supportedChains": [],
-    "signatureRequired": false,
-    "echohuntRegistrationUrl": null
-  }
-}
-```
-
-稳定返回完整结构可以减少前端对缺失字段的分支判断；后端实际报名逻辑仍以服务端读取到的活动配置为准。
-
-`echohuntRegistrationUrl` 由服务端使用 EchoHunt Web 基础地址和 `campaignKey` 生成，不能复用活动的 `activeUrl`：`activeUrl` 可能指向项目官网或外部活动页，并不保证是 EchoHunt 报名页面。
-
-## 4. 签名消息与 challenge 协议
-
-### 4.1 核心约束
-
-签名消息由服务端生成，前端只能原样展示和签名。前端不得自行拼接标题、地址、nonce 或时间。
-
-用户可见的活动字段使用 `displayName.en`：
-
-```text
-Campaign: XStable Creator Campaign
-```
-
-消息中不展示 `campaignKey`。服务端创建 challenge 时保存以下绑定关系：
-
-```text
-challengeId -> campaignKey + authCenterUserId + twitterId + chain + address + titleSnapshot
-```
-
-因此即使两个活动英文标题相同，或活动后续修改了英文标题，已签名 challenge 也只能用于创建它最初绑定的活动报名记录。
-
-### 4.2 英文标题来源
-
-签名标题只读取活动原始配置 `displayName.en`，不按请求语言切换，也不接受前端传入标题。
-
-生成消息前执行：
-
-1. `trim()`；
-2. 将 `\r`、`\n`、连续空白规范化为单个空格，防止消息结构注入；
-3. 限制最大长度，例如 160 个 Unicode 字符；
-4. 字段为空时拒绝创建 challenge，返回 `CAMPAIGN_ENGLISH_TITLE_REQUIRED`。
-
-challenge 中保存 `titleSnapshot`，验证签名时使用快照，不重新读取可能已修改的活动标题。
-
-### 4.3 消息模板
-
-所有链使用相同的 UTF-8 文本和 `\n` 换行：
-
-```text
-XHunt Campaign Wallet Registration
-
-Campaign: {displayName.en}
-Network: {networkDisplayName}
-Wallet Address: {canonicalAddress}
-
-This wallet will be bound to this campaign and cannot be changed after registration.
-This request does not trigger a blockchain transaction or cost gas.
-
-Request ID: {challengeId}
-Nonce: {nonce}
-Issued At: {issuedAtIso}
-Expiration Time: {expiresAtIso}
-Origin: {expectedOrigin}
-```
-
-字段顺序、大小写、空行和换行符是签名协议的一部分。后续改消息模板时增加 `messageVersion`，不能静默修改同一版本。
-
-### 4.4 Challenge 接口
-
-新增：
-
-```text
-POST /api/xhunt/echohunt/campaigns/:campaignKey/wallet-registration/challenge
-Authorization: Bearer <Auth Center access token>
-```
-
-请求：
-
-```json
-{
-  "chain": "solana",
-  "address": "..."
-}
-```
-
-响应：
-
-```json
-{
-  "success": true,
-  "data": {
-    "challengeId": "uuid",
-    "messageVersion": 1,
-    "message": "XHunt Campaign Wallet Registration\n...",
-    "chain": "solana",
-    "address": "canonical address",
-    "signatureType": "solana_signMessage",
-    "expiresAt": "2026-11-07T10:05:00.000Z"
-  }
-}
-```
-
-服务端流程：
-
-1. 校验 Auth Center 登录态和 Twitter 身份。
-2. 读取服务端活动配置并确认活动允许报名。
-3. 确认 `walletRegistration.enabled === true`、链在 `supportedChains` 内、`signatureRequired === true`。
-4. 按链校验并规范化地址。
-5. 使用服务端配置生成英文标题、消息、nonce 和 `challengeId`。
-6. 将 challenge 写入 Redis，TTL 建议 5 分钟。
-7. 同一个用户、活动、链、地址短时间内重复申请时覆盖或废弃旧 challenge，避免多个有效签名并存。
-
-### 4.5 签名与验证
-
-| 链 | 前端签名 | 服务端验证 |
-| --- | --- | --- |
-| Monad | `personal_sign` | EVM message recovery，恢复地址必须等于报名地址 |
-| BNB Chain | `personal_sign` | EVM message recovery，恢复地址必须等于报名地址 |
-| Solana | `signMessage` | Ed25519 验证，公钥必须等于报名地址 |
-| Sui | `signPersonalMessage` | Sui personal-message 验证，恢复公钥派生地址必须等于报名地址 |
-
-EVM 普通消息签名只能证明地址控制权，不能单独证明用户当前连接在哪条 EVM 链。因此前端还必须切换并校验目标 chain ID，服务端将目标链写入签名消息和报名记录；服务端不把客户端自报的 chain ID 当成地址所有权证明。
-
-Redis challenge 必须一次性原子消费。以下任一情况拒绝报名：
-
-- challenge 不存在、已过期或已消费；
-- challenge 绑定的活动、用户、链或地址与报名请求不一致；
-- 签名算法与链不匹配；
-- 签名验证失败；
-- 活动配置在 challenge 创建后被关闭或改变为不支持该链；
-- 当前用户已经报名；
-- 当前链地址已被同一活动的其他报名记录使用。
-
-## 5. 报名接口契约
-
-### 5.1 启用钱包报名时
-
-`POST /api/xhunt/echohunt/campaigns/:campaignKey/register` 请求扩展为：
-
-```json
-{
-  "wallet": {
-    "chain": "solana",
-    "address": "canonical-or-raw-address",
-    "walletName": "Phantom",
-    "challengeId": "uuid",
-    "signature": "base58/base64/0x signature according to chain"
+  "bsc": {
+    "displayName": { "zh": "BSC", "en": "BSC" },
+    "addressType": "evm"
   },
+  "solana": {
+    "displayName": { "zh": "Solana", "en": "Solana" },
+    "addressType": "solana"
+  },
+  "sui": {
+    "displayName": { "zh": "Sui", "en": "Sui" },
+    "addressType": "sui"
+  }
+}
+```
+
+首期校验规则：
+
+| 链 key | 地址类型 | 后端校验与规范化 |
+| --- | --- | --- |
+| `bsc` | `evm` | 使用成熟 EVM 地址库校验 20 字节地址；比较值保存小写，展示值可保存 checksum 格式 |
+| `solana` | `solana` | Base58 解码后必须为 32 字节，再输出标准 Base58 |
+| `sui` | `sui` | 使用 Sui 官方地址规范化逻辑，保存为小写 `0x` + 64 位十六进制 |
+
+实现要求：
+
+1. 后端提供按链 key 分派的权威校验器，例如 `validateSubmissionAddress(chain, address)`。
+2. 前端使用同一份链枚举和等价校验规则提供即时反馈，但不能代替后端校验。
+3. 前后端共享有效、无效和边界地址测试向量，避免校验语义漂移。
+4. 多条 EVM 链可以复用 `evm` 地址校验器，但链 key 仍分别保存，便于展示和业务核验。
+5. 增加新链时先扩展注册表、后端校验器、前端校验器和测试向量，再允许管理后台选择。
+6. 链注册表不包含钱包品牌、RPC、Explorer、chain ID 或切链参数，因为本功能不发起链上交互。
+
+## 6. 报名接口改造
+
+### 6.1 旧模式
+
+`addressCollectionMode` 缺失或为 `registration_evm` 时保持现有请求和校验：
+
+```json
+{
+  "evmAddress": "0x...",
+  "email": null
+}
+```
+
+现有 EVM 格式、Email、唯一性和 `XHuntUser.evmAddresses` 同步规则不变。
+
+### 6.2 新模式
+
+`addressCollectionMode === "leaderboard_submission"` 时，报名请求不传地址：
+
+```json
+{
   "agreements": {
     "terms": true,
     "disclosure": true
@@ -319,562 +379,466 @@ Redis challenge 必须一次性原子消费。以下任一情况拒绝报名：
 }
 ```
 
-当 `signatureRequired === false` 时，请求省略 `challengeId` 和 `signature`，但仍必须通过连接钱包得到地址：
+`registerCampaignParticipant` 根据服务端活动配置执行：
+
+1. 不要求 `evmAddress`。
+2. `CampaignRegistration.evmAddress` 保存为 `NULL`。
+3. 排名门槛、X 账号质量、重复报名、任务和协议等既有校验保持不变。
+4. 请求如果传入 `evmAddress`，返回 `REGISTRATION_ADDRESS_NOT_ALLOWED`，避免旧客户端把地址写到错误阶段。
+5. 后续榜单地址不回写 `CampaignRegistration.evmAddress` 或 `XHuntUser.evmAddresses`。
+
+## 7. 投稿接口契约
+
+### 7.1 第一次向榜单投稿
+
+现有接口路径保持不变：
+
+```text
+POST /api/xhunt/echohunt/campaigns/:campaignKey/leaderboards/:leaderboardKey/tweet-submissions
+```
+
+新模式下，第一次向当前榜单投稿时请求增加：
 
 ```json
 {
-  "wallet": {
-    "chain": "sui",
+  "tweetUrl": "https://x.com/example/status/1234567890",
+  "chain": "bsc",
+  "submissionAddress": "0x...",
+  "addressConfirmed": true
+}
+```
+
+服务端接收用户选择的 `chain`，但链是否允许、使用哪种地址校验器以及展示文案全部以服务端活动配置和统一链注册表为准。服务端不接收钱包类型、客户端自定义正则或提示语。
+
+第一次投稿流程：
+
+1. 校验登录态、Twitter 身份、报名记录和投稿窗口。
+2. 读取当前榜单的 `tweetSubmission.addressInput` 配置。
+3. 确认 `chain` 属于当前榜单的 `supportedChains`。
+4. 通过统一地址校验器校验并规范化 `submissionAddress`。
+5. 校验推文链接、推文作者、重复投稿和限额。
+6. 要求 `addressConfirmed === true`。
+7. 在现有投稿事务内创建榜单地址绑定和投稿记录。
+8. 投稿记录写入新建的 `addressBindingId`。
+
+地址与第一次投稿在同一事务中提交：任何一步失败都不保存地址。这样可以避免用户只保存了一个不可修改地址，却因为推文无效而没有成功投稿。
+
+### 7.2 后续投稿
+
+当前用户在该榜单已经存在地址绑定时，请求只需提交推文：
+
+```json
+{
+  "tweetUrl": "https://x.com/example/status/2345678901"
+}
+```
+
+服务端读取并复用现有绑定。若客户端仍传入地址：
+
+- 链和规范化地址均与已绑定值一致：可忽略并继续处理；
+- 链或规范化地址不同：返回 `LEADERBOARD_ADDRESS_LOCKED`；
+- 不提供用户修改或删除接口。
+
+### 7.3 输入与地址校验
+
+`submissionAddress` 先执行通用输入校验：
+
+1. 必须是字符串。
+2. `trim()` 后不能为空。
+3. 长度不超过固定安全上限，例如 256 个 Unicode 字符。
+4. 拒绝换行和不可见控制字符。
+5. `chain` 必须是当前榜单配置允许的单个字符串。
+
+通用校验通过后，再按链注册表选择 EVM、Solana、Sui 等地址校验器。服务端保存用户展示值和规范化比较值。地址格式通过只代表字符串符合该链地址规则，不代表用户拥有该地址，也不代表用户完成了任何链上或第三方平台交互。
+
+## 8. 查询接口
+
+现有接口：
+
+```text
+GET /api/xhunt/echohunt/campaigns/:campaignKey/tweet-submissions
+```
+
+每个榜单摘要增加：
+
+```json
+{
+  "leaderboardKey": "xstable",
+  "config": {
+    "period": "day",
+    "periodLimit": 3,
+    "totalLimit": 20,
+    "addressInput": {
+      "supportedChains": [
+        { "key": "bsc", "name": "BSC", "recommended": true },
+        { "key": "solana", "name": "Solana", "recommended": false },
+        { "key": "sui", "name": "Sui", "recommended": false }
+      ],
+      "label": "XStable 交互及收款地址",
+      "placeholder": "请输入你在 XStable 参与交易的钱包地址",
+      "helpText": "交互地址与奖励收款地址须一致，获奖资格将由 XStable 核验。",
+      "confirmationText": "我确认地址无误，提交后不可修改。"
+    }
+  },
+  "addressBinding": {
+    "chain": "bsc",
+    "networkName": "BSC",
     "address": "0x...",
-    "walletName": "Slush"
+    "lockedAt": "2026-11-09T10:00:00.000Z"
+  },
+  "usage": {},
+  "submissions": []
+}
+```
+
+规则：
+
+- 接口根据请求语言返回已经本地化的文案，不要求前端自行选择语言对象。
+- 尚未第一次投稿时返回 `addressBinding: null`。
+- 旧模式或未开启主动投稿的榜单返回 `addressInput: null`、`addressBinding: null`。
+- 用户只能查询自己的完整链和地址值。
+
+## 9. 数据模型与迁移
+
+### 9.1 新增榜单地址绑定表
+
+建议新增 `XhuntCampaignLeaderboardAddressBindings`：
+
+```text
+id                         UUID         PRIMARY KEY
+campaignKey                VARCHAR(128) NOT NULL
+leaderboardKey             VARCHAR(128) NOT NULL
+campaignRegistrationId     UUID         NOT NULL
+xHuntUserId                UUID         NOT NULL
+authCenterUserId           UUID         NULL
+twitterId                  VARCHAR(64)  NULL
+chain                      VARCHAR(32)  NOT NULL
+address                    VARCHAR(256) NOT NULL
+addressNormalized          VARCHAR(256) NOT NULL
+promptSnapshot             JSONB        NOT NULL
+lockedAt                   TIMESTAMPTZ  NOT NULL
+createdAt                  TIMESTAMPTZ  NOT NULL
+updatedAt                  TIMESTAMPTZ  NOT NULL
+```
+
+该表按不可变记录处理：`updatedAt` 创建时与 `createdAt` 相同，正常业务流程中不再变化。
+
+`promptSnapshot` 保存第一次投稿时实际展示的配置文案，例如：
+
+```json
+{
+  "supportedChains": ["bsc", "solana", "sui"],
+  "recommendedChain": "bsc",
+  "label": {
+    "zh": "XStable 交互及收款地址",
+    "en": "XStable interaction and reward address"
+  },
+  "helpText": {
+    "zh": "交互地址与奖励收款地址须一致，获奖资格将由 XStable 核验。",
+    "en": "The interaction and reward address must be the same. Eligibility will be verified by XStable."
+  },
+  "confirmationText": {
+    "zh": "我确认地址无误，提交后不可修改。",
+    "en": "I confirm this address is correct and cannot be changed after submission."
   }
 }
 ```
 
-服务端不信任 `walletName`，该字段只用于运营分析；地址、链、签名状态必须由服务端校验后写入。
+该表保存用户选择的链、展示地址和规范化地址，但不保存 `walletType`、`walletName`、`verified`、`signature` 或 `challenge`。`chain` 只表示地址使用的链类型，不表示前端实际连接或切换到了该网络。
 
-### 5.2 历史模式
-
-`walletRegistration.enabled !== true` 时继续接受：
-
-```json
-{
-  "evmAddress": "0x..."
-}
-```
-
-历史模式不接受 Solana/Sui 地址，也不把 `evmAddress` 自动映射为 `wallet.chain`。
-
-### 5.3 Email 路径
-
-活动同时满足以下条件时可继续 Email 报名：
-
-```text
-allowEmailRegistration === true
-walletRegistration.enabled === true
-```
-
-请求只传 `email`，不同时传 `wallet`。钱包和 Email 同时存在返回 `CONTACT_CONFLICT`。
-
-## 6. 数据模型与迁移
-
-### 6.1 CampaignRegistration 新字段
-
-建议通过 PostgreSQL 迁移增加：
-
-```text
-walletChain                VARCHAR(32)  NULL
-walletAddress              VARCHAR(128) NULL
-walletAddressNormalized    VARCHAR(128) NULL
-walletSignatureRequired    BOOLEAN      NULL
-walletVerified             BOOLEAN      NULL
-walletVerifiedAt           TIMESTAMPTZ  NULL
-walletVerification         JSONB        NULL
-```
-
-`walletVerification` 建议结构：
-
-```json
-{
-  "messageVersion": 1,
-  "challengeId": "uuid",
-  "signatureType": "solana_signMessage",
-  "signature": "...",
-  "message": "signed message snapshot",
-  "titleSnapshot": "XStable Creator Campaign",
-  "walletName": "Phantom",
-  "verifiedAt": "2026-11-07T10:00:10.000Z"
-}
-```
-
-签名不是密码或私钥，但公开接口不返回原始 `signature`、完整签名消息、nonce 或 `challengeId`。这些字段仅用于服务端审计和争议排查。
-
-### 6.2 地址规范化
-
-- Monad、BNB Chain：用 EVM 地址库校验；比较值保存为小写，展示值可保存校验和格式。
-- Solana：解析为公钥后重新输出标准 Base58；Base58 大小写敏感。
-- Sui：规范化为小写 `0x` 加 64 位十六进制。
-
-增加唯一索引：
+### 9.2 索引与约束
 
 ```sql
-UNIQUE (campaign, walletChain, walletAddressNormalized)
-WHERE walletAddressNormalized IS NOT NULL
+UNIQUE (campaignKey, leaderboardKey, xHuntUserId)
+INDEX  (campaignRegistrationId)
+INDEX  (campaignKey, leaderboardKey, lockedAt)
 ```
 
-该约束防止并发请求绕过“先查询、后插入”的应用层唯一性检查。
+不对 `chain + addressNormalized` 建立跨用户唯一索引。格式校验不代表业务上禁止多人填写同一地址；如果某个活动需要地址查重，应另行配置或由运营、合作方核验流程处理，不能写死在通用功能中。
 
-### 6.3 旧字段兼容
-
-- 保留 `evmAddress` 和现有索引，避免破坏插件与历史消费者。
-- 新模式下 Monad/BNB 报名可在过渡期同步写入 `evmAddress`，但新代码以 `walletAddress` 为权威值。
-- Solana/Sui 不写入 `evmAddress`。
-- Solana/Sui 地址不写入 `XHuntUser.evmAddresses`。
-- 本期不把活动报名地址升级为用户账号级通用钱包身份；地址只绑定当前活动报名。
-
-## 7. 报名查询接口返回规则
-
-### 7.1 统一序列化结构
-
-活动启用 `walletRegistration.enabled` 且报名记录通过钱包路径创建时，报名对象增加：
-
-```json
-{
-  "walletRegistration": {
-    "chain": "solana",
-    "networkName": "Solana",
-    "address": "...",
-    "signatureRequired": true,
-    "verified": true,
-    "verifiedAt": "2026-11-07T10:00:10.000Z",
-    "signatureType": "solana_signMessage",
-    "walletName": "Phantom"
-  }
-}
-```
-
-不返回：
-
-- 原始签名；
-- nonce；
-- challenge ID；
-- 完整签名消息；
-- Redis key 或内部验证错误详情。
-
-当活动未启用新模式时，保持现有 `evmAddress`、`email` 返回，不强行构造 `walletRegistration`。当活动已启用但记录是迁移前的历史报名时返回：
-
-```json
-{
-  "walletRegistration": null,
-  "legacyEvmAddress": "0x..."
-}
-```
-
-正常情况下应通过“已有报名后锁定配置”避免产生这种混合状态。
-
-### 7.2 EchoHunt 活动配置接口
-
-以下接口必须返回活动级 `registrationConfig.walletRegistration`：
-
-| 接口 | 返回内容 |
-| --- | --- |
-| `GET /api/xhunt/echohunt/campaigns` | 每个活动的开关、支持链、是否签名 |
-| `GET /api/xhunt/echohunt/campaigns/:campaignKey` | 当前活动完整钱包报名配置 |
-| `GET /api/xhunt/campaign/config` | 插件侧兼容配置；未支持新流程的插件据此禁用或隐藏报名 |
-
-### 7.3 EchoHunt 当前用户接口
-
-`GET /api/xhunt/echohunt/campaigns/:campaignKey/me`：
-
-- 未报名：`registration: null`，仍返回活动级配置的接口负责告知前端如何报名。
-- 已通过钱包报名：`registration.walletRegistration` 返回链、地址和验证状态。
-- 已通过 Email 报名：`registration.email` 保持现有返回，`registration.walletRegistration` 为 `null`。
-
-`POST /api/xhunt/echohunt/campaigns/:campaignKey/register` 的成功响应使用相同序列化结构，避免前端报名成功后还需立即重新查询。
-
-### 7.4 管理后台报名查询
-
-`GET /api/xhunt/campaign/internal/registrations` 在启用钱包报名的活动中为每行返回：
-
-```json
-{
-  "walletRegistration": {
-    "chain": "bsc",
-    "networkName": "BNB Chain",
-    "address": "0x...",
-    "signatureRequired": true,
-    "verified": true,
-    "verifiedAt": "...",
-    "signatureType": "evm_personal_sign",
-    "walletName": "MetaMask"
-  }
-}
-```
-
-管理后台表格调整为：
+除唯一约束外，建议在数据库迁移中增加保护触发器，拒绝修改或删除绑定记录。至少必须禁止更新：
 
 ```text
-用户 | 网络 | 钱包地址 | 签名状态 | Email | 报名时间 | ...
+campaignKey, leaderboardKey, campaignRegistrationId, xHuntUserId,
+authCenterUserId, twitterId, chain, address, addressNormalized,
+promptSnapshot, lockedAt
 ```
 
-签名状态建议使用：
+这样即使后续代码误用 `update`、管理接口或批量操作，也不能绕过不可修改规则。正常业务代码只允许 `INSERT` 和 `SELECT`。
 
-- `已验证`：要求签名且验证成功；
-- `未要求签名`：配置关闭签名，地址仅做格式校验；
-- `历史记录`：活动当前启用新模式，但记录缺少新字段；
-- `-`：Email 报名。
+### 9.3 投稿表字段
 
-### 7.5 现有报名列表和插件当前用户接口
-
-以下接口同步使用统一序列化器，避免不同入口返回不同字段：
-
-- `GET /api/xhunt/campaign/registrations`
-- `GET /api/xhunt/campaign/me?campaign=...`
-
-公开或弱鉴权列表返回链、完整钱包地址和 `verified`，不做地址掩码；仍不返回 `walletName`、`signatureType` 等非必要审计信息。完整地址返回是本期已确认的产品规则，如后续要收紧公开范围，应另行调整接口权限，不能只在前端隐藏。
-
-### 7.6 序列化实现建议
-
-把钱包返回结构集中在服务层，例如：
-
-```javascript
-serializeRegistrationWallet(record, campaignConfig, { audience })
-```
-
-`audience` 至少区分：
-
-- `self`：当前报名用户；
-- `admin`：管理后台；
-- `public`：公开列表；
-- `legacyPlugin`：旧插件兼容。
-
-路由不重复拼装字段。序列化器以服务端活动配置和数据库记录为输入，不使用客户端传来的 `walletRegistration.enabled`。
-
-## 8. 前端钱包适配方案
-
-### 8.1 依赖建议
-
-当前 EchoHunt 无钱包 SDK。建议按协议分层：
-
-- Monad / BNB Chain：`wagmi` + `viem`；
-- Solana：`@solana/wallet-adapter-react` 或 Wallet Standard；
-- Sui：`@mysten/dapp-kit`；
-- 移动端扫码和深链：按产品范围接入 WalletConnect/Reown。
-
-xStable 的公开前端资源同样采用 EVM、Solana、Sui 多 adapter 结构，不能把四条链视为一个钱包协议。公开 npm 当前没有独立的 `@reown/appkit-adapter-sui`，Sui 仍需要单独适配或定制 adapter。
-
-### 8.2 首批钱包名单
-
-一期只明确支持下列钱包，不承诺其它钱包即使能被 Wallet Standard、EIP-6963 或 WalletConnect 发现也一定可用：
-
-| 网络 | 桌面端 | 移动端最小支持 |
-| --- | --- | --- |
-| Monad | MetaMask、OKX Wallet | MetaMask、OKX Wallet，通过 WalletConnect/官方 Universal Link 打开 |
-| BNB Chain | Binance Wallet、MetaMask、OKX Wallet | Binance Wallet、MetaMask、OKX Wallet，通过 WalletConnect/官方 Universal Link 打开 |
-| Solana | Phantom、OKX Wallet | Phantom、OKX Wallet，通过 WalletConnect 或钱包官方 Universal Link 打开 |
-| Sui | Slush、OKX Wallet | Slush、OKX Wallet，优先跳转钱包内置浏览器并通过 Wallet Standard 连接 |
-
-该名单的目标是覆盖每条链至少一个主流原生钱包，并复用 OKX Wallet 的多链能力降低移动端适配数量。未列入的钱包可在后续按实际用户需求增加。
-
-### 8.3 移动端最小方案
-
-移动端纳入一期，但采用最小可用实现：
-
-1. EVM 和 Solana 优先复用 Reown/WalletConnect 的二维码、Universal Link 和已安装钱包唤起能力。
-2. Sui 只适配 Slush、OKX Wallet；优先用官方 Deep Link 打开钱包内置 DApp 浏览器，再由 Wallet Standard 完成连接和签名。
-3. 不建设全量钱包搜索、钱包推荐、社交登录、内嵌钱包、法币入口或多账户管理。
-4. 钱包未安装时只展示对应官方安装/打开入口，不实现自建钱包下载市场。
-5. 首期验收机型覆盖一台 iOS 和一台 Android；每条链至少有一个钱包完成连接、签名、拒签和返回网页测试。
-
-移动端跳转前保存活动路径和待选链；钱包返回网页后重新读取连接状态。challenge 在用户真正连接并取得地址后再申请，避免 App 切换期间提前过期。
-
-### 8.4 统一接口
-
-在 EchoHunt 前端新增活动钱包模块，对 `SignupPanel` 暴露统一状态：
-
-```ts
-type CampaignWalletConnection = {
-  chain: 'solana' | 'sui' | 'monad' | 'bsc';
-  address: string;
-  walletName: string;
-  connectedChainId?: string | number;
-};
-
-interface CampaignWalletAdapter {
-  connect(chain: CampaignWalletChain): Promise<CampaignWalletConnection>;
-  signMessage(message: string): Promise<string>;
-  disconnect(): Promise<void>;
-}
-```
-
-钱包模块是 client-only 组件，并通过动态加载降低活动首屏体积。活动页面和排行榜静态内容不应因为钱包 SDK 全部变为客户端渲染。
-
-### 8.5 报名交互
-
-推荐流程：
+为 `XhuntCampaignTweetSubmissions` 增加：
 
 ```text
-选择活动支持的网络
-  -> 展示该网络可用钱包
-  -> 连接钱包并读取地址
-  -> 展示网络、钱包名称、完整地址
-  -> 完成任务和协议勾选
-  -> 打开最终确认弹窗
-  -> 按配置签名或直接报名
+addressBindingId UUID NULL
 ```
 
-最终确认弹窗必须展示：
+- 新模式下新增投稿必须关联当前榜单地址绑定。
+- 旧模式和历史投稿允许为空。
+- 外键删除策略使用 `RESTRICT`，避免投稿失去当时使用的地址依据。
+
+### 9.4 事务与并发
+
+第一次投稿在同一个数据库事务中：
+
+1. 锁定活动报名记录。
+2. 获取当前 `campaignKey + leaderboardKey + xHuntUserId` 的事务锁。
+3. 查询或创建地址绑定。
+4. 执行现有重复投稿和限额校验。
+5. 创建投稿并写入 `addressBindingId`。
+
+数据库唯一约束负责兜底并发请求。两个不同地址的并发首次投稿最多一个可以建立绑定；另一个返回地址已锁定。
+
+## 10. 管理后台交互
+
+### 10.1 活动级选项
+
+活动报名配置中增加：
 
 ```text
-确认报名
-
-本次活动绑定后不可更换，请确认网络与钱包地址无误。
-
-活动：{displayName.en}
-网络：Solana
-地址：完整地址
-
-[返回修改] [确认并签名]
+地址填写阶段
+○ 报名时填写 EVM 地址（旧模式）
+○ 投稿时按榜单分别填写地址
 ```
 
-`signatureRequired === false` 时按钮改为 `确认报名`，提醒仍然保留。
+第二项在没有开启主动投稿榜单时置灰，并展示前置条件说明。
 
-以下状态变化必须清空已有 challenge 和签名：
+### 10.2 榜单级配置
 
-- 用户切换钱包账号；
-- 用户切换网络；
-- 钱包断开；
-- 活动切换；
-- challenge 过期；
-- 服务端返回活动配置已变化。
+在自定义榜单的“主动投稿”区域中：
 
-用户拒绝连接、拒绝签名、网络不匹配、地址格式错误和 challenge 过期分别显示明确错误，不统一显示“报名失败”。
+1. 先开启 `主动投稿`。
+2. 活动选择新模式后，显示“投稿地址输入”配置。
+3. 管理员从系统链注册表中选择当前榜单支持的链，并可标记一个推荐链。
+4. 管理员分别填写输入框名称、占位文案、提示语、确认文案的多语言内容。
+5. 实时预览用户投稿时看到的链选择和输入区域。
 
-## 9. 后端模块划分
+不配置钱包品牌、RPC、签名或自定义地址正则。地址格式由选中的系统链类型决定。
 
-建议新增或调整：
+### 10.3 地址与投稿管理
+
+投稿管理列表增加：
 
 ```text
-src/xhunt/
-├── constants/
-│   └── campaign-wallet-chains.js
-├── services/
-│   ├── campaignRegistrationService.js
-│   ├── campaignWalletConfigService.js
-│   ├── campaignWalletChallengeService.js
-│   └── campaignWalletVerificationService.js
-├── models/
-│   └── CampaignRegistration.js
-└── api/
-    ├── echohunt.js
-    └── campaign.js
+用户 | 榜单 | 链 | 投稿地址 | 绑定时间 | 推文 | 投稿时间
 ```
 
-职责：
+导出列至少包括：
 
-- `campaignWalletConfigService`：配置归一化、支持链判断、英文标题校验。
-- `campaignWalletChallengeService`：生成消息、Redis TTL、一次性消费。
-- `campaignWalletVerificationService`：地址规范化和三类签名验证。
-- `campaignRegistrationService`：统一钱包/Email/历史 EVM 联系方式，完成唯一性校验和写表。
-- 路由：认证、参数读取、调用服务、返回统一错误结构。
-
-### 9.1 统一链常量
-
-管理后台只保存 `solana`、`sui`、`monad`、`bsc` 枚举，不保存 RPC URL、chain ID 或钱包参数。后端和前端从同一份受控定义生成运行配置，至少包含：
-
-```ts
-type CampaignWalletChainConfig = {
-  key: 'solana' | 'sui' | 'monad' | 'bsc';
-  displayName: string;
-  namespace: 'solana' | 'sui' | 'eip155';
-  caipNetworkId: string;
-  chainId?: number;
-  rpcUrl: string;
-  explorerUrl: string;
-  nativeCurrency: { name: string; symbol: string; decimals: number };
-  signatureType: string;
-};
+```text
+campaignKey, leaderboardKey, twitterId, username,
+chain, submissionAddress, lockedAt, tweetId, tweetUrl, submittedAt
 ```
 
-已知主网标识可作为实现初值，但正式发布前必须用官方文档逐项复核：
+通用管理后台展示配置链和地址，但不显示钱包品牌或“所有权已验证”。
 
-| 网络 | 预期标识 | 发布前检查 |
-| --- | --- | --- |
-| Solana | `solana:mainnet` | RPC、钱包网络标识、Explorer URL |
-| Sui | `sui:mainnet` | RPC、Wallet Standard chain、Explorer URL |
-| Monad | `eip155:143` | chain ID、RPC、原生币、Explorer、`wallet_addEthereumChain` 参数 |
-| BNB Chain | `eip155:56` | chain ID、RPC、原生币、Explorer、`wallet_addEthereumChain` 参数 |
+## 11. EchoHunt 前端交互
 
-RPC 通过环境配置或受控公共配置注入，不在组件中散落硬编码。钱包切链只读取统一常量；任一官方参数变化只改一处并覆盖对应测试。
+### 11.1 旧模式
 
-## 10. 插件兼容边界
+报名表继续展示现有 EVM 地址输入逻辑，投稿区域不额外要求分榜单地址。
 
-一期只在 EchoHunt Web 实现钱包连接和签名。现有插件仍只会提交 `evmAddress`，因此插件采用“前端跳转 + 后端拒绝”的双保险方案。
+### 11.2 新模式
 
-### 10.1 插件前端
+报名阶段：
 
-插件从活动配置读取：
+- 不展示 EVM 地址输入框；
+- 报名完成后才显示主动投稿区域。
 
-```json
-{
-  "walletRegistration": {
-    "enabled": true,
-    "echohuntRegistrationUrl": "https://app.echohunt.ai/campaigns/example-campaign"
-  }
-}
+第一次向某榜单投稿：
+
+```text
+选择榜单
+  -> 展示后台配置的支持链、label、placeholder、helpText
+  -> 用户选择链；只有一条链时可直接展示并默认选中
+  -> 用户填写文本地址
+  -> 前端按所选链执行即时格式校验
+  -> 勾选后台配置的 confirmationText
+  -> 填写推文链接
+  -> 一次提交地址与推文
 ```
 
-当 `enabled === true`：
+投稿成功后：
 
-1. 不展示旧的 EVM 地址输入框和插件内报名确认流程。
-2. 报名按钮文案改为 `前往 EchoHunt 报名` / `Continue on EchoHunt`。
-3. 点击后打开服务端返回的 `echohuntRegistrationUrl`。
-4. 插件不自行拼接域名，避免测试、预发布和生产环境地址不一致。
+- 当前榜单展示已绑定的完整地址，只读；
+- 同时展示已绑定的链，只读；
+- 不展示修改或删除入口；
+- 后续投稿只要求填写推文链接；
+- 切换另一个榜单时，使用该榜单自己的配置和绑定状态。
 
-### 10.2 插件报名接口强制拒绝
+前端状态必须按 `leaderboardKey` 隔离：
 
-插件报名接口 `POST /api/xhunt/campaign/register` 读取服务端活动配置后，如果 `walletRegistration.enabled === true`，必须在处理 `evmAddress`、排名校验和写表之前返回 HTTP `403`：
+- 输入框文案；
+- 已选链；
+- 尚未提交的地址值；
+- 已绑定地址；
+- 确认勾选状态；
+- 投稿链接；
+- 投稿限额和历史；
+- 错误信息。
 
-```json
-{
-  "success": false,
-  "error": "ECHOHUNT_WEB_REGISTRATION_REQUIRED",
-  "message": "该活动需要连接钱包，请前往 EchoHunt 网页完成报名。",
-  "messageEn": "This campaign requires a wallet connection. Continue on EchoHunt to register.",
-  "redirectUrl": "https://app.echohunt.ai/campaigns/example-campaign"
-}
-```
+不能使用一个全局地址状态在多个榜单间复用。
 
-这样旧版本插件即使没有识别新配置、仍然调用旧接口，也无法绕过钱包签名规则。该拒绝只作用于启用新模式的活动；历史活动继续使用原插件报名逻辑。
+### 11.3 无钱包逻辑
 
-EchoHunt Web 报名接口不接受插件 token 代替 Auth Center token。插件打开网页后，用户按 EchoHunt 正常登录流程完成报名。
+本期前端不引入或调用：
 
-## 11. 错误码
+- `wagmi`、`viem`；
+- Solana Wallet Adapter；
+- Sui dApp Kit；
+- WalletConnect/Reown；
+- 浏览器注入钱包；
+- 移动端钱包 Deep Link；
+- 网络切换或签名 API。
 
-建议新增稳定错误码：
+桌面端和移动端都是同一个“链选择 + 普通地址输入”表单流程。前端校验用于即时反馈，提交时仍必须由后端使用同一链规则重新校验。
+
+## 12. 权限与数据边界
+
+1. 系统只能证明某个登录用户在第一次投稿时选择了链并填写了格式合法的地址，不能证明地址所有权。
+2. 可以返回 `chain` 和格式校验后的地址，但不使用 `verified`、`ownershipVerified`、`walletName` 等可能造成所有权已验证误解的字段。
+3. 完整链和地址值只返回给当前用户本人、管理后台和鉴权后的内部接口。
+4. 无鉴权的公开投稿接口不返回 `address`、`addressNormalized`、`addressBindingId` 或文案快照。
+5. 客户端传入的提示语、榜单配置或锁定状态全部忽略，服务端只读取活动配置。
+6. 常规日志记录 `requestId`、活动、榜单、用户和错误码，不打印完整地址值。
+
+## 13. 错误码
 
 | 错误码 | HTTP | 含义 |
 | --- | --- | --- |
-| `WALLET_REGISTRATION_NOT_ENABLED` | 400 | 活动未启用新钱包流程 |
-| `WALLET_CHAIN_REQUIRED` | 400 | 缺少网络 |
-| `WALLET_CHAIN_NOT_SUPPORTED` | 400 | 当前活动不支持该网络 |
-| `WALLET_ADDRESS_REQUIRED` | 400 | 缺少钱包地址 |
-| `WALLET_ADDRESS_INVALID` | 400 | 地址格式不符合所选链 |
-| `WALLET_SIGNATURE_REQUIRED` | 400 | 当前活动要求签名 |
-| `WALLET_SIGNATURE_INVALID` | 400 | 签名无法验证到报名地址 |
-| `WALLET_CHALLENGE_INVALID` | 400 | challenge 不存在或绑定信息不一致 |
-| `WALLET_CHALLENGE_EXPIRED` | 410 | challenge 已过期 |
-| `WALLET_CHALLENGE_USED` | 409 | challenge 已使用 |
-| `WALLET_ADDRESS_ALREADY_USED` | 409 | 同一活动下该链地址已报名 |
-| `CAMPAIGN_ENGLISH_TITLE_REQUIRED` | 400/502 | 活动缺少签名所需英文标题 |
-| `ECHOHUNT_WEB_REGISTRATION_REQUIRED` | 403 | 插件不能报名该活动，需跳转 EchoHunt Web |
+| `REGISTRATION_ADDRESS_NOT_ALLOWED` | 400 | 新模式报名请求错误地携带了 EVM 地址 |
+| `LEADERBOARD_SUBMISSION_MODE_UNAVAILABLE` | 400 | 未开启主动投稿，不能使用新模式 |
+| `LEADERBOARD_NOT_FOUND` | 404 | 榜单不存在 |
+| `TWEET_SUBMISSION_DISABLED` | 400 | 当前榜单未开启主动投稿 |
+| `LEADERBOARD_ADDRESS_CONFIG_INVALID` | 502 | 当前榜单缺少有效的地址输入配置 |
+| `LEADERBOARD_ADDRESS_CHAIN_REQUIRED` | 400 | 第一次投稿缺少链类型 |
+| `LEADERBOARD_ADDRESS_CHAIN_NOT_SUPPORTED` | 400 | 所选链不在当前榜单配置范围内 |
+| `LEADERBOARD_ADDRESS_REQUIRED` | 400 | 第一次投稿缺少地址文本 |
+| `LEADERBOARD_ADDRESS_INVALID` | 400 | 地址为空、过长、含控制字符或不符合所选链格式 |
+| `LEADERBOARD_ADDRESS_CONFIRMATION_REQUIRED` | 400 | 未勾选配置的确认文案 |
+| `LEADERBOARD_ADDRESS_LOCKED` | 409 | 当前榜单地址已绑定，不能替换 |
+| `CAMPAIGN_REGISTRATION_REQUIRED` | 403 | 尚未完成活动报名 |
 
-错误响应不暴露签名恢复结果、Redis key 或内部堆栈。
+错误响应不包含其他用户数据、数据库记录 ID、完整地址、内部 SQL 或堆栈。
 
-## 12. 测试与验收
+## 14. 兼容策略
 
-### 12.1 配置
+### 14.1 历史活动
 
-1. 历史活动缺少 `walletRegistration` 时仍可按原 EVM/Email 流程报名。
-2. 后台只能保存四个合法链值，数组去重且启用后至少一条。
-3. 启用钱包报名但缺少 `displayName.en` 时禁止发布。
-4. 活动已有报名后不能直接改变钱包报名核心规则。
-5. 活动列表、详情和插件配置返回归一化钱包配置。
+- `addressCollectionMode` 缺失时按旧模式处理。
+- 现有 `CampaignRegistration.evmAddress` 和索引保持不变。
+- 历史报名地址不迁移为榜单地址，因为无法确定它对应哪个榜单。
+- 历史投稿的 `addressBindingId` 保持 `NULL`。
+- 新模式只影响明确开启它的活动。
 
-### 12.2 Challenge 与签名
+### 14.2 配置变更
 
-1. 签名消息 `Campaign` 行为英文标题，不出现 `campaignKey`。
-2. challenge 服务端记录正确关联 `campaignKey`，相同英文标题的两个活动不能互用 challenge。
-3. 修改活动标题后，已签发 challenge 仍按 `titleSnapshot` 验证。
-4. Monad、BNB Chain、Solana、Sui 的合法签名分别通过，错误地址或错误签名失败。
-5. challenge 过期、重复使用、跨用户、跨活动、跨链、换地址均失败。
-6. 前端不能通过自行构造消息绕过服务端 challenge。
+- 活动有报名后禁止切换地址填写模式。
+- 榜单有地址绑定或投稿后禁止修改榜单 ID 或删除榜单。
+- 榜单已有绑定后不能删除绑定记录正在使用的链；新增支持链只影响尚未首次投稿的用户。
+- 修改提示语不修改已有绑定的 `promptSnapshot`。
+- 关闭主动投稿时，如果已有绑定或投稿，必须先阻止保存并提示风险，不能让数据静默失去入口。
 
-### 12.3 报名和唯一性
+### 14.3 插件
 
-1. 签名开启时缺少 challenge 或签名失败不能写表。
-2. 签名关闭时保存 `verified: false` 和 `signatureRequired: false`。
-3. 同活动、同链、同规范化地址的并发请求最多一条成功。
-4. EVM 大小写变化不能绕过唯一约束。
-5. Solana 大小写敏感地址按标准 Base58 比较。
-6. Sui 短格式和完整格式规范化后不能重复报名。
-7. Email 与钱包同时提交返回冲突错误。
-8. Solana/Sui 地址不会进入 `XHuntUser.evmAddresses`。
+新模式依赖 EchoHunt 的主动投稿页面。未支持该模式的插件：
 
-### 12.4 查询接口
+- 不展示旧的 EVM 报名输入框；
+- 报名入口跳转 EchoHunt；
+- 旧插件调用报名接口并传 EVM 地址时，由服务端返回 `REGISTRATION_ADDRESS_NOT_ALLOWED` 或统一的 EchoHunt 跳转错误；
+- 历史活动继续使用原插件报名逻辑。
 
-1. EchoHunt `me` 和报名成功响应返回一致的钱包对象。
-2. 活动启用 `walletRegistration.enabled` 时，活动列表、详情、当前用户、报名成功响应、现有报名列表和管理后台查询均按各自 audience 返回约定的钱包数据。
-3. 管理后台返回网络、完整钱包地址、签名状态、验证时间和必要审计字段。
-4. 当前用户和公开报名列表返回完整钱包地址，不做地址掩码。
-5. 公开报名列表不返回原始签名、nonce、challenge 或完整消息。
-6. Email 报名返回 `walletRegistration: null`。
-7. 历史活动的既有消费者仍可读取 `evmAddress`。
-8. 插件当前用户接口和现有报名列表使用统一序列化器，不出现同一记录在不同接口字段含义不一致的情况。
+## 15. 测试与验收
 
-### 12.5 插件跳转与接口拒绝
+### 15.1 管理后台配置
 
-1. 插件读取到 `walletRegistration.enabled === true` 后不再展示旧 EVM 报名表单，按钮跳转服务端返回的 `echohuntRegistrationUrl`。
-2. `echohuntRegistrationUrl` 在开发、预发布和生产环境分别指向对应 EchoHunt Web，不复用项目 `activeUrl`。
-3. 新旧版本插件调用 `POST /api/xhunt/campaign/register` 报名新模式活动时，均返回 HTTP `403`、`ECHOHUNT_WEB_REGISTRATION_REQUIRED` 和正确的 `redirectUrl`，且不写入报名记录。
-4. 历史模式活动继续使用原插件报名流程，不被误拒绝。
-5. EchoHunt Web 报名接口拒绝使用插件 token 冒充 Auth Center token。
+1. 历史活动默认展示并保持旧模式。
+2. 没有主动投稿榜单时不能选择新模式。
+3. 开启一个榜单的主动投稿后可以选择新模式。
+4. 关闭最后一个主动投稿榜单时阻止保存新模式配置。
+5. 地址输入配置只在新模式且当前榜单开启投稿时展示。
+6. 每个投稿榜单分别保存自己的支持链、推荐链和多语言文案。
+7. 非法链 key、空支持链、推荐链不在支持链中时不能发布。
+8. 缺少必填文案、文案过长或语言配置不完整时不能发布。
+9. 管理后台不出现钱包品牌、RPC、签名或自定义正则配置。
 
-### 12.6 Web 钱包矩阵
+### 15.2 报名
 
-以下组合是一期必须完成的真实钱包验收范围：
+1. 旧模式继续要求现有 EVM/Email 联系方式。
+2. 新模式不填写地址即可报名。
+3. 新模式报名记录的 `evmAddress` 为 `NULL`。
+4. 新模式报名请求携带 `evmAddress` 时拒绝。
+5. 新模式报名页面不显示地址输入框。
 
-| 网络 | 钱包 | 连接 | 切链/网络校验 | 签名 | 拒签恢复 | 报名查询 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Monad | MetaMask | 必测 | 必测 | 必测 | 必测 | 必测 |
-| Monad | OKX Wallet | 必测 | 必测 | 必测 | 必测 | 必测 |
-| BNB Chain | Binance Wallet | 必测 | 必测 | 必测 | 必测 | 必测 |
-| BNB Chain | MetaMask | 必测 | 必测 | 必测 | 必测 | 必测 |
-| BNB Chain | OKX Wallet | 必测 | 必测 | 必测 | 必测 | 必测 |
-| Solana | Phantom | 必测 | 必测 | 必测 | 必测 | 必测 |
-| Solana | OKX Wallet | 必测 | 必测 | 必测 | 必测 | 必测 |
-| Sui | Slush | 必测 | 必测 | 必测 | 必测 | 必测 |
-| Sui | OKX Wallet | 必测 | 必测 | 必测 | 必测 | 必测 |
+### 15.3 第一次投稿
 
-同一 EVM 钱包需要分别验证 Monad 和 BNB Chain，不能因地址相同而跳过网络切换与目标 chain ID 校验。未列入的钱包不作为一期上线阻塞项。
+1. 每个开启投稿的榜单展示自己配置的输入文案。
+2. 未选择链、选择榜单不支持的链时被拒绝。
+3. 空字符串、只有空格、超长文本和控制字符被拒绝。
+4. BSC/EVM、Solana、Sui 的合法测试地址分别通过，错误格式分别失败。
+5. 前端和后端使用同一组有效、无效和边界测试向量。
+6. 未勾选确认文案时不能提交。
+7. 推文校验失败时地址绑定也不写入。
+8. 投稿成功时在同一事务中创建地址绑定和投稿记录。
+9. Nym 和 XStable 等不同榜单分别创建绑定，互不复用。
 
-### 12.7 EchoHunt Web 交互
+### 15.4 后续投稿与并发
 
-1. 只展示管理后台配置的网络和本期明确支持的钱包。
-2. 连接钱包后地址只读，不能手工编辑。
-3. 切换账号或网络会清空 challenge 和签名。
-4. 最终提交前明确展示 `本次活动绑定后不可更换`、英文活动标题、网络和完整地址。
-5. 签名要求开启和关闭时按钮文案与流程正确。
-6. 钱包拒绝、网络错误、challenge 过期均有就近错误反馈和重试入口。
+1. 后续投稿不再要求输入地址。
+2. 后续投稿复用当前榜单的 `addressBindingId`。
+3. 客户端尝试传入另一个链或地址时返回 `LEADERBOARD_ADDRESS_LOCKED`。
+4. 两个不同链或地址的并发首次投稿最多一个建立绑定。
+5. 不同榜单可以填写相同文本，系统不做跨榜单或跨用户唯一性校验。
+6. 现有推文作者、重复推文、周期限额和累计限额逻辑不回归。
+7. 用户端、管理后台和内部业务 API 均不存在修改、重新绑定或删除入口。
+8. 直接通过 ORM 更新链、地址或所属关系时被拒绝。
+9. 直接执行数据库 `UPDATE` 或 `DELETE` 时被不可变保护触发器拒绝。
 
-### 12.8 移动端最小验收
+### 15.5 查询与权限
 
-1. 至少使用一台 iOS 和一台 Android 真机验收，不以桌面浏览器模拟移动端替代。
-2. Monad 至少完成 MetaMask 或 OKX Wallet 的连接、切链、签名、拒签和返回网页。
-3. BNB Chain 至少完成 Binance Wallet、MetaMask 或 OKX Wallet 中一个钱包的连接、切链、签名、拒签和返回网页。
-4. Solana 至少完成 Phantom 或 OKX Wallet 的连接、签名、拒签和返回网页。
-5. Sui 至少完成 Slush 或 OKX Wallet 的 Deep Link、钱包内置浏览器连接、签名、拒签和回到活动页。
-6. 钱包未安装时显示对应官方安装/打开入口；取消跳转或返回网页后页面可继续操作。
-7. App 切换期间活动路径和已选网络能够恢复；过期 challenge 不会继续提交，而是明确提示并允许重新申请。
+1. 用户查询按榜单返回支持链、本地化提示语和自己的链及绑定地址。
+2. 管理后台展示和导出链、地址、绑定时间及投稿记录。
+3. 公开投稿接口不返回地址或绑定 ID。
+4. 提示语修改后，已有绑定保留原文案快照。
+5. 日志和错误响应不泄露完整地址值。
 
-### 12.9 链参数与发布前复核
-
-1. 前后端和钱包切链逻辑均只从统一链常量读取网络参数，业务组件内不得散落 RPC、chain ID 或 Explorer URL。
-2. 自动化测试固定校验 Solana `solana:mainnet`、Sui `sui:mainnet`、Monad `eip155:143`、BNB Chain `eip155:56` 的映射关系。
-3. 上线前按官方主网文档逐项人工复核 RPC、chain ID/网络标识、Explorer、原生币和 `wallet_addEthereumChain` 参数，并记录复核日期和来源。
-4. 四条链分别通过真实主网钱包的连接、网络识别和签名验证；不要求发起链上交易，也不应产生 Gas。
-
-## 13. 实施顺序与工作量
+## 16. 实施顺序与工作量
 
 建议顺序：
 
-1. 增加配置归一化、统一链常量、后台控件和发布校验。
-2. 增加数据库迁移、模型字段和统一序列化器。
-3. 实现 challenge、链地址规范化和三类签名验证。
-4. 改造 EchoHunt 报名接口、插件报名拒绝逻辑与所有报名查询接口。
-5. 接入 EchoHunt Web 多 adapter 钱包模块、最小移动端跳转和最终确认弹窗。
-6. 更新插件，使新模式活动隐藏旧表单并跳转服务端返回的 EchoHunt URL。
-7. 使用测试活动完成桌面钱包矩阵和 iOS/Android 最小移动端真机联调。
-8. 发布前按官方资料复核统一链常量并冻结上线版本。
-9. 按数据库迁移、后端、管理后台、EchoHunt Web、插件跳转更新的顺序发布；后端拒绝逻辑必须先于或同时早于插件跳转更新上线。
+1. 增加活动级 `addressCollectionMode` 的归一化、管理后台选项和依赖校验。
+2. 增加共享链注册表、后端地址校验器、前端即时校验器和共享测试向量。
+3. 在现有榜单 `tweetSubmission` 配置中增加支持链、推荐链和 `addressInput` 多语言文案编辑。
+4. 增加榜单地址绑定表、投稿表 `addressBindingId` 和数据库迁移。
+5. 改造报名服务，按活动模式决定是否要求 EVM 地址。
+6. 在投稿服务中实现链校验、地址规范化、第一次投稿原子创建绑定、后续复用和锁定检查。
+7. 扩展本人查询、管理后台列表和鉴权导出。
+8. 改造 EchoHunt 报名与投稿界面。
+9. 完成链地址测试向量、配置依赖、事务并发、历史兼容和权限测试。
 
 工作量估算：
 
-- 后端、迁移、管理后台和插件兼容：约 4–6 人日；
-- EchoHunt Web 桌面端多链钱包接入：约 3–4 人日；
-- iOS/Android 最小移动端 WalletConnect、Universal Link/Deep Link 适配与真机联调：约 3–4 人日；
-- 合计约 10–14 人日，建议按 2 名开发配合测试安排约 1.5–2 周日历时间，并预留第三方钱包兼容性波动。
-
-估算不包含第三方钱包自身缺陷修复、正式 RPC 采购、全量钱包市场、独立安全审计或历史报名数据清洗。若真实钱包联调发现某钱包的移动端协议能力与官方说明不一致，应优先保证每条链至少一个已确认钱包可用，再单独评估该钱包兼容成本。
+- 后端、迁移、链校验和查询：约 2–3 人日；
+- 管理后台与 EchoHunt Web：约 1.5–2 人日；
+- 联调和回归：约 0.5–1 人日；
+- 合计约 4–6 人日。
 
 生产环境迁移和发布由用户确认后执行；本文档不授权自动运行迁移、构建、服务重启或生产写操作。
 
-## 14. 已确认实施范围
+## 17. 明确不做的内容
 
-1. 一期只在 EchoHunt Web 完成钱包报名；插件统一跳转 EchoHunt，旧插件接口对新模式活动强制返回 `403 ECHOHUNT_WEB_REGISTRATION_REQUIRED`。
-2. 首批钱包限定为：Monad 的 MetaMask、OKX Wallet；BNB Chain 的 Binance Wallet、MetaMask、OKX Wallet；Solana 的 Phantom、OKX Wallet；Sui 的 Slush、OKX Wallet。
-3. 移动端纳入一期，采用最小可用方案，只覆盖上述四条链和首批钱包，不建设通用钱包市场。
-4. 报名查询接口按 audience 返回约定的钱包数据；需要返回地址的现有接口返回完整钱包地址，不做掩码，但始终排除签名、nonce、challenge 和完整签名消息。
-5. Monad 和 BNB Chain 的生产 RPC、chain ID 和钱包切链参数由统一链常量管理，上线前以官方主网配置复核。
-6. 用户可见签名消息使用活动英文标题 `displayName.en`；真实 `campaignKey` 仅由服务端 challenge 内部关联，不能由前端标题替代服务端活动标识。
-7. 正式配置字段统一为 `walletRegistration.enabled`，不增加错误拼写 `enabel` 的兼容分支。
+以下内容不属于这个通用功能：
+
+- 为 Nym、XStable 或其它项目写专用判断；
+- 为 MetaMask、Phantom、OKX 等具体钱包写适配；
+- 允许活动配置任意自定义地址正则或可执行校验逻辑；
+- 同一地址跨用户唯一性校验；
+- 钱包连接、账户监听和网络切换；
+- challenge、nonce、Redis 一次性消费；
+- `personal_sign`、`signMessage` 或其它签名；
+- WalletConnect、Deep Link 或移动端钱包兼容；
+- 地址所有权验证；
+- 第三方平台交互资格验证。
+
+本需求的核心是：**管理员选择地址填写阶段；新模式仅依赖主动投稿；每个投稿榜单配置支持链和输入提示；前后端按统一链注册表校验地址；用户第一次投稿时填写并锁定该榜单的链和地址。**
