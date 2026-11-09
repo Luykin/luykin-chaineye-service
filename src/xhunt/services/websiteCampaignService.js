@@ -1200,7 +1200,7 @@ async function saveWebsiteCampaignConfig(identifier, payload) {
     };
 
     if (Object.prototype.hasOwnProperty.call(payload, "displayMetrics")) {
-      const nacosPayload = toSafeObject(record.nacosPayload, {});
+      const nacosPayload = { ...toSafeObject(record.nacosPayload, {}) };
       if (Array.isArray(payload.displayMetrics)) {
         const filtered = payload.displayMetrics.filter(
           (it) => typeof it === "string" && ["hunters", "tweets", "views", "engagement"].includes(it)
