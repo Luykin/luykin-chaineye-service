@@ -131,7 +131,7 @@ export function CampaignRegistrationsModal({
   async function deleteRecord(record: CampaignRegistrationItem) {
     try {
       await deleteCampaignRegistrationAdmin(record.id, campaign);
-      onToast?.("报名记录已删除", "success");
+      onToast?.("报名记录及关联数据已删除", "success");
       const nextPage = rows.length <= 1 && page > 1 ? page - 1 : page;
       await load({ page: nextPage });
     } catch (error) {
@@ -348,9 +348,9 @@ export function CampaignRegistrationsModal({
               render: (_value, record) =>
                 canDelete ? (
                   <Popconfirm
-                    title="删除报名记录"
-                    description={`确认删除 @${record.username || record.twitterId || "该用户"} 的报名记录？`}
-                    okText="删除"
+                    title="强制删除报名记录"
+                    description={`将永久删除 @${record.username || record.twitterId || "该用户"} 的报名记录、推文投稿和榜单地址绑定，且无法恢复。确认继续？`}
+                    okText="强制删除"
                     cancelText="取消"
                     okButtonProps={{ danger: true }}
                     onConfirm={() => void deleteRecord(record)}

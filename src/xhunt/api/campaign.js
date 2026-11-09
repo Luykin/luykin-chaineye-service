@@ -43,6 +43,9 @@ const {
   listExternalTweetSubmissions,
   replaceTweetSubmission,
 } = require("../services/campaignTweetSubmissionService");
+const {
+  deleteCampaignRegistrationWithRelations,
+} = require("../services/campaignRegistrationAdminService");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
@@ -916,11 +919,11 @@ router.delete(
     try {
       if (!id) return res.status(400).json({ success: false, error: "id 为必填字段" });
 
-      const where = { id };
-      if (normalizedCampaign) where.campaign = normalizedCampaign;
-
-      const record = await CampaignRegistration.findOne({ where });
-      if (!record) {
+      const result = await deleteCampaignRegistrationWithRelations({
+        id,
+        campaign: normalizedCampaign,
+      });
+      if (!result) {
         await writeAdminAudit(req, {
           action: "campaign-registration-delete",
           success: false,
@@ -929,13 +932,12 @@ router.delete(
         return res.status(404).json({ success: false, error: "报名记录不存在或已删除" });
       }
 
-      const safeRecord = serializeCampaignRegistration(record);
-      await record.destroy();
+      const safeRecord = serializeCampaignRegistration(result.record);
 
       await writeAdminAudit(req, {
         action: "campaign-registration-delete",
         success: true,
-        message: `删除活动报名记录成功: campaign=${safeRecord.campaign}, twitterId=${safeRecord.twitterId || "-"}, username=@${safeRecord.username || "-"}`,
+        message: `强制删除活动报名记录成功: campaign=${safeRecord.campaign}, twitterId=${safeRecord.twitterId || "-"}, username=@${safeRecord.username || "-"}, tweetSubmissions=${result.deletedTweetSubmissions}, addressBindings=${result.deletedAddressBindings}`,
         payload: {
           id: safeRecord.id,
           campaign: safeRecord.campaign,
@@ -943,10 +945,19 @@ router.delete(
           username: safeRecord.username,
           evmAddress: safeRecord.evmAddress,
           email: safeRecord.email,
+          deletedTweetSubmissions: result.deletedTweetSubmissions,
+          deletedAddressBindings: result.deletedAddressBindings,
         },
       });
 
-      return res.json({ success: true, data: safeRecord });
+      return res.json({
+        success: true,
+        data: {
+          ...safeRecord,
+          deletedTweetSubmissions: result.deletedTweetSubmissions,
+          deletedAddressBindings: result.deletedAddressBindings,
+        },
+      });
     } catch (err) {
       console.error("Admin campaign registration delete error:", err);
       await writeAdminAudit(req, {
