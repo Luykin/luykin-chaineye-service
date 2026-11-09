@@ -37,6 +37,28 @@ test("校验 BSC、Solana、Sui 和 Monad 地址并生成稳定规范值", () =>
   assert.equal(monad.valid, true);
   assert.equal(monad.addressNormalized, "0x000000000000000000000000000000000000dEaD");
 
+  // 投稿只做基础格式校验：EVM 不强制 checksum，Solana 不做字节级解码。
+  const mixedCaseEvm = normalizeChainAddress(
+    "bsc",
+    "0x000000000000000000000000000000000000DeaD"
+  );
+  assert.equal(mixedCaseEvm.valid, true);
+  assert.equal(mixedCaseEvm.addressNormalized, "0x000000000000000000000000000000000000dEaD");
+  assert.equal(
+    normalizeChainAddress(
+      "monad",
+      "0x000000000000000000000000000000000000DeaD"
+    ).valid,
+    true
+  );
+
+  const looseSolana = normalizeChainAddress(
+    "solana",
+    "111111111111111111111111111111111"
+  );
+  assert.equal(looseSolana.valid, true);
+  assert.equal(looseSolana.addressNormalized, "111111111111111111111111111111111");
+
   assert.deepEqual(getAddressInputConfigErrors(completeConfig).errors, []);
 });
 

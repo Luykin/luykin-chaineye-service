@@ -2,8 +2,8 @@ const { utils: ethersUtils } = require("ethers");
 const chainContract = require("../../../shared/xhunt/leaderboard-address-chain-contract.json");
 
 const SUPPORTED_CHAIN_IDS = new Set(chainContract.chains.map((item) => item.id));
-const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const BASE58_INDEX = new Map(Array.from(BASE58_ALPHABET).map((char, index) => [char, index]));
+const EVM_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+const SOLANA_ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function isLeaderboardSubmissionAddressMode(campaign) {
   return campaign?.addressCollectionMode === "leaderboard_submission";
@@ -41,24 +41,6 @@ function getAddressInputConfigErrors(value) {
   return { config, errors };
 }
 
-function decodeBase58(value) {
-  let number = 0n;
-  for (const char of value) {
-    const digit = BASE58_INDEX.get(char);
-    if (digit === undefined) return null;
-    number = number * 58n + BigInt(digit);
-  }
-  const bytes = [];
-  while (number > 0n) {
-    bytes.push(Number(number % 256n));
-    number /= 256n;
-  }
-  bytes.reverse();
-  let leadingZeroes = 0;
-  while (leadingZeroes < value.length && value[leadingZeroes] === "1") leadingZeroes += 1;
-  return Buffer.from([...new Array(leadingZeroes).fill(0), ...bytes]);
-}
-
 function normalizeChainAddress(chain, rawAddress) {
   const normalizedChain = String(chain || "").trim().toLowerCase();
   const address = String(rawAddress || "").trim();
@@ -70,16 +52,27 @@ function normalizeChainAddress(chain, rawAddress) {
   }
 
   if (normalizedChain === "bsc" || normalizedChain === "monad") {
+    if (!EVM_ADDRESS_PATTERN.test(address)) {
+      return { valid: false, code: "INVALID_SUBMISSION_ADDRESS" };
+    }
     try {
-      return { valid: true, chain: normalizedChain, address, addressNormalized: ethersUtils.getAddress(address) };
+      // 投稿只校验基础格式，不要求用户输入符合 EIP-55 checksum；仍生成稳定 checksum 值用于比较。
+      return {
+        valid: true,
+        chain: normalizedChain,
+        address,
+        addressNormalized: ethersUtils.getAddress(address.toLowerCase()),
+      };
     } catch (_) {
       return { valid: false, code: "INVALID_SUBMISSION_ADDRESS" };
     }
   }
 
   if (normalizedChain === "solana") {
-    const decoded = decodeBase58(address);
-    if (!decoded || decoded.length !== 32) return { valid: false, code: "INVALID_SUBMISSION_ADDRESS" };
+    // 仅做常用长度和 Base58 字符检查，不进行公钥解码或链上查询。
+    if (!SOLANA_ADDRESS_PATTERN.test(address)) {
+      return { valid: false, code: "INVALID_SUBMISSION_ADDRESS" };
+    }
     return { valid: true, chain: normalizedChain, address, addressNormalized: address };
   }
 
