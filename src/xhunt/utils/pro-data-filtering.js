@@ -27,7 +27,12 @@ function maskDeletedTweetValue(value, key = "") {
 
   if (typeof value === "string") {
     // 保留列表渲染、关联和时间展示所需的技术字段。
-    if (key === "id" || key.endsWith("_id") || key === "create_time") {
+    if (
+      key === "id" ||
+      key.endsWith("_id") ||
+      key === "first_confirmed_at" ||
+      key === "last_check"
+    ) {
       return value;
     }
     if (key === "text" || key === "html") {
@@ -80,9 +85,13 @@ function applyDeletedTweetFiltering(req, data) {
   const now = Date.now();
   const cutoff = now - DELETED_TWEET_WINDOW_MS;
   const isRecentItem = (item) => {
-    const createTime = Date.parse(item?.create_time);
+    const confirmedAt = Date.parse(
+      item?.first_confirmed_at || item?.last_check
+    );
     return (
-      Number.isFinite(createTime) && createTime >= cutoff && createTime <= now
+      Number.isFinite(confirmedAt) &&
+      confirmedAt >= cutoff &&
+      confirmedAt <= now
     );
   };
 

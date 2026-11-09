@@ -740,7 +740,7 @@ router.all(
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
-    const targetUrl = getTargetUrl(req);
+    const targetUrl = getTargetUrl(req, "fetch/tweet/deleted_all");
     await proxyRequest(req, res, targetUrl);
   }
 );

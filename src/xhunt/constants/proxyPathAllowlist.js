@@ -12,6 +12,9 @@ const PROXY_PATH_ALLOWLIST = [
   "analysis/*",
 ];
 
+// 仅允许服务端作为上游目标使用，禁止客户端绕过本地权限裁剪直接访问。
+const PROXY_PATH_DENYLIST = ["fetch/tweet/deleted_all"];
+
 function extractProxyPathInfo(requestPath) {
   if (typeof requestPath !== "string" || !requestPath) {
     return null;
@@ -67,6 +70,14 @@ function isProxyPathAllowed(requestPath) {
     pathInfo.entryType === "public-stream"
       ? PUBLIC_STREAM_PATH_ALLOWLIST
       : PROXY_PATH_ALLOWLIST;
+  if (
+    pathInfo.entryType === "proxy" &&
+    PROXY_PATH_DENYLIST.some((pattern) =>
+      matchesPathPattern(pathInfo.targetPath, pattern)
+    )
+  ) {
+    return false;
+  }
   return allowlist.some((pattern) =>
     matchesPathPattern(pathInfo.targetPath, pattern)
   );
@@ -74,6 +85,7 @@ function isProxyPathAllowed(requestPath) {
 
 module.exports = {
   PROXY_PATH_ALLOWLIST,
+  PROXY_PATH_DENYLIST,
   PUBLIC_STREAM_PATH_ALLOWLIST,
   extractProxyPathInfo,
   isProxyPathAllowed,

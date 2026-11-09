@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const {
   PROXY_PATH_ALLOWLIST,
+  PROXY_PATH_DENYLIST,
   PUBLIC_STREAM_PATH_ALLOWLIST,
   extractProxyPathInfo,
   isProxyPathAllowed,
@@ -19,6 +20,7 @@ test("maintains separate coarse-grained allowlists for proxy and public-stream",
     "pro/api/*",
     "analysis/*",
   ]);
+  assert.deepEqual(PROXY_PATH_DENYLIST, ["fetch/tweet/deleted_all"]);
 });
 
 test("normal proxy accepts observed path families without requiring exact entries", () => {
@@ -79,6 +81,7 @@ test("extracts the entry type and logical target path", () => {
 
 test("rejects non-allowlisted and non-canonical paths", () => {
   const rejectedPaths = [
+    "/public/fetch/tweet/deleted_all",
     "/public/internal/not-allowed",
     "/public-stream/internal/not-allowed",
     "/public//fetch/twitter/rank",

@@ -82,7 +82,7 @@ test("deleted tweet response includes the request VIP status", async () => {
           {
             id: "tweet-1",
             text: "deleted tweet content",
-            create_time: new Date().toISOString(),
+            first_confirmed_at: new Date().toISOString(),
           },
         ],
       },
@@ -134,13 +134,35 @@ test("deleted tweet response preserves every upstream item with role-based maski
 
     const recentTime = new Date().toISOString();
     const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const deletedTweets = [
+      {
+        first_confirmed_at: recentTime,
+        last_check: oldTime,
+      },
+      {
+        first_confirmed_at: "",
+        last_check: recentTime,
+      },
+      {
+        first_confirmed_at: oldTime,
+        last_check: recentTime,
+      },
+      {
+        first_confirmed_at: null,
+        last_check: oldTime,
+      },
+      {
+        first_confirmed_at: null,
+        last_check: null,
+      },
+    ];
     const payload = {
       code: 200,
       data: {
-        data: Array.from({ length: 5 }, (_, index) => ({
+        data: deletedTweets.map((timestamps, index) => ({
           id: `tweet-${index + 1}`,
           text: `deleted tweet content ${index + 1}`,
-          create_time: index === 0 ? recentTime : oldTime,
+          ...timestamps,
         })),
       },
     };
@@ -181,7 +203,7 @@ test("deleted tweet response preserves every upstream item with role-based maski
       vipResult.data.data.map((item) => item.text),
       [
         "deleted tweet content 1",
-        "您暂时无法查看详细删帖内容",
+        "deleted tweet content 2",
         "您暂时无法查看详细删帖内容",
         "您暂时无法查看详细删帖内容",
         "您暂时无法查看详细删帖内容",
