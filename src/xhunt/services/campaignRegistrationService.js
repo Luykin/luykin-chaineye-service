@@ -4,6 +4,7 @@ const { CampaignRegistration } = require("../../models/postgres-start");
 const { getManagedCampaignPayloadByKey } = require("./websiteCampaignService");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const { DATA_SERVICE_BASE_URL } = require("../constants/dataService");
+const { isLeaderboardSubmissionAddressMode } = require("../utils/leaderboard-address");
 const {
   RANK_API_BY_DOMAIN,
   evaluateRankEligibility,
@@ -161,6 +162,7 @@ function normalizeRegistrationContact({ evmAddress, email, emil } = {}) {
 }
 
 function validateRegistrationContact(campaign, contact) {
+  if (isLeaderboardSubmissionAddressMode(campaign)) return;
   const allowEmailRegistration = campaign?.allowEmailRegistration === true;
   const trimmedAddress = contact?.evmAddress || null;
   const normalizedEmail = contact?.email || "";

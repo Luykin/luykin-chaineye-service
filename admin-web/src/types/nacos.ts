@@ -101,6 +101,13 @@ export interface CampaignTweetSubmissionItem {
     twitterId?: string | null;
     username?: string | null;
   };
+  addressBinding?: {
+    id: string;
+    chain: string;
+    address: string;
+    addressNormalized: string;
+    lockedAt: string;
+  } | null;
 }
 
 export interface CampaignTweetSubmissionListResponse {

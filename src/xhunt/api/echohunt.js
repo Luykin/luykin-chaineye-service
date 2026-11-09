@@ -61,6 +61,7 @@ const {
   evaluateRankEligibility,
   getCampaignDisplayDomains,
 } = require("../services/campaignRegistrationService");
+const { isLeaderboardSubmissionAddressMode } = require("../utils/leaderboard-address");
 const {
   fetchCreatorVerification,
   submitCreatorVerification,
@@ -616,6 +617,9 @@ function buildEchohuntCampaignListItem(record, lang, viewer) {
       allowEmailRegistration: plugin.allowEmailRegistration === true,
       threshold: plugin.threshold ?? null,
       includeCreator: !!plugin.includeCreator,
+      ...(plugin.addressCollectionMode === "leaderboard_submission"
+        ? { addressCollectionMode: "leaderboard_submission" }
+        : {}),
     },
     leaderboardConfig: {
       leaderboardMode: plugin.leaderboardMode || "traditional",
@@ -1102,6 +1106,9 @@ function buildEchohuntCampaignDetail(record, lang) {
       allowEmailRegistration: plugin.allowEmailRegistration === true,
       threshold: plugin.threshold ?? null,
       includeCreator: !!plugin.includeCreator,
+      ...(plugin.addressCollectionMode === "leaderboard_submission"
+        ? { addressCollectionMode: "leaderboard_submission" }
+        : {}),
     },
     leaderboardConfig: {
       leaderboardMode: plugin.leaderboardMode || "traditional",
@@ -1922,6 +1929,9 @@ router.post(
         twitterIdentityRecord,
         authCenterUserId: req.authCenter?.user?.id || null,
         tweetUrl: req.body?.tweetUrl,
+        chain: req.body?.chain,
+        submissionAddress: req.body?.submissionAddress,
+        addressConfirmed: req.body?.addressConfirmed,
       });
       return res.status(201).json({ success: true, data });
     } catch (error) {
@@ -2070,7 +2080,7 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
         source: "echohunt_web",
       },
       cooldownKey: `echohunt:campaign:${normalizedCampaign}:register:cd:${req.authCenter.user.id}`,
-      updateUserEvmAddress: true,
+      updateUserEvmAddress: !isLeaderboardSubmissionAddressMode(found),
     });
 
     return res.json({ success: true, registration: serializeRegistration(result.registration) });

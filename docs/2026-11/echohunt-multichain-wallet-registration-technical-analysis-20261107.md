@@ -1,6 +1,6 @@
 # EchoHunt 活动分榜单投稿地址技术分析
 
-> 状态：需求变更版，待评审与排期，未实施
+> 状态：已按需求变更版完成本地实现，待迁移演练、部署和联调
 > 初始日期：2026-11-07
 > 修订日期：2026-11-09
 > 原型：https://yzi-s2.alphahan.win/
@@ -18,6 +18,8 @@
 | --- | --- | --- |
 | 报名时填写地址（旧模式） | 保持现有活动行为 | 用户报名时填写 EVM 地址，地址保存在 `CampaignRegistration.evmAddress` |
 | 投稿时按榜单填写地址（新模式） | 地址与投稿榜单绑定 | 报名时不填写地址；用户第一次向某个榜单投稿时，填写该榜单自己的地址 |
+
+新能力采用严格白名单式开关：**只有服务端活动配置明确满足 `addressCollectionMode === "leaderboard_submission"` 时才启用。** 字段缺失、空值、未知值或明确选择 `registration_evm`，全部按现有旧模式处理，不得根据榜单中是否存在 `addressInput` 等其它字段猜测开启新功能。
 
 新模式必须满足以下前置条件：
 
@@ -176,7 +178,7 @@ campaignKey + leaderboardKey + xHuntUserId
 
 兼容规则：
 
-- 字段缺失时按 `registration_evm` 处理，确保历史活动不变。
+- 字段缺失、空值、未知值或 `registration_evm` 时都按旧模式处理，确保历史活动和选择旧模式的新活动不变。
 - `allowEmailRegistration` 继续只服务旧模式的现有 Email 报名逻辑。
 - 新模式不把投稿地址当作报名联系方式，也不写入报名表 `evmAddress`。
 - 活动产生第一条报名记录后锁定 `addressCollectionMode`，避免同一活动同时存在两种含义的报名记录。
@@ -197,6 +199,35 @@ leaderboardMode === "custom"
 2. 已选择新模式后，如果管理员关闭最后一个主动投稿榜单，阻止保存并提示恢复投稿或切回旧模式。
 3. 传统榜单模式不能选择新模式。
 4. 关闭某个榜单的主动投稿时，该榜单的地址输入配置不再生效；如已有地址绑定或投稿记录，应阻止直接关闭并提示先处理历史数据。
+
+### 4.3 新旧流程隔离
+
+服务端统一使用严格判断函数，例如：
+
+```javascript
+function isLeaderboardSubmissionAddressEnabled(campaign) {
+  return campaign?.addressCollectionMode === "leaderboard_submission";
+}
+```
+
+只有该函数返回 `true` 时，才允许执行以下新逻辑：
+
+- 读取和校验 `tweetSubmission.addressInput`；
+- 要求第一次投稿传入链和地址；
+- 查询或写入榜单地址绑定表；
+- 写入投稿记录的 `addressBindingId`；
+- 在本人投稿查询中返回 `addressInput` 和 `addressBinding`。
+
+旧模式必须保持现有执行路径：
+
+1. 报名请求、EVM/Email 校验和数据库写入逻辑不变。
+2. 投稿请求仍只接收现有 `tweetUrl`，不要求链、地址或确认字段。
+3. 不读取、校验或查询 `addressInput` 和榜单地址绑定表。
+4. 投稿列表和详情响应保持现有字段结构，不附加值为 `null` 的新字段。
+5. 不增加额外数据库 join、查询或锁，不产生旧活动的性能变化。
+6. 插件、EchoHunt 和管理后台现有活动交互保持不变。
+
+管理后台新建活动时默认使用 `registration_evm`。只有管理员主动选择并成功保存 `leaderboard_submission` 后，才视为开启新能力。
 
 ## 5. 榜单地址输入配置
 
@@ -495,14 +526,42 @@ GET /api/xhunt/echohunt/campaigns/:campaignKey/tweet-submissions
 
 - 接口根据请求语言返回已经本地化的文案，不要求前端自行选择语言对象。
 - 尚未第一次投稿时返回 `addressBinding: null`。
-- 旧模式或未开启主动投稿的榜单返回 `addressInput: null`、`addressBinding: null`。
+- 以上新字段只在活动明确开启新模式时返回；旧模式保持当前响应结构，不增加 `addressInput` 或 `addressBinding` 字段。
+- 新模式中未开启主动投稿的榜单不构造地址配置。
 - 用户只能查询自己的完整链和地址值。
 
 ## 9. 数据模型与迁移
 
+### 9.0 生产环境现状核对（2026-11-09，只读）
+
+已通过生产 PostgreSQL 元数据和聚合查询确认：
+
+| 项目 | 生产现状 |
+| --- | --- |
+| `CampaignRegistrations` 记录数 | 约 2,273 条 |
+| 旧方案钱包字段 | 已存在 `walletChain`、`walletAddress`、`walletAddressNormalized`、`walletSignatureRequired`、`walletVerified`、`walletVerifiedAt`、`walletVerification` |
+| 旧方案钱包字段数据 | 上述 7 个字段的非空记录数全部为 0 |
+| 旧方案钱包索引 | 已存在 `idx_campaign_reg_campaign_wallet` 和部分唯一索引 `ux_campaign_reg_campaign_wallet` |
+| 生产迁移记录 | 已执行 `20261107120000-add-wallet-registration-to-campaign-registrations.js` |
+| 本地当前分支 | 该迁移文件和旧钱包代码已回滚；后续开发以当前本地代码为基线 |
+| `XhuntCampaignTweetSubmissions` | 约 289 条历史记录，尚无 `addressBindingId` |
+| `XHuntWebsiteCampaigns` | 15 条；`walletRegistration`、`addressCollectionMode` 配置数量均为 0 |
+
+结论：**可以假设旧钱包报名数据为干净状态，不需要迁移或回填任何旧钱包数据；但不能假设生产表结构与本地一致。**
+
+处理原则：
+
+1. 新方案不能复用报名表中的旧钱包字段，因为它们属于“每次报名一个地址”的旧粒度，无法表达“每个榜单独立绑定”。
+2. 新方案仍创建独立的榜单地址绑定表，并只给投稿表增加可空 `addressBindingId`。
+3. 生产报名表中的 7 个空字段和 2 个空索引作为历史残留保留；新模型和业务代码完全忽略，不恢复旧代码，也不在本次功能中清理。
+4. 不恢复本地已回滚的旧迁移文件。生产 `SequelizeMeta` 中保留已执行记录，后续迁移使用新的、更晚的文件名继续向前执行。
+5. 新迁移不得依赖旧钱包字段存在，也不得尝试创建、修改或删除这些字段。这样生产环境有旧字段、新环境没有旧字段，两种 schema 都能运行同一份新代码。
+6. 除非未来单独提出数据库清理需求，否则不再处理这些历史残留字段和索引。
+7. 本次只读核对没有在生产执行迁移、SQL 写入、代码修改、重启或配置变更。
+
 ### 9.1 新增榜单地址绑定表
 
-建议新增 `XhuntCampaignLeaderboardAddressBindings`：
+已新增 `XhuntCampaignLeaderboardAddressBindings`：
 
 ```text
 id                         UUID         PRIMARY KEY
@@ -556,7 +615,7 @@ INDEX  (campaignKey, leaderboardKey, lockedAt)
 
 不对 `chain + addressNormalized` 建立跨用户唯一索引。格式校验不代表业务上禁止多人填写同一地址；如果某个活动需要地址查重，应另行配置或由运营、合作方核验流程处理，不能写死在通用功能中。
 
-除唯一约束外，建议在数据库迁移中增加保护触发器，拒绝修改或删除绑定记录。至少必须禁止更新：
+除唯一约束外，迁移 `20261109120000-add-campaign-leaderboard-address-bindings.js` 已增加保护触发器，拒绝修改或删除绑定记录。数据库禁止更新：
 
 ```text
 campaignKey, leaderboardKey, campaignRegistrationId, xHuntUserId,
@@ -578,7 +637,20 @@ addressBindingId UUID NULL
 - 旧模式和历史投稿允许为空。
 - 外键删除策略使用 `RESTRICT`，避免投稿失去当时使用的地址依据。
 
-### 9.4 事务与并发
+### 9.4 迁移兼容要求
+
+数据库迁移必须是纯增量的：
+
+1. 只新增榜单地址绑定表和投稿表的可空 `addressBindingId`。
+2. 不回填、不修改、不删除任何历史报名或投稿数据。
+3. 不给历史行增加新的非空约束。
+4. 不重建或改变现有 `CampaignRegistration.evmAddress` 索引和唯一性语义。
+5. 旧模式创建的新投稿继续允许 `addressBindingId = NULL`。
+6. 新表为空时不影响现有服务启动、旧活动查询或投稿。
+7. 本次新功能迁移不删除、重命名或复用生产已有的旧钱包字段和索引。
+8. 新迁移时间戳必须晚于已执行的 `20261107120000`，并在当前生产 schema 上进行迁移前演练。
+
+### 9.5 事务与并发
 
 第一次投稿在同一个数据库事务中：
 
@@ -726,13 +798,25 @@ chain, submissionAddress, lockedAt, tweetId, tweetUrl, submittedAt
 
 ### 14.1 历史活动
 
-- `addressCollectionMode` 缺失时按旧模式处理。
+- `addressCollectionMode` 缺失、空值、未知值或 `registration_evm` 时均按旧模式处理。
 - 现有 `CampaignRegistration.evmAddress` 和索引保持不变。
 - 历史报名地址不迁移为榜单地址，因为无法确定它对应哪个榜单。
 - 历史投稿的 `addressBindingId` 保持 `NULL`。
-- 新模式只影响明确开启它的活动。
+- 历史活动不查询新表、不增加新校验、不改变接口响应结构。
+- 新模式只影响明确保存 `addressCollectionMode: "leaderboard_submission"` 的活动。
 
-### 14.2 配置变更
+### 14.2 使用旧模式新建的活动
+
+新建活动默认选择 `registration_evm`。管理员保持默认值或明确选择旧模式时：
+
+- 报名页面继续展示现有 EVM/Email 输入；
+- 报名服务继续执行现有联系方式校验和写表；
+- 投稿页面和接口不展示或要求榜单地址；
+- 即使榜单配置中误留 `addressInput`，服务端也必须忽略；
+- 不查询或写入 `XhuntCampaignLeaderboardAddressBindings`；
+- 不返回新模式专属响应字段。
+
+### 14.3 配置变更
 
 - 活动有报名后禁止切换地址填写模式。
 - 榜单有地址绑定或投稿后禁止修改榜单 ID 或删除榜单。
@@ -740,14 +824,15 @@ chain, submissionAddress, lockedAt, tweetId, tweetUrl, submittedAt
 - 修改提示语不修改已有绑定的 `promptSnapshot`。
 - 关闭主动投稿时，如果已有绑定或投稿，必须先阻止保存并提示风险，不能让数据静默失去入口。
 
-### 14.3 插件
+### 14.4 插件
 
 新模式依赖 EchoHunt 的主动投稿页面。未支持该模式的插件：
 
 - 不展示旧的 EVM 报名输入框；
 - 报名入口跳转 EchoHunt；
 - 旧插件调用报名接口并传 EVM 地址时，由服务端返回 `REGISTRATION_ADDRESS_NOT_ALLOWED` 或统一的 EchoHunt 跳转错误；
-- 历史活动继续使用原插件报名逻辑。
+- 上述跳转或拒绝只允许发生在明确开启新模式的活动；
+- 历史活动和使用旧模式新建的活动继续使用原插件报名逻辑。
 
 ## 15. 测试与验收
 
@@ -803,9 +888,22 @@ chain, submissionAddress, lockedAt, tweetId, tweetUrl, submittedAt
 4. 提示语修改后，已有绑定保留原文案快照。
 5. 日志和错误响应不泄露完整地址值。
 
-## 16. 实施顺序与工作量
+### 15.6 旧模式零影响回归
 
-建议顺序：
+分别使用一个未包含 `addressCollectionMode` 的历史活动和一个明确配置 `registration_evm` 的新活动验证：
+
+1. 报名请求参数、校验结果、错误码和数据库写入与改造前一致。
+2. 投稿请求仍只传 `tweetUrl` 即可成功，不要求链、地址或确认字段。
+3. 报名、活动详情、本人投稿和公开投稿响应不增加新模式字段。
+4. 不产生榜单地址绑定表的查询或写入。
+5. 投稿记录的 `addressBindingId` 保持 `NULL`。
+6. 插件与 EchoHunt 页面继续展示原有流程，不出现新模式入口或提示。
+7. 旧活动即使意外带有 `tweetSubmission.addressInput`，服务端也忽略该配置。
+8. 对关键旧接口保存改造前响应快照或契约测试，防止字段和错误码回归。
+
+## 16. 实施结果与后续工作
+
+本地实现已完成：
 
 1. 增加活动级 `addressCollectionMode` 的归一化、管理后台选项和依赖校验。
 2. 增加共享链注册表、后端地址校验器、前端即时校验器和共享测试向量。
@@ -815,14 +913,29 @@ chain, submissionAddress, lockedAt, tweetId, tweetUrl, submittedAt
 6. 在投稿服务中实现链校验、地址规范化、第一次投稿原子创建绑定、后续复用和锁定检查。
 7. 扩展本人查询、管理后台列表和鉴权导出。
 8. 改造 EchoHunt 报名与投稿界面。
-9. 完成链地址测试向量、配置依赖、事务并发、历史兼容和权限测试。
+9. 增加链地址、首次绑定、后续复用、拒绝换地址、旧模式隔离和报名模式测试。
 
-工作量估算：
+实际落地的迁移是：
 
-- 后端、迁移、链校验和查询：约 2–3 人日；
-- 管理后台与 EchoHunt Web：约 1.5–2 人日；
-- 联调和回归：约 0.5–1 人日；
-- 合计约 4–6 人日。
+```text
+migrations-pg/20261109120000-add-campaign-leaderboard-address-bindings.js
+```
+
+该迁移只新增榜单地址绑定表、投稿表的可空 `addressBindingId`、索引、外键和不可变触发器；不读取、修改或删除生产已有的旧钱包字段，也不回填历史投稿。
+
+已执行的本地验证：
+
+- 后端针对性 Node 测试通过；
+- Admin Web TypeScript `--noEmit` 检查通过；
+- EchoHunt TypeScript `--noEmit` 检查通过；
+- 两个仓库 `git diff --check` 通过。
+
+仍需在部署前后完成：
+
+- 在与生产同结构的临时库执行迁移 up/down 演练；
+- 先部署数据库迁移，再部署后端、Admin Web 和 EchoHunt 前端；
+- 使用一场无报名数据的新活动完成 BSC、Solana、Sui 首次投稿和后续投稿联调；
+- 抽查旧活动报名、投稿及公开投稿查询响应，确认无新增字段和额外行为。
 
 生产环境迁移和发布由用户确认后执行；本文档不授权自动运行迁移、构建、服务重启或生产写操作。
 

@@ -4,11 +4,17 @@ const {
   pgInstance,
   AuthCenterXhuntIdentity,
   CampaignRegistration,
+  XhuntCampaignLeaderboardAddressBinding,
   XhuntCampaignTweetSubmission,
 } = require("../../models/postgres-start");
 const tweetSubmissionContract = require("../../../shared/xhunt/tweet-submission-contract.json");
 const { normalizeCustomLeaderboardKey } = require("../utils/custom-leaderboard-key");
 const { buildTweetDisplayTitle } = require("../utils/tweet-display-title");
+const {
+  getAddressInputConfigErrors,
+  isLeaderboardSubmissionAddressMode,
+  validateConfiguredChainAddress,
+} = require("../utils/leaderboard-address");
 const { getEchohuntTweetDetail } = require("./twitter-echohunt");
 
 const PERIODS = new Set(tweetSubmissionContract.periods);
@@ -60,12 +66,22 @@ function normalizeTweetSubmissionConfig(value) {
 
 function getTweetSubmissionLeaderboards(campaignConfig = {}) {
   if (campaignConfig.leaderboardMode !== "custom") return [];
+  const addressModeEnabled = isLeaderboardSubmissionAddressMode(campaignConfig);
   const items = Array.isArray(campaignConfig.customLeaderboards) ? campaignConfig.customLeaderboards : [];
   return items
     .map((item, index) => {
       const leaderboardKey = normalizeCustomLeaderboardKey(item?.id);
       const config = normalizeTweetSubmissionConfig(item?.tweetSubmission);
-      return { item, index, leaderboardKey, ...config };
+      if (!addressModeEnabled) return { item, index, leaderboardKey, ...config };
+      const addressInputResult = getAddressInputConfigErrors(item?.tweetSubmission?.addressInput);
+      return {
+        item,
+        index,
+        leaderboardKey,
+        ...config,
+        addressInput: addressInputResult.config,
+        addressInputInvalid: addressInputResult.errors,
+      };
     })
     .filter((item) => item.leaderboardKey && item.enabled);
 }
@@ -147,9 +163,23 @@ async function getUsage({ campaignKey, leaderboardKey, xHuntUserId, config, tran
   };
 }
 
-function serializeSubmission(record) {
-  const item = typeof record?.toJSON === "function" ? record.toJSON() : record;
+function serializeAddressBinding(record) {
+  if (!record) return null;
+  const item = typeof record.toJSON === "function" ? record.toJSON() : record;
   return {
+    id: item.id,
+    campaignKey: item.campaignKey,
+    leaderboardKey: item.leaderboardKey,
+    chain: item.chain,
+    address: item.address,
+    addressNormalized: item.addressNormalized,
+    lockedAt: item.lockedAt,
+  };
+}
+
+function serializeSubmission(record, { includeAddressBinding = false } = {}) {
+  const item = typeof record?.toJSON === "function" ? record.toJSON() : record;
+  const serialized = {
     id: item.id,
     campaignKey: item.campaignKey,
     leaderboardKey: item.leaderboardKey,
@@ -162,6 +192,10 @@ function serializeSubmission(record) {
       username: item.twitterUsername || null,
     },
   };
+  if (includeAddressBinding && item.addressBinding) {
+    serialized.addressBinding = serializeAddressBinding(item.addressBinding);
+  }
+  return serialized;
 }
 
 function lockKey(campaignKey, leaderboardKey, xHuntUserId) {
@@ -176,9 +210,22 @@ async function createTweetSubmission({
   twitterIdentityRecord,
   authCenterUserId,
   tweetUrl,
+  chain,
+  submissionAddress,
+  addressConfirmed,
 }) {
   const leaderboard = findTweetSubmissionLeaderboard(campaignConfig, leaderboardKey);
   if (!leaderboard) throw submissionError("TWEET_SUBMISSION_DISABLED", 400, "Tweet submission is not enabled for this leaderboard");
+  const normalizedLeaderboardKey = leaderboard.leaderboardKey;
+  const addressModeEnabled = isLeaderboardSubmissionAddressMode(campaignConfig);
+  if (addressModeEnabled && leaderboard.addressInputInvalid.length) {
+    throw submissionError(
+      "ADDRESS_INPUT_CONFIG_INVALID",
+      502,
+      "Address input configuration is unavailable",
+      { fields: leaderboard.addressInputInvalid }
+    );
+  }
   assertSubmissionWindow(campaignConfig);
   if (!twitterIdentity?.twitterId) throw submissionError("TWITTER_ID_REQUIRED", 400, "Please connect your X account first");
   const parsedTweet = parseTweetUrl(tweetUrl);
@@ -202,13 +249,67 @@ async function createTweetSubmission({
     if (!registration) throw submissionError("CAMPAIGN_REGISTRATION_REQUIRED", 403, "Please register for this campaign before submitting a post");
 
     await pgInstance.query("SELECT pg_advisory_xact_lock(hashtext(:key))", {
-      replacements: { key: lockKey(campaignKey, leaderboardKey, registration.xHuntUserId) },
+      replacements: { key: lockKey(campaignKey, normalizedLeaderboardKey, registration.xHuntUserId) },
       type: QueryTypes.SELECT,
       transaction,
     });
 
+    let addressBinding = null;
+    if (addressModeEnabled) {
+      addressBinding = await XhuntCampaignLeaderboardAddressBinding.findOne({
+        where: { campaignKey, leaderboardKey: normalizedLeaderboardKey, xHuntUserId: registration.xHuntUserId },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (addressBinding) {
+        const requestIncludesAddress = chain !== undefined || submissionAddress !== undefined;
+        if (requestIncludesAddress) {
+          const validation = validateConfiguredChainAddress(leaderboard.addressInput, chain, submissionAddress);
+          if (!validation.valid
+            || validation.chain !== addressBinding.chain
+            || validation.addressNormalized !== addressBinding.addressNormalized) {
+            throw submissionError(
+              "LEADERBOARD_ADDRESS_LOCKED",
+              409,
+              "This leaderboard address is already bound and cannot be changed"
+            );
+          }
+        }
+      } else {
+        if (addressConfirmed !== true) {
+          throw submissionError("ADDRESS_CONFIRMATION_REQUIRED", 400, "Please confirm the address before submitting");
+        }
+        const validation = validateConfiguredChainAddress(leaderboard.addressInput, chain, submissionAddress);
+        if (!validation.valid) {
+          const status = validation.code === "ADDRESS_INPUT_CONFIG_INVALID" ? 502 : 400;
+          throw submissionError(
+            validation.code,
+            status,
+            validation.code === "UNSUPPORTED_ADDRESS_CHAIN"
+              ? "The selected chain is not supported for this leaderboard"
+              : "Please enter a valid address for the selected chain",
+            validation.configErrors ? { fields: validation.configErrors } : undefined
+          );
+        }
+        addressBinding = await XhuntCampaignLeaderboardAddressBinding.create({
+          campaignKey,
+          leaderboardKey: normalizedLeaderboardKey,
+          campaignRegistrationId: registration.id,
+          xHuntUserId: registration.xHuntUserId,
+          authCenterUserId: authCenterUserId || registration.authCenterUserId || null,
+          twitterId: registration.twitterId,
+          chain: validation.chain,
+          address: validation.address,
+          addressNormalized: validation.addressNormalized,
+          promptSnapshot: leaderboard.addressInput,
+          lockedAt: new Date(),
+        }, { transaction });
+      }
+    }
+
     const duplicate = await XhuntCampaignTweetSubmission.findOne({
-      where: { campaignKey, leaderboardKey, xHuntUserId: registration.xHuntUserId, tweetId: parsedTweet.tweetId },
+      where: { campaignKey, leaderboardKey: normalizedLeaderboardKey, xHuntUserId: registration.xHuntUserId, tweetId: parsedTweet.tweetId },
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
@@ -216,7 +317,7 @@ async function createTweetSubmission({
 
     const usage = await getUsage({
       campaignKey,
-      leaderboardKey,
+      leaderboardKey: normalizedLeaderboardKey,
       xHuntUserId: registration.xHuntUserId,
       config: leaderboard,
       transaction,
@@ -228,8 +329,9 @@ async function createTweetSubmission({
 
     const submission = await XhuntCampaignTweetSubmission.create({
       campaignKey,
-      leaderboardKey,
+      leaderboardKey: normalizedLeaderboardKey,
       campaignRegistrationId: registration.id,
+      ...(addressModeEnabled ? { addressBindingId: addressBinding.id } : {}),
       xHuntUserId: registration.xHuntUserId,
       authCenterUserId: authCenterUserId || registration.authCenterUserId || null,
       twitterId: registration.twitterId,
@@ -240,16 +342,20 @@ async function createTweetSubmission({
     }, { transaction });
     const nextUsage = await getUsage({
       campaignKey,
-      leaderboardKey,
+      leaderboardKey: normalizedLeaderboardKey,
       xHuntUserId: registration.xHuntUserId,
       config: leaderboard,
       transaction,
       campaignStartAt: getCampaignStartAt(campaignConfig),
     });
-    return { submission, usage: nextUsage };
+    return { submission, usage: nextUsage, addressBinding };
   });
 
-  return { submission: serializeSubmission(result.submission), usage: result.usage };
+  return {
+    submission: serializeSubmission(result.submission),
+    usage: result.usage,
+    ...(addressModeEnabled ? { addressBinding: serializeAddressBinding(result.addressBinding) } : {}),
+  };
 }
 
 async function getUserTweetSubmissions({
@@ -267,6 +373,17 @@ async function getUserTweetSubmissions({
   const selectedLeaderboards = requestedLeaderboardKey
     ? leaderboards.filter((item) => item.leaderboardKey === requestedLeaderboardKey)
     : leaderboards;
+  if (isLeaderboardSubmissionAddressMode(campaignConfig)) {
+    const invalidLeaderboard = selectedLeaderboards.find((item) => item.addressInputInvalid?.length);
+    if (invalidLeaderboard) {
+      throw submissionError(
+        "ADDRESS_INPUT_CONFIG_INVALID",
+        502,
+        "Address input configuration is unavailable",
+        { leaderboardKey: invalidLeaderboard.leaderboardKey, fields: invalidLeaderboard.addressInputInvalid }
+      );
+    }
+  }
   if (requestedLeaderboardKey && !selectedLeaderboards.length) {
     throw submissionError("LEADERBOARD_NOT_FOUND", 404, "Leaderboard not found");
   }
@@ -285,6 +402,18 @@ async function getUserTweetSubmissions({
     order: [["registeredAt", "DESC"]],
   });
   if (!registration) return { registered: false, leaderboards: [] };
+  const addressModeEnabled = isLeaderboardSubmissionAddressMode(campaignConfig);
+  let addressBindingsByLeaderboard = null;
+  if (addressModeEnabled) {
+    const rows = await XhuntCampaignLeaderboardAddressBinding.findAll({
+      where: {
+        campaignKey,
+        xHuntUserId: registration.xHuntUserId,
+        leaderboardKey: { [Op.in]: selectedLeaderboards.map((item) => item.leaderboardKey) },
+      },
+    });
+    addressBindingsByLeaderboard = new Map(rows.map((item) => [item.leaderboardKey, item]));
+  }
   const summaries = await Promise.all(selectedLeaderboards.map(async (leaderboard) => {
     const [usage, page] = await Promise.all([
       getUsage({
@@ -304,7 +433,7 @@ async function getUserTweetSubmissions({
         normalizedLimit,
       }),
     ]);
-    return {
+    const summary = {
       leaderboardKey: leaderboard.leaderboardKey,
       config: {
         period: leaderboard.period,
@@ -315,6 +444,11 @@ async function getUserTweetSubmissions({
       submissions: page.items,
       nextCursor: page.nextCursor,
     };
+    if (addressModeEnabled) {
+      summary.addressInput = leaderboard.addressInput;
+      summary.addressBinding = serializeAddressBinding(addressBindingsByLeaderboard.get(leaderboard.leaderboardKey));
+    }
+    return summary;
   }));
   return { registered: true, leaderboards: summaries };
 }
@@ -371,7 +505,7 @@ function parseIsoDate(value, errorCode) {
   return parsed;
 }
 
-async function listSubmissionPage({ where, decodedCursor, normalizedLimit }) {
+async function listSubmissionPage({ where, decodedCursor, normalizedLimit, includeAddressBinding = false }) {
   const queryWhere = { ...where };
   if (decodedCursor) {
     const existingAnd = Array.isArray(queryWhere[Op.and]) ? queryWhere[Op.and] : [];
@@ -384,12 +518,18 @@ async function listSubmissionPage({ where, decodedCursor, normalizedLimit }) {
   }
   const rows = await XhuntCampaignTweetSubmission.findAll({
     where: queryWhere,
+    ...(includeAddressBinding ? {
+      include: [{ model: XhuntCampaignLeaderboardAddressBinding, as: "addressBinding", required: false }],
+    } : {}),
     order: [["submittedAt", "DESC"], ["id", "DESC"]],
     limit: normalizedLimit + 1,
   });
   const hasMore = rows.length > normalizedLimit;
   const items = hasMore ? rows.slice(0, -1) : rows;
-  return { items: items.map(serializeSubmission), nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null };
+  return {
+    items: items.map((item) => serializeSubmission(item, { includeAddressBinding })),
+    nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null,
+  };
 }
 
 function buildSubmissionSearchCondition(query) {
@@ -411,7 +551,16 @@ function buildSubmissionSearchCondition(query) {
   };
 }
 
-async function listExternalTweetSubmissions({ campaignKey, leaderboardKey, from, to, cursor, limit, query }) {
+async function listExternalTweetSubmissions({
+  campaignKey,
+  leaderboardKey,
+  from,
+  to,
+  cursor,
+  limit,
+  query,
+  includeAddressBinding = false,
+}) {
   const fromDate = parseIsoDate(from, "INVALID_FROM");
   const toDate = parseIsoDate(to, "INVALID_TO");
   if (fromDate && toDate && fromDate > toDate) {
@@ -432,6 +581,7 @@ async function listExternalTweetSubmissions({ campaignKey, leaderboardKey, from,
     where,
     decodedCursor: decodeCursor(cursor),
     normalizedLimit: normalizePageLimit(limit, tweetSubmissionContract.externalHistoryPage),
+    includeAddressBinding,
   });
 }
 
@@ -516,13 +666,25 @@ async function replaceTweetSubmission({ id, campaignKey, tweetUrl }) {
         );
       }
 
-      const before = serializeSubmission(locked);
+      const addressBinding = locked.addressBindingId
+        ? await XhuntCampaignLeaderboardAddressBinding.findByPk(locked.addressBindingId, { transaction })
+        : null;
+      const before = serializeSubmission(
+        { ...locked.toJSON(), addressBinding },
+        { includeAddressBinding: true }
+      );
       await locked.update({
         ...parsedTweet,
         tweetTitle: tweetTitle || null,
         twitterUsername: tweetDetail.authorUsername || locked.twitterUsername || null,
       }, { transaction });
-      return { before, submission: serializeSubmission(locked) };
+      return {
+        before,
+        submission: serializeSubmission(
+          { ...locked.toJSON(), addressBinding },
+          { includeAddressBinding: true }
+        ),
+      };
     });
   } catch (error) {
     if (error?.name === "SequelizeUniqueConstraintError") {

@@ -7,9 +7,18 @@ function cleanUrlOrNull(val) {
 
 const crypto = require("crypto");
 const { Op } = require("sequelize");
-const { XHuntWebsiteCampaign, pgInstance } = require("../../models/postgres-start");
+const {
+  CampaignRegistration,
+  XHuntWebsiteCampaign,
+  XhuntCampaignLeaderboardAddressBinding,
+  pgInstance,
+} = require("../../models/postgres-start");
 const LEGACY_WEBSITE_CAMPAIGNS = require("../constants/legacyWebsiteCampaigns");
 const { getNacosConfigContent } = require("./nacosConfigClient");
+const {
+  getAddressInputConfigErrors,
+  isLeaderboardSubmissionAddressMode,
+} = require("../utils/leaderboard-address");
 
 const WEBSITE_STATUS_VALUES = new Set([
   "draft",
@@ -195,6 +204,84 @@ function normalizeNacosCampaign(campaign) {
 
 function normalizeManagedCampaign(campaign) {
   return normalizeNacosCampaign(campaign);
+}
+
+function createManagedCampaignValidationError(message, status = 400) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function validateManagedCampaignAddressConfig(campaign) {
+  const payload = toSafeObject(campaign?.nacosPayload, {});
+  if (!isLeaderboardSubmissionAddressMode(payload)) return;
+  if (payload.leaderboardMode !== "custom") {
+    throw createManagedCampaignValidationError(`${campaign.campaignKey}: 投稿时填写地址模式仅支持自定义榜单`);
+  }
+  const activeLeaderboards = toSafeArray(payload.customLeaderboards)
+    .filter((item) => item?.tweetSubmission?.enabled === true);
+  if (!activeLeaderboards.length) {
+    throw createManagedCampaignValidationError(`${campaign.campaignKey}: 投稿时填写地址模式要求至少开启一个榜单的主动投稿`);
+  }
+  for (const item of activeLeaderboards) {
+    const leaderboardKey = String(item?.id || "").trim();
+    if (!leaderboardKey) {
+      throw createManagedCampaignValidationError(`${campaign.campaignKey}: 开启主动投稿的榜单必须配置榜单 ID`);
+    }
+    const { errors } = getAddressInputConfigErrors(item?.tweetSubmission?.addressInput);
+    if (errors.length) {
+      throw createManagedCampaignValidationError(
+        `${campaign.campaignKey}/${leaderboardKey}: 地址输入配置不完整（${errors.join(", ")}）`
+      );
+    }
+  }
+}
+
+function getActiveTweetSubmissionLeaderboardKeys(payload) {
+  return new Set(
+    toSafeArray(payload?.customLeaderboards)
+      .filter((item) => item?.tweetSubmission?.enabled === true)
+      .map((item) => String(item?.id || "").trim())
+      .filter(Boolean)
+  );
+}
+
+async function assertAddressModeCanChange(existing, campaign, transaction) {
+  const previousPayload = toSafeObject(existing?.nacosPayload, {});
+  const nextPayload = toSafeObject(campaign?.nacosPayload, {});
+  const previousAddressMode = isLeaderboardSubmissionAddressMode(previousPayload);
+  const nextAddressMode = isLeaderboardSubmissionAddressMode(nextPayload);
+  if (previousAddressMode !== nextAddressMode) {
+    const registrationCount = await CampaignRegistration.count({
+      where: { campaign: existing.campaignKey },
+      transaction,
+    });
+    if (registrationCount > 0) {
+      throw createManagedCampaignValidationError(
+        `${existing.campaignKey}: 活动已有报名记录，不能切换地址填写阶段`,
+        409
+      );
+    }
+  }
+
+  if (!previousAddressMode || !nextAddressMode) return;
+  const nextLeaderboardKeys = getActiveTweetSubmissionLeaderboardKeys(nextPayload);
+  const removedKeys = Array.from(getActiveTweetSubmissionLeaderboardKeys(previousPayload))
+    .filter((key) => !nextLeaderboardKeys.has(key));
+  if (!removedKeys.length) return;
+  const bindingCount = await XhuntCampaignLeaderboardAddressBinding.count({
+    where: {
+      campaignKey: existing.campaignKey,
+      leaderboardKey: { [Op.in]: removedKeys },
+    },
+    transaction,
+  });
+  if (bindingCount > 0) {
+    throw createManagedCampaignValidationError(
+      `${existing.campaignKey}: 榜单已有不可修改的地址绑定，不能关闭或移除主动投稿（${removedKeys.join(", ")}）`,
+      409
+    );
+  }
 }
 
 function getSyncedPayload(recordLike) {
@@ -469,6 +556,7 @@ async function saveManagedCampaignsConfig(configLike, expectedRevision) {
   const campaigns = toSafeArray(config.campaigns)
     .map(normalizeManagedCampaign)
     .filter((item) => item.nacosCampaignId && item.campaignKey);
+  campaigns.forEach(validateManagedCampaignAddressConfig);
 
   const incomingIds = new Set(campaigns.map((item) => String(item.nacosCampaignId)));
 
@@ -516,6 +604,7 @@ async function saveManagedCampaignsConfig(configLike, expectedRevision) {
       }
 
       const wasDeleted = !!existing.isDeleted;
+      await assertAddressModeCanChange(existing, campaign, transaction);
       await existing.update(
         {
           ...campaign,
@@ -890,6 +979,9 @@ function buildPluginCampaign(record, options = {}) {
     includeCreator: !!payload.includeCreator,
     threshold: payload.threshold,
     allowEmailRegistration: payload.allowEmailRegistration === true,
+    ...(payload.addressCollectionMode === "leaderboard_submission"
+      ? { addressCollectionMode: "leaderboard_submission" }
+      : {}),
     showExtraComponents: payload.showExtraComponents !== false,
     showSponsoredPolicy: payload.showSponsoredPolicy !== false,
     riskConfirmHtml: payload.riskConfirmHtml || null,

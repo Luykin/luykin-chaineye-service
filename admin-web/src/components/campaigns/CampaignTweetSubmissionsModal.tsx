@@ -342,7 +342,7 @@ export function CampaignTweetSubmissionsModal({
           loading={loading}
           dataSource={rows}
           pagination={false}
-          scroll={{ x: 1180 }}
+          scroll={{ x: 1440 }}
           locale={{ emptyText: "当前筛选条件下暂无投稿记录" }}
           columns={[
             {
@@ -376,6 +376,20 @@ export function CampaignTweetSubmissionsModal({
               ),
             },
             {
+              title: "绑定地址（不可修改）",
+              key: "addressBinding",
+              width: 280,
+              render: (_value, record) => record.addressBinding ? (
+                <div style={{ minWidth: 0 }}>
+                  <Tag color="purple">{record.addressBinding.chain.toUpperCase()}</Tag>
+                  <div title={record.addressBinding.address} style={{ marginTop: 4, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <Text copyable={{ text: record.addressBinding.address }}>{record.addressBinding.address}</Text>
+                  </div>
+                  <div><Text type="secondary">绑定于 {formatDateTime(record.addressBinding.lockedAt)}</Text></div>
+                </div>
+              ) : <Text type="secondary">旧模式 / 未绑定</Text>,
+            },
+            {
               title: "投稿时间",
               dataIndex: "submittedAt",
               width: 190,
@@ -400,7 +414,7 @@ export function CampaignTweetSubmissionsModal({
                   {canDelete ? (
                     <Popconfirm
                       title="删除投稿记录"
-                      description={`确认删除 @${record.user?.username || record.user?.twitterId || "该用户"} 的这条投稿？此操作不可恢复，删除后对应投稿限额会释放。`}
+                      description={`确认删除 @${record.user?.username || record.user?.twitterId || "该用户"} 的这条投稿？此操作不可恢复，删除后对应投稿限额会释放；已经绑定的榜单地址仍会永久保留。`}
                       okText="删除"
                       cancelText="取消"
                       okButtonProps={{ danger: true }}

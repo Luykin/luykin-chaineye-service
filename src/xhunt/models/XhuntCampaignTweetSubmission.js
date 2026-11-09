@@ -7,6 +7,7 @@ module.exports = (sequelize) => sequelize.define(
     campaignKey: { type: DataTypes.STRING(128), allowNull: false },
     leaderboardKey: { type: DataTypes.STRING(128), allowNull: false },
     campaignRegistrationId: { type: DataTypes.UUID, allowNull: true },
+    addressBindingId: { type: DataTypes.UUID, allowNull: true },
     xHuntUserId: { type: DataTypes.UUID, allowNull: false },
     authCenterUserId: { type: DataTypes.UUID, allowNull: true },
     twitterId: { type: DataTypes.STRING(64), allowNull: true },
@@ -28,6 +29,10 @@ module.exports = (sequelize) => sequelize.define(
       {
         name: "idx_xhunt_campaign_tweet_submission_user_time",
         fields: ["campaignKey", "leaderboardKey", "xHuntUserId", "submittedAt"],
+      },
+      {
+        name: "idx_xhunt_campaign_tweet_submission_address_binding",
+        fields: ["addressBindingId"],
       },
       {
         name: "idx_xhunt_campaign_tweet_submission_campaign_time",

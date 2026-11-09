@@ -8,6 +8,7 @@ const XPrivateNoteModel = require("../../xhunt/models/XPrivateNote");
 const MantleRegistrationModel = require("../../xhunt/models/MantleRegistration");
 const MantleRegistration2Model = require("../../xhunt/models/MantleRegistration2");
 const CampaignRegistrationModel = require("../../xhunt/models/CampaignRegistration");
+const XhuntCampaignLeaderboardAddressBindingModel = require("../../xhunt/models/XhuntCampaignLeaderboardAddressBinding");
 const XhuntCampaignTweetSubmissionModel = require("../../xhunt/models/XhuntCampaignTweetSubmission");
 const XPrivateMessageModel = require("../../xhunt/models/XPrivateMessage");
 const DailyActiveUserModel = require("../../xhunt/models/DailyActiveUser");
@@ -88,6 +89,7 @@ function initModels(pgInstance) {
     MantleRegistration: MantleRegistrationModel(pgInstance),
     MantleRegistration2: MantleRegistration2Model(pgInstance),
     CampaignRegistration: CampaignRegistrationModel(pgInstance),
+    XhuntCampaignLeaderboardAddressBinding: XhuntCampaignLeaderboardAddressBindingModel(pgInstance),
     XhuntCampaignTweetSubmission: XhuntCampaignTweetSubmissionModel(pgInstance),
     XPrivateMessage: XPrivateMessageModel(pgInstance),
     DailyActiveUser: DailyActiveUserModel(pgInstance),

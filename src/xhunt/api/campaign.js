@@ -567,6 +567,7 @@ router.get(
         cursor: req.query.cursor,
         limit: req.query.limit,
         query: req.query.q,
+        includeAddressBinding: true,
       });
       return res.json({ success: true, data: { campaignKey, ...data } });
     } catch (err) {

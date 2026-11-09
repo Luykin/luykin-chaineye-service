@@ -610,7 +610,7 @@ router.put("/internal/managed-config", adminAuth, requirePermission("nacos_confi
       success: false,
       message: error.message || "保存失败",
     });
-    const status = error.status === 409 ? 409 : 500;
+    const status = Number.isInteger(error.status) ? error.status : 500;
     return res.status(status).json({
       success: false,
       error: error.message || "保存失败",

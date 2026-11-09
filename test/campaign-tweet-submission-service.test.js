@@ -21,6 +21,11 @@ const state = {
   tweetDetail: null,
   tweetError: null,
   lastFindAllOptions: null,
+  registration: null,
+  binding: null,
+  bindingFindCalls: 0,
+  createdBinding: null,
+  createdSubmission: null,
 };
 
 function submissionRecord(overrides = {}) {
@@ -54,6 +59,7 @@ const XhuntCampaignTweetSubmission = {
   async findOne({ where }) {
     if (where?.id && typeof where.id === "object") return state.duplicate;
     if (where?.id === state.record?.id) return state.record;
+    if (where?.tweetId) return state.duplicate;
     return null;
   },
   async findAll(options) {
@@ -62,6 +68,35 @@ const XhuntCampaignTweetSubmission = {
   },
   async count() {
     return 0;
+  },
+  async create(values) {
+    state.createdSubmission = submissionRecord({
+      ...values,
+      id: "33333333-3333-4333-8333-333333333333",
+    });
+    return state.createdSubmission;
+  },
+};
+
+const XhuntCampaignLeaderboardAddressBinding = {
+  async findOne() {
+    state.bindingFindCalls += 1;
+    return state.binding;
+  },
+  async create(values) {
+    state.createdBinding = {
+      id: "44444444-4444-4444-8444-444444444444",
+      ...values,
+      toJSON() {
+        const { toJSON, ...record } = this;
+        return record;
+      },
+    };
+    state.binding = state.createdBinding;
+    return state.createdBinding;
+  },
+  async findAll() {
+    return state.binding ? [state.binding] : [];
   },
 };
 
@@ -77,7 +112,12 @@ mockModule(modelsPath, {
       return state.identity;
     },
   },
-  CampaignRegistration: {},
+  CampaignRegistration: {
+    async findOne() {
+      return state.registration;
+    },
+  },
+  XhuntCampaignLeaderboardAddressBinding,
   XhuntCampaignTweetSubmission,
 });
 
@@ -90,6 +130,7 @@ mockModule(twitterServicePath, {
 
 delete require.cache[servicePath];
 const {
+  createTweetSubmission,
   listExternalTweetSubmissions,
   replaceTweetSubmission,
 } = require(servicePath);
@@ -105,6 +146,17 @@ beforeEach(() => {
   };
   state.tweetError = null;
   state.lastFindAllOptions = null;
+  state.registration = {
+    id: "registration-1",
+    xHuntUserId: "user-1",
+    authCenterUserId: "auth-user-1",
+    twitterId: "123456789",
+    username: "old_user",
+  };
+  state.binding = null;
+  state.bindingFindCalls = 0;
+  state.createdBinding = null;
+  state.createdSubmission = null;
 });
 
 after(() => {
@@ -179,4 +231,110 @@ test("搜索条件与游标条件同时生效，搜索通配符按普通字符�
   const searchColumns = andConditions[0][Op.or];
   assert.equal(searchColumns[0].tweetTitle[Op.iLike], "%Neo\\%\\_%");
   assert.ok(andConditions[1][Op.or]);
+  assert.equal(state.lastFindAllOptions.include, undefined);
+});
+
+function submissionCampaignConfig(addressCollectionMode) {
+  return {
+    ...(addressCollectionMode ? { addressCollectionMode } : {}),
+    leaderboardMode: "custom",
+    enrollmentWindow: {
+      startAt: "2020-01-01T00:00:00.000Z",
+      endAt: "2099-01-01T00:00:00.000Z",
+    },
+    customLeaderboards: [{
+      id: "essay",
+      tweetSubmission: {
+        enabled: true,
+        period: "day",
+        periodLimit: 3,
+        totalLimit: 20,
+        addressInput: {
+          supportedChains: ["bsc"],
+          recommendedChain: "bsc",
+          label: { zh: "地址", en: "Address" },
+          placeholder: { zh: "请输入地址", en: "Enter address" },
+          helpText: { zh: "奖励地址", en: "Reward address" },
+          confirmationText: { zh: "确认后不可修改", en: "Cannot be changed" },
+        },
+      },
+    }],
+  };
+}
+
+test("新模式首次投稿在同一事务创建不可变地址绑定并关联投稿", async () => {
+  const result = await createTweetSubmission({
+    campaignKey: "campaign-a",
+    leaderboardKey: "essay",
+    campaignConfig: submissionCampaignConfig("leaderboard_submission"),
+    twitterIdentity: { twitterId: "123456789", username: "old_user" },
+    twitterIdentityRecord: { id: "identity-1" },
+    authCenterUserId: "auth-user-1",
+    tweetUrl: "https://x.com/old_user/status/2000000000000000002",
+    chain: "bsc",
+    submissionAddress: "0x000000000000000000000000000000000000dEaD",
+    addressConfirmed: true,
+  });
+
+  assert.equal(state.createdBinding.addressNormalized, "0x000000000000000000000000000000000000dEaD");
+  assert.equal(state.createdSubmission.addressBindingId, state.createdBinding.id);
+  assert.equal(result.addressBinding.id, state.createdBinding.id);
+});
+
+test("旧模式投稿完全不查询地址绑定，也不增加响应字段", async () => {
+  const result = await createTweetSubmission({
+    campaignKey: "campaign-a",
+    leaderboardKey: "essay",
+    campaignConfig: submissionCampaignConfig(),
+    twitterIdentity: { twitterId: "123456789", username: "old_user" },
+    twitterIdentityRecord: { id: "identity-1" },
+    authCenterUserId: "auth-user-1",
+    tweetUrl: "https://x.com/old_user/status/2000000000000000002",
+  });
+
+  assert.equal(state.bindingFindCalls, 0);
+  assert.equal(Object.prototype.hasOwnProperty.call(result, "addressBinding"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(state.createdSubmission, "addressBindingId"), false);
+});
+
+test("新模式后续投稿复用绑定，任何换链或换地址请求都会被拒绝", async () => {
+  state.binding = {
+    id: "44444444-4444-4444-8444-444444444444",
+    campaignKey: "campaign-a",
+    leaderboardKey: "essay",
+    chain: "bsc",
+    address: "0x000000000000000000000000000000000000dEaD",
+    addressNormalized: "0x000000000000000000000000000000000000dEaD",
+    lockedAt: new Date("2026-11-09T00:00:00.000Z"),
+  };
+
+  const reused = await createTweetSubmission({
+    campaignKey: "campaign-a",
+    leaderboardKey: "essay",
+    campaignConfig: submissionCampaignConfig("leaderboard_submission"),
+    twitterIdentity: { twitterId: "123456789", username: "old_user" },
+    twitterIdentityRecord: { id: "identity-1" },
+    authCenterUserId: "auth-user-1",
+    tweetUrl: "https://x.com/old_user/status/2000000000000000002",
+  });
+  assert.equal(state.createdSubmission.addressBindingId, state.binding.id);
+  assert.equal(reused.addressBinding.id, state.binding.id);
+
+  state.createdSubmission = null;
+  await assert.rejects(
+    createTweetSubmission({
+      campaignKey: "campaign-a",
+      leaderboardKey: "essay",
+      campaignConfig: submissionCampaignConfig("leaderboard_submission"),
+      twitterIdentity: { twitterId: "123456789", username: "old_user" },
+      twitterIdentityRecord: { id: "identity-1" },
+      authCenterUserId: "auth-user-1",
+      tweetUrl: "https://x.com/old_user/status/3000000000000000003",
+      chain: "bsc",
+      submissionAddress: "0x0000000000000000000000000000000000000001",
+      addressConfirmed: true,
+    }),
+    (error) => error.status === 409 && error.message === "LEADERBOARD_ADDRESS_LOCKED",
+  );
+  assert.equal(state.createdSubmission, null);
 });

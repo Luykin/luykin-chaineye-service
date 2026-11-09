@@ -26,6 +26,7 @@ import { ExternalLeaderboardAdapterCard } from "@/components/campaigns/ExternalL
 import customLeaderboardKeyContract from "../../../shared/xhunt/custom-leaderboard-key-contract.json";
 import tweetSubmissionContract from "../../../shared/xhunt/tweet-submission-contract.json";
 import leaderboardColumnContract from "../../../shared/xhunt/leaderboard-column-contract.json";
+import leaderboardAddressChainContract from "../../../shared/xhunt/leaderboard-address-chain-contract.json";
 
 const { TextArea } = Input;
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -132,6 +133,13 @@ const CUSTOM_LEADERBOARD_HIDDEN_COLUMN_VALUES = new Set(
 const TWEET_SUBMISSION_PERIOD_VALUES = new Set<string>(
   tweetSubmissionContract.periods,
 );
+const LEADERBOARD_ADDRESS_CHAIN_OPTIONS = leaderboardAddressChainContract.chains.map((item) => ({
+  value: item.id,
+  label: item.label.zh,
+}));
+const LEADERBOARD_ADDRESS_CHAIN_VALUES = new Set(
+  LEADERBOARD_ADDRESS_CHAIN_OPTIONS.map((item) => item.value),
+);
 const CUSTOM_LEADERBOARD_KEY_PATTERN = new RegExp(
   customLeaderboardKeyContract.allowedPattern,
   customLeaderboardKeyContract.flags,
@@ -204,12 +212,30 @@ function normalizeTweetSubmissionEditorConfig(value: unknown) {
   )
     .trim()
     .toLowerCase();
-  return {
+  const output: AnyObj = {
     enabled: source.enabled === true,
     period: rawPeriod,
     periodLimit: source.periodLimit === undefined || source.periodLimit === null ? undefined : Number(source.periodLimit),
     totalLimit: source.totalLimit === undefined || source.totalLimit === null ? undefined : Number(source.totalLimit),
   };
+  if (source.addressInput && typeof source.addressInput === "object") {
+    const addressInput = source.addressInput as AnyObj;
+    const supportedChains = Array.from(new Set(
+      (Array.isArray(addressInput.supportedChains) ? addressInput.supportedChains : [])
+        .map((item: unknown) => String(item || "").trim().toLowerCase())
+        .filter((item: string) => LEADERBOARD_ADDRESS_CHAIN_VALUES.has(item)),
+    ));
+    const recommendedChain = String(addressInput.recommendedChain || "").trim().toLowerCase();
+    output.addressInput = {
+      supportedChains,
+      recommendedChain: supportedChains.includes(recommendedChain) ? recommendedChain : undefined,
+      label: normalizeI18nText(addressInput.label),
+      placeholder: normalizeI18nText(addressInput.placeholder),
+      helpText: normalizeI18nText(addressInput.helpText),
+      confirmationText: normalizeI18nText(addressInput.confirmationText),
+    };
+  }
+  return output;
 }
 
 function normalizeCustomLeaderboardKey(value: unknown) {
@@ -258,6 +284,14 @@ export interface CustomLeaderboardConfig {
     period?: "day" | "week";
     periodLimit?: number | null;
     totalLimit?: number | null;
+    addressInput?: {
+      supportedChains?: string[];
+      recommendedChain?: string;
+      label?: { zh?: string; en?: string };
+      placeholder?: { zh?: string; en?: string };
+      helpText?: { zh?: string; en?: string };
+      confirmationText?: { zh?: string; en?: string };
+    };
   };
 }
 type CampaignConfig = {
@@ -669,6 +703,7 @@ function makeNewCampaign(): AnyObj {
     includeCreator: false,
     showSponsoredPolicy: true,
     allowEmailRegistration: false,
+    addressCollectionMode: "registration_evm",
     leaderboardMode: "custom",
     leaderboardApiUrl: DEFAULT_CUSTOM_LEADERBOARD_API_URL,
     userActivityApiUrl: DEFAULT_CUSTOM_USER_ACTIVITY_API_URL,
@@ -1649,6 +1684,11 @@ export function NacosCampaignsPage() {
         )
           errors.push(`${prefix}: 自定义模式下至少需要添加一个榜单`);
         const tweetSubmissionLeaderboardIds = new Set<string>();
+        const submissionItems = (Array.isArray(c.customLeaderboards) ? c.customLeaderboards : [])
+          .filter((item: AnyObj) => item?.tweetSubmission?.enabled === true);
+        if (c.addressCollectionMode === "leaderboard_submission" && !submissionItems.length) {
+          errors.push(`${prefix}: 投稿时填写地址模式要求至少开启一个榜单的主动投稿`);
+        }
         (Array.isArray(c.customLeaderboards) ? c.customLeaderboards : []).forEach(
           (item: AnyObj, leaderboardIdx: number) => {
             const label = `${prefix}: 自定义榜单 #${leaderboardIdx + 1}`;
@@ -1692,6 +1732,17 @@ export function NacosCampaignsPage() {
                 errors.push(`${label} 周期内提交上限必须是 ${tweetSubmissionContract.periodLimit.min}-${tweetSubmissionContract.periodLimit.max} 的整数`);
               if (!Number.isInteger(item.tweetSubmission.totalLimit) || item.tweetSubmission.totalLimit < tweetSubmissionContract.totalLimit.min || item.tweetSubmission.totalLimit > tweetSubmissionContract.totalLimit.max)
                 errors.push(`${label} 累计提交上限必须是 ${tweetSubmissionContract.totalLimit.min}-${tweetSubmissionContract.totalLimit.max} 的整数`);
+              if (c.addressCollectionMode === "leaderboard_submission") {
+                const addressInput = item.tweetSubmission.addressInput || {};
+                if (!Array.isArray(addressInput.supportedChains) || !addressInput.supportedChains.length)
+                  errors.push(`${label} 至少需要选择一个支持的地址链类型`);
+                if (addressInput.recommendedChain && !addressInput.supportedChains?.includes(addressInput.recommendedChain))
+                  errors.push(`${label} 推荐链必须包含在支持的链类型中`);
+                (["label", "placeholder", "helpText", "confirmationText"] as const).forEach((field) => {
+                  if (!String(addressInput[field]?.zh || "").trim() || !String(addressInput[field]?.en || "").trim())
+                    errors.push(`${label} 地址配置 ${field} 必须同时填写中文和英文`);
+                });
+              }
             }
             item.isEssayContest = item.isEssayContest === true;
             item.winners = item.isEssayContest ? normalizeEssayWinnerList(item.winners) : [];
@@ -1703,6 +1754,9 @@ export function NacosCampaignsPage() {
             );
           },
         );
+      }
+      if (c.addressCollectionMode === "leaderboard_submission" && c.leaderboardMode !== "custom") {
+        errors.push(`${prefix}: 投稿时填写地址模式仅支持自定义榜单`);
       }
       if (!Array.isArray(c.tasks) || !c.tasks.length)
         errors.push(`${prefix}: 至少需要配置一个 task`);
@@ -2976,6 +3030,9 @@ function CampaignEditor(props: {
   const { c, vipUsers, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem, externalAdapterNacosCampaignId, isSuperAdmin, onMessage } = props;
   const [campaignIdModalOpen, setCampaignIdModalOpen] = useState(false);
   const [campaignIdDraft, setCampaignIdDraft] = useState("");
+  const hasTweetSubmissionLeaderboard = c.leaderboardMode === "custom"
+    && (Array.isArray(c.customLeaderboards) ? c.customLeaderboards : [])
+      .some((item: AnyObj) => item?.tweetSubmission?.enabled === true);
   const internalTestUserOptions = internalTestUsers.map((item) => ({
     value: item.username,
     label: item.username,
@@ -3148,8 +3205,38 @@ function CampaignEditor(props: {
           <Col xs={24} md={8}><Field label="结束时间"><Input type="datetime-local" value={toDatetimeLocal(c.enrollmentWindow?.endAt)} onChange={(e) => setCampaignPath("enrollmentWindow.endAt", fromDatetimeLocalToIsoZ(e.target.value))} /></Field></Col>
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
         </Row>
+        <Card size="small" style={{ marginTop: 12 }}>
+          <Row gutter={[12, 12]} align="middle">
+            <Col xs={24} md={10}>
+              <Field
+                label={<InfoLabel info="旧模式在报名时填写 EVM；新模式在用户第一次向每个榜单投稿时分别填写，绑定后不可修改。">地址填写阶段</InfoLabel>}
+              >
+                <Select
+                  style={{ width: "100%" }}
+                  value={c.addressCollectionMode === "leaderboard_submission" ? "leaderboard_submission" : "registration_evm"}
+                  onChange={(value) => setCampaignPath("addressCollectionMode", value)}
+                  options={[
+                    { value: "registration_evm", label: "报名时填写 EVM 地址（旧模式）" },
+                    {
+                      value: "leaderboard_submission",
+                      label: "投稿时按榜单填写地址",
+                      disabled: !hasTweetSubmissionLeaderboard,
+                    },
+                  ]}
+                />
+              </Field>
+            </Col>
+            <Col xs={24} md={14}>
+              <span style={{ color: "#8c8c8c", fontSize: 12 }}>
+                {hasTweetSubmissionLeaderboard
+                  ? "新模式只采集普通地址文本，不连接钱包、不签名；每个榜单首次投稿绑定一次。"
+                  : "请先在下方至少开启一个自定义榜单的主动投稿，才能选择新模式。"}
+              </span>
+            </Col>
+          </Row>
+        </Card>
         <div style={{ marginTop: 12 }}>
-          {(c.leaderboardMode || "traditional") === "custom" ? <Space direction="vertical" size={8} style={{ width: "100%" }}><CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} mockEnabled={!!c.mockCustomLeaderboardDataEnabled} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} nacosCampaignId={externalAdapterNacosCampaignId} isSuperAdmin={isSuperAdmin} onMessage={onMessage} /></Space> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
+          {(c.leaderboardMode || "traditional") === "custom" ? <Space direction="vertical" size={8} style={{ width: "100%" }}><CustomLeaderboards addressCollectionMode={c.addressCollectionMode} apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} mockEnabled={!!c.mockCustomLeaderboardDataEnabled} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} nacosCampaignId={externalAdapterNacosCampaignId} isSuperAdmin={isSuperAdmin} onMessage={onMessage} /></Space> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
         </div>
       </Section>
 
@@ -3775,6 +3862,7 @@ function resolveEssayWinnerPreviewAward(winner: AnyObj, index: number, distinctR
 }
 
 function CustomLeaderboards({
+  addressCollectionMode,
   apiUrl,
   userActivityApiUrl,
   mockEnabled,
@@ -3904,23 +3992,82 @@ function CustomLeaderboards({
           />
         </div>
         {it.tweetSubmission?.enabled ? (
-          <Row gutter={[12, 12]} style={{ marginTop: 10 }}>
-            <Col xs={24} md={8}>
-              <Field label="限额周期">
-                <Select value={it.tweetSubmission?.period || "day"} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.period", value)} options={[{ value: "day", label: "每天" }, { value: "week", label: "每周" }]} />
-              </Field>
-            </Col>
-            <Col xs={12} md={8}>
-              <Field label="周期内最多提交">
-                <InputNumber min={tweetSubmissionContract.periodLimit.min} max={tweetSubmissionContract.periodLimit.max} value={it.tweetSubmission?.periodLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.periodLimit", value)} addonAfter="篇" />
-              </Field>
-            </Col>
-            <Col xs={12} md={8}>
-              <Field label="累计最多提交">
-                <InputNumber min={tweetSubmissionContract.totalLimit.min} max={tweetSubmissionContract.totalLimit.max} value={it.tweetSubmission?.totalLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.totalLimit", value)} addonAfter="篇" />
-              </Field>
-            </Col>
-          </Row>
+          <>
+            <Row gutter={[12, 12]} style={{ marginTop: 10 }}>
+              <Col xs={24} md={8}>
+                <Field label="限额周期">
+                  <Select value={it.tweetSubmission?.period || "day"} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.period", value)} options={[{ value: "day", label: "每天" }, { value: "week", label: "每周" }]} />
+                </Field>
+              </Col>
+              <Col xs={12} md={8}>
+                <Field label="周期内最多提交">
+                  <InputNumber min={tweetSubmissionContract.periodLimit.min} max={tweetSubmissionContract.periodLimit.max} value={it.tweetSubmission?.periodLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.periodLimit", value)} addonAfter="篇" />
+                </Field>
+              </Col>
+              <Col xs={12} md={8}>
+                <Field label="累计最多提交">
+                  <InputNumber min={tweetSubmissionContract.totalLimit.min} max={tweetSubmissionContract.totalLimit.max} value={it.tweetSubmission?.totalLimit} onChange={(value) => update("customLeaderboards", i, "tweetSubmission.totalLimit", value)} addonAfter="篇" />
+                </Field>
+              </Col>
+            </Row>
+            {addressCollectionMode === "leaderboard_submission" ? (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--admin-border-soft, #d9d9d9)" }}>
+                <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 700 }}>
+                  首次投稿地址配置
+                  <span style={{ marginLeft: 8, color: "#8c8c8c", fontWeight: 400 }}>
+                    仅做格式校验；不连接钱包、不签名，用户确认后永久锁定。
+                  </span>
+                </div>
+                <Row gutter={[12, 12]}>
+                  <Col xs={24} md={16}>
+                    <Field label="支持的链类型">
+                      <Select
+                        mode="multiple"
+                        allowClear
+                        placeholder="至少选择一个"
+                        value={it.tweetSubmission?.addressInput?.supportedChains || []}
+                        options={LEADERBOARD_ADDRESS_CHAIN_OPTIONS}
+                        onChange={(values) => {
+                          update("customLeaderboards", i, "tweetSubmission.addressInput.supportedChains", values);
+                          if (it.tweetSubmission?.addressInput?.recommendedChain && !values.includes(it.tweetSubmission.addressInput.recommendedChain)) {
+                            update("customLeaderboards", i, "tweetSubmission.addressInput.recommendedChain", undefined);
+                          }
+                        }}
+                      />
+                    </Field>
+                  </Col>
+                  <Col xs={24} md={8}>
+                    <Field label="推荐链（可选）">
+                      <Select
+                        allowClear
+                        placeholder="不指定"
+                        value={it.tweetSubmission?.addressInput?.recommendedChain}
+                        options={LEADERBOARD_ADDRESS_CHAIN_OPTIONS.filter((option) => it.tweetSubmission?.addressInput?.supportedChains?.includes(option.value))}
+                        onChange={(value) => update("customLeaderboards", i, "tweetSubmission.addressInput.recommendedChain", value)}
+                      />
+                    </Field>
+                  </Col>
+                  {([
+                    ["label", "输入框名称", "例如：活动奖励收款地址"],
+                    ["placeholder", "占位文案", "例如：请输入奖励收款地址"],
+                    ["helpText", "提示语", "例如：获奖后奖励将发放至此地址"],
+                    ["confirmationText", "确认文案", "例如：我已核对地址，提交后不可修改"],
+                  ] as const).flatMap(([field, fieldLabel, placeholder]) => ([
+                    <Col xs={24} md={12} key={`${field}-zh`}>
+                      <Field label={`${fieldLabel}（中文）`}>
+                        <Input value={it.tweetSubmission?.addressInput?.[field]?.zh || ""} placeholder={placeholder} onChange={(event) => update("customLeaderboards", i, `tweetSubmission.addressInput.${field}.zh`, event.target.value)} />
+                      </Field>
+                    </Col>,
+                    <Col xs={24} md={12} key={`${field}-en`}>
+                      <Field label={`${fieldLabel}（English）`}>
+                        <Input value={it.tweetSubmission?.addressInput?.[field]?.en || ""} placeholder="Required" onChange={(event) => update("customLeaderboards", i, `tweetSubmission.addressInput.${field}.en`, event.target.value)} />
+                      </Field>
+                    </Col>,
+                  ]))}
+                </Row>
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
       <div

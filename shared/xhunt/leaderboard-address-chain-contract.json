@@ -1,0 +1,26 @@
+{
+  "addressMaxLength": 256,
+  "chains": [
+    {
+      "id": "bsc",
+      "label": {
+        "zh": "BNB Smart Chain (BSC)",
+        "en": "BNB Smart Chain (BSC)"
+      }
+    },
+    {
+      "id": "solana",
+      "label": {
+        "zh": "Solana",
+        "en": "Solana"
+      }
+    },
+    {
+      "id": "sui",
+      "label": {
+        "zh": "Sui",
+        "en": "Sui"
+      }
+    }
+  ]
+}

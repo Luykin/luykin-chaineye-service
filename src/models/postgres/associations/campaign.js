@@ -6,6 +6,7 @@ function setupCampaignAssociations({
   MantleRegistration,
   MantleRegistration2,
   CampaignRegistration,
+  XhuntCampaignLeaderboardAddressBinding,
   XhuntCampaignTweetSubmission,
   XPrivateMessage,
 }) {
@@ -39,6 +40,23 @@ function setupCampaignAssociations({
     as: "xHuntUser",
   });
 
+  XHuntUser.hasMany(XhuntCampaignLeaderboardAddressBinding, {
+    foreignKey: "xHuntUserId",
+    as: "campaignLeaderboardAddressBindings",
+  });
+  XhuntCampaignLeaderboardAddressBinding.belongsTo(XHuntUser, {
+    foreignKey: "xHuntUserId",
+    as: "xHuntUser",
+  });
+  CampaignRegistration.hasMany(XhuntCampaignLeaderboardAddressBinding, {
+    foreignKey: "campaignRegistrationId",
+    as: "leaderboardAddressBindings",
+  });
+  XhuntCampaignLeaderboardAddressBinding.belongsTo(CampaignRegistration, {
+    foreignKey: "campaignRegistrationId",
+    as: "campaignRegistration",
+  });
+
   XHuntUser.hasMany(XhuntCampaignTweetSubmission, {
     foreignKey: "xHuntUserId",
     as: "campaignTweetSubmissions",
@@ -54,6 +72,14 @@ function setupCampaignAssociations({
   XhuntCampaignTweetSubmission.belongsTo(CampaignRegistration, {
     foreignKey: "campaignRegistrationId",
     as: "campaignRegistration",
+  });
+  XhuntCampaignLeaderboardAddressBinding.hasMany(XhuntCampaignTweetSubmission, {
+    foreignKey: "addressBindingId",
+    as: "tweetSubmissions",
+  });
+  XhuntCampaignTweetSubmission.belongsTo(XhuntCampaignLeaderboardAddressBinding, {
+    foreignKey: "addressBindingId",
+    as: "addressBinding",
   });
 
   // XPrivateMessage 关系（私信）
