@@ -132,7 +132,13 @@ function enforceProxyPathAllowlist(req, res, next) {
 }
 
 // 代理请求处理函数
-async function proxyRequest(req, res, targetUrl, transformJson = null) {
+async function proxyRequest(
+  req,
+  res,
+  targetUrl,
+  transformJson = null,
+  recoverErrorJson = null
+) {
   try {
     // 需要保留的 header 列表（忽略大小写，支持部分匹配）
     const HEADERS_TO_PRESERVE = [
@@ -246,20 +252,8 @@ async function proxyRequest(req, res, targetUrl, transformJson = null) {
       return res.status(statusCode).json(redirectData);
     }
 
-    // 对于错误状态码（400+），打印详细的错误信息
+    // 对于错误状态码（400+），默认原样返回；个别接口可将预期错误恢复为成功空数据。
     if (isError) {
-      console.error(
-        `目标服务器返回错误: ${statusCode} ${response.statusText}`,
-        {
-          url: targetUrl,
-          method: req.method,
-          status: statusCode,
-          statusText: response.statusText,
-          contentType: contentType,
-          errorBody: responseText.substring(0, 2000), // 打印前 2000 字符，包含完整错误信息
-        }
-      );
-
       // 尝试解析为 JSON，如果失败则返回错误文本
       let errorData;
       if (isJson) {
@@ -279,6 +273,31 @@ async function proxyRequest(req, res, targetUrl, transformJson = null) {
           details: responseText || `服务器返回了 ${statusCode} 状态码`,
         };
       }
+
+      if (typeof recoverErrorJson === "function") {
+        try {
+          const recoveredData = await recoverErrorJson(errorData, statusCode);
+          if (recoveredData !== null && recoveredData !== undefined) {
+            ensureCorsHeaders(req, res);
+            setBrowserCacheHeaders(res, req);
+            return res.status(200).json(recoveredData);
+          }
+        } catch (recoverErr) {
+          console.warn("Proxy error response recovery warning:", recoverErr);
+        }
+      }
+
+      console.error(
+        `目标服务器返回错误: ${statusCode} ${response.statusText}`,
+        {
+          url: targetUrl,
+          method: req.method,
+          status: statusCode,
+          statusText: response.statusText,
+          contentType: contentType,
+          errorBody: responseText.substring(0, 2000), // 打印前 2000 字符，包含完整错误信息
+        }
+      );
 
       // 设置 CORS 头
       ensureCorsHeaders(req, res);
@@ -768,8 +787,15 @@ router.get(
       getTargetUrl(req, "fetch/twitter/kol_interactions")
     );
     targetUrl.searchParams.set("limit", "1");
-    await proxyRequest(req, res, targetUrl.toString(), (data) =>
-      buildSocialCircleAvailabilityResponse(data)
+    await proxyRequest(
+      req,
+      res,
+      targetUrl.toString(),
+      (data) => buildSocialCircleAvailabilityResponse(data),
+      (_data, statusCode) =>
+        statusCode === 404
+          ? buildSocialCircleAvailabilityResponse({ code: 404 })
+          : null
     );
   }
 );

@@ -106,6 +106,70 @@ test("only the social-circle detail route uses the quota middleware", () => {
   );
 });
 
+test("availability converts an upstream 404 into an empty successful response", async () => {
+  process.env.PG_HOST ||= "127.0.0.1";
+  process.env.PG_DATABASE ||= "test";
+  process.env.PG_USERNAME ||= "test";
+  process.env.PG_PASSWORD ||= "test";
+
+  const router = require("../src/xhunt/api/proxy");
+  const availabilityRoute = router.stack.find(
+    (layer) =>
+      layer.route?.path ===
+      "/public/fetch/twitter/kol_interactions/availability",
+  );
+  const routeHandler = availabilityRoute.route.stack.at(-1).handle;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  let statusCode;
+  let responseBody;
+  const responseHeaders = new Map();
+
+  global.fetch = async () =>
+    new Response(JSON.stringify({ code: 404, message: "not found" }), {
+      status: 404,
+      headers: { "content-type": "application/json" },
+    });
+  console.error = () => {};
+
+  try {
+    await routeHandler(
+      {
+        method: "GET",
+        path: "/public/fetch/twitter/kol_interactions/availability",
+        query: { username: "no_data" },
+        headers: {},
+      },
+      {
+        setHeader(name, value) {
+          responseHeaders.set(String(name).toLowerCase(), value);
+        },
+        hasHeader(name) {
+          return responseHeaders.has(String(name).toLowerCase());
+        },
+        status(value) {
+          statusCode = value;
+          return this;
+        },
+        json(value) {
+          responseBody = value;
+          return this;
+        },
+      },
+    );
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(statusCode, 200);
+  assert.deepEqual(responseBody, {
+    code: 200,
+    message: "success",
+    data: { available: false },
+  });
+});
+
 test("valid social-circle data atomically consumes one handler", async () => {
   const calls = [];
   const redisClient = {
