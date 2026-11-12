@@ -514,7 +514,9 @@ vipLastApiOrderNo = NULL
 - `XHuntUserProSubscriptions` 表、模型注册和关联不存在。
 - 通用 DB 管理和 PostgreSQL 备份配置不再引用旧 Pro 表。
 - Proxy、SSE、Ghost Following 不再包含旧 Pro 查询或判断。
-- `/auth/me` 不再返回 `isPro` 字段。
+- `/auth/me` 始终返回 `isPro: false`，并继续返回 `proExpiryTime: null`、`isLegacyPro: false`。
+- SSE `/feeds` 的 `connection_established` 事件始终返回 `isPro: false`。
+- `isPro` 不会因用户是 VIP 而变成 `true`。
 - Ghost Following 的 VIP 配额仍按新 VIP 正常工作。
 - VIP 删帖裁剪不受删除旧 Pro 分支影响。
 - 全仓库不存在可执行的旧 Pro 开通、查询或鉴权链路。
@@ -539,7 +541,8 @@ vipLastApiOrderNo = NULL
 | `VipManagementPage.tsx` | VIP 只读表格、分页、筛选、来源与时间展示 |
 | `stats.js` | 删除旧 Pro 开通和查询路由 |
 | `pro-status.js` 及调用方 | 移除旧 Pro 查询和中间件挂载 |
-| `auth.js` | 清理已废弃的 Pro 注释代码 |
+| `auth.js` | 清理旧 Pro 计算和注释代码，保留固定为 `false` 的 `isPro` 兼容字段 |
+| `sse.js` | 移除旧 Pro 门槛判断，连接事件固定返回 `isPro: false` |
 | 模型与关联 | 删除 `XHuntUserProSubscription` 模型、注册和关联 |
 | DB Admin 与备份配置 | 移除旧 Pro 表引用 |
 | 测试 | 幂等、并发、到期、旧 Pro 完整移除和回归测试 |
@@ -554,5 +557,6 @@ vipLastApiOrderNo = NULL
 4. 0.5 天至 5 年只作为合法范围校验；越界请求被拒绝，不由本服务修正。
 5. 管理后台只关闭 VIP 写入；内测名单继续保留新增、修改和删除能力。
 6. 首期新 VIP 暂不自动同步 Nacos 金丝雀或 E2E 投放权限；这不是永久解除，后续必须补充包含到期回收、重试和对账能力的统一关联方案。
-7. 旧 Pro 从未真实上线，无需保留历史数据、兼容接口或权益补偿；代码链路和 `XHuntUserProSubscriptions` 表直接完整移除。
+7. 旧 Pro 从未真实上线，无需保留历史数据、开通/查询接口或权益补偿；代码链路和 `XHuntUserProSubscriptions` 表直接完整移除。
 8. 不使用 `sourceVersion`；调用方负责同一 X ID 的严格调用顺序，不同订单按本服务最后成功处理者直接覆盖当前过期时间。
+9. `isPro` 是保留的响应兼容字段，所有需要返回它的位置始终返回 `false`，且与 `isVip` 无关。
