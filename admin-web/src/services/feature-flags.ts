@@ -5,6 +5,7 @@ import type {
   FeatureFlagsResponse,
   VipListItem,
   VipListsResponse,
+  VipMembershipsResponse,
   VipTwitterIdSyncResponse,
 } from "@/types/feature-flags";
 
@@ -40,6 +41,23 @@ export async function publishBannerConfig(adBanners: AdBannerConfig[]) {
 
 export async function fetchVipLists() {
   return apiRequest<VipListsResponse>("/api/xhunt/stats/vip-lists");
+}
+
+export async function fetchVipMemberships(params: {
+  page: number;
+  pageSize: number;
+  status: "active" | "expired" | "all";
+  origin?: "legacy_manual" | "membership_api";
+  keyword?: string;
+}) {
+  const search = new URLSearchParams({
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+    status: params.status,
+  });
+  if (params.origin) search.set("origin", params.origin);
+  if (params.keyword) search.set("keyword", params.keyword);
+  return apiRequest<VipMembershipsResponse>(`/api/xhunt/stats/vip-memberships?${search.toString()}`);
 }
 
 export async function fetchFeatureTranslations() {

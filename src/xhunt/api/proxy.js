@@ -5,7 +5,6 @@ const {
   authenticateTokenOptional,
 } = require("../middleware/auth");
 const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
-const { checkProStatus } = require("../middleware/pro-status");
 const { applyProDataFiltering } = require("../utils/pro-data-filtering");
 const {
   shouldBlockLegacyUnfollowRelation,
@@ -745,11 +744,10 @@ router.all(
   }
 );
 
-// 代理路由 - 账户profile接口（需要 Pro 状态检查）
+// 代理路由 - 账户 profile 接口
 router.all(
   "/public/fetch/twitter/user",
   authenticateTokenOptional,
-  checkProStatus,
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {

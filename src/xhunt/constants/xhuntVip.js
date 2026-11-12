@@ -9,10 +9,11 @@
 
 const { XhuntVipTestUser } = require("../../models/postgres-start");
 const { getRedisClient } = require("../../lib/redisClient");
+const { Op } = require("sequelize");
 
-const XHUNT_VIP = new Set();
+const XHUNT_VIP = new Map();
 const INTERNAL_TEST_USERS = new Set();
-const XHUNT_VIP_IDS = new Set();
+const XHUNT_VIP_IDS = new Map();
 const INTERNAL_TEST_USER_IDS = new Set();
 
 let loaded = false;
@@ -24,7 +25,13 @@ const REFRESH_CHANNEL = "xhunt:vip:refresh";
 async function loadVipLists() {
   try {
     const rows = await XhuntVipTestUser.findAll({
-      attributes: ["username", "twitterId", "listType"],
+      attributes: ["username", "twitterId", "listType", "vipExpiresAt"],
+      where: {
+        [Op.or]: [
+          { listType: "internal_test" },
+          { listType: "vip", vipExpiresAt: { [Op.gt]: new Date() } },
+        ],
+      },
       raw: true,
     });
 
@@ -38,8 +45,10 @@ async function loadVipLists() {
       const twitterId = String(row.twitterId || "").trim();
       if (!name && !twitterId) continue;
       if (row.listType === "vip") {
-        if (name) XHUNT_VIP.add(name);
-        if (twitterId) XHUNT_VIP_IDS.add(twitterId);
+        const expiresAt = new Date(row.vipExpiresAt).getTime();
+        if (!Number.isFinite(expiresAt)) continue;
+        if (name) XHUNT_VIP.set(name, expiresAt);
+        if (twitterId) XHUNT_VIP_IDS.set(twitterId, expiresAt);
       } else if (row.listType === "internal_test") {
         if (name) INTERNAL_TEST_USERS.add(name);
         if (twitterId) INTERNAL_TEST_USER_IDS.add(twitterId);
@@ -137,8 +146,8 @@ function isXHuntVipHandle(handle) {
   const raw = normalizeIdentifier(handle);
   if (!raw) return false;
   // 优先兼容 Twitter ID，其次兼容旧的 username 判断
-  if (XHUNT_VIP_IDS.has(raw)) return true;
-  return XHUNT_VIP.has(raw.toLowerCase());
+  const expiresAt = XHUNT_VIP_IDS.get(raw) || XHUNT_VIP.get(raw.toLowerCase());
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
 }
 
 function isInternalTestUserHandle(handle) {

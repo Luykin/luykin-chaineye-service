@@ -18,7 +18,6 @@ stubModule("../src/xhunt/middleware/auth", {
 stubModule("../src/xhunt/middleware/aiContentRateLimit", {
   aiContentRateLimit: pass,
 });
-stubModule("../src/xhunt/middleware/pro-status", { checkProStatus: pass });
 stubModule("../src/xhunt/constants/xhuntVip", {
   isRequestXHuntVip: () => {
     vipChecks += 1;

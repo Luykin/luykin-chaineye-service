@@ -48,9 +48,6 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定 Rootdata 页面事件
     bindRootdataEvents();
 
-    // 绑定 Pro 用户管理事件
-    bindProManagementEvents();
-
     // 绑定 数据库备份 事件
     bindBackupEvents();
 
@@ -93,7 +90,6 @@ function initTabs() {
     messages: "messages",
     "data-export": "export:users",
     "reviews-management": "reviews-management",
-    "pro-management": "pro-management",
     "perf-monitor": "perf-monitor",
     backup: "backup:operate",
     "server-command": "server:execute",
@@ -177,9 +173,6 @@ function handleTabInit(tabId) {
   switch (tabId) {
     case "redis-management":
       initRedisManagement();
-      break;
-    case "pro-management":
-      initProManagement();
       break;
     case "reviews-management":
       initReviewsManagement();
@@ -855,14 +848,6 @@ function bindReviewsManagementEvents() {
   }
 }
 
-// 绑定 Pro 用户管理事件
-function bindProManagementEvents() {
-  const loadBtn = document.getElementById("pro-load-btn");
-  if (loadBtn) {
-    loadBtn.addEventListener("click", () => loadProUsersList(1));
-  }
-}
-
 // 绑定备份事件
 function bindBackupEvents() {
   const backupBtn = document.getElementById("backup-now-btn");
@@ -979,44 +964,6 @@ function initReviewsManagement() {
   loadReviewsList();
 }
 
-// 加载 Pro 用户列表
-async function loadProUsersList(page = 1) {
-  const container = document.getElementById("pro-list-container");
-  if (!container) return;
-
-  container.innerHTML = "<p>加载中...</p>";
-
-  try {
-    const response = await fetch(`/api/admin/pro-users/list?page=${page}`);
-    const result = await response.json();
-
-    if (result.success) {
-      renderProUsersList(result.data);
-    } else {
-      container.innerHTML = "<p>加载失败</p>";
-    }
-  } catch (error) {
-    console.error("加载 Pro 用户列表失败:", error);
-    container.innerHTML = "<p>加载失败</p>";
-  }
-}
-
-// 渲染 Pro 用户列表
-function renderProUsersList(data) {
-  const container = document.getElementById("pro-list-container");
-  if (!data || data.length === 0) {
-    container.innerHTML = "<p>暂无数据</p>";
-    return;
-  }
-
-  container.innerHTML = "<p>已加载 " + data.length + " 位 Pro 用户</p>";
-}
-
-// 初始化 Pro 用户管理
-function initProManagement() {
-  loadProUsersList(1);
-}
-
 // 立即备份
 async function handleBackupNow() {
   try {
@@ -1064,7 +1011,6 @@ function renderSidebarTabs() {
     'messages': 'messages',
     'data-export': 'export:users',
     'reviews-management': 'reviews-management',
-    'pro-management': 'pro-management',
     'vip-management': 'vip-management',
     'perf-monitor': 'perf-monitor',
     'backup': 'backup:operate',
@@ -1745,7 +1691,6 @@ const TAB_META_MAP = {
   'messages': { name: '私信管理', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', color: '#3b82f6' },
   'data-export': { name: '数据导出', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5M12 15V3', color: '#8b5cf6' },
   'reviews-management': { name: '点评管理', icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z', color: '#f59e0b' },
-  'pro-management': { name: 'Pro 管理', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z', color: '#10b981' },
   'perf-monitor': { name: '性能监控', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', color: '#ec4899' },
   'backup': { name: '备份管理', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12', color: '#06b6d4' },
   'server-command': { name: '服务器命令', icon: 'M4 17l6-6-6-6M12 19h8', color: '#f97316' },
@@ -1881,7 +1826,7 @@ function switchToRecentTab(tabId) {
     "device-monitor": "device-status:read", "version-stats": "version-stats",
     "url-stats": "url-stats", "generic-stats": "generic-stats", "security-violations": "security-violations",
     "messages": "messages", "data-export": "export:users",
-    "reviews-management": "reviews-management", "pro-management": "pro-management",
+    "reviews-management": "reviews-management",
     "perf-monitor": "perf-monitor", "backup": "backup:operate",
     "server-command": "server:execute", "daily-report-email": "daily-report:send",
     "admin-audit-logs": "audit-logs:read", "nacos-messages": "nacos-messages",

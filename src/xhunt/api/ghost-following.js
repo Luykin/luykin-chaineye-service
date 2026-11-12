@@ -3,7 +3,6 @@ const { body } = require("express-validator");
 const axios = require("axios");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
-const { checkProStatusRequired } = require("../middleware/pro-status");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
   getGhostFollowingAnalyzeQuotaKey,
@@ -804,7 +803,6 @@ router.post(
   "/analyze",
   [
     authenticateToken,
-    checkProStatusRequired,
     checkCrawlerQuota,
     concurrentUserLimit,
     body("user_id")
@@ -1073,7 +1071,7 @@ router.post(
  */
 router.get(
   "/quota",
-  [authenticateToken, checkProStatusRequired],
+  [authenticateToken],
   async (req, res) => {
     try {
       const userId = req.user.id;// Pro 状态（用于权限检查）
@@ -1334,7 +1332,6 @@ router.post(
   "/following",
   [
     authenticateToken,
-    checkProStatusRequired,
     checkCrawlerQuota,
     body("user_id")
       .trim()

@@ -9,6 +9,8 @@ const { loadVipLists, notifyRefresh } = require("../../constants/xhuntVip");
 const { logAdminAction } = require("./shared");
 const { DATA_SERVICE_BASE_URL } = require("../../constants/dataService");
 const { nacosRequest } = require("../../services/nacosConfigClient");
+const vipMembershipService = require("../../services/vipMembershipService");
+const { Op } = require("sequelize");
 
 const router = express.Router();
 const TWITTER_USER_LOOKUP_URL = `${DATA_SERVICE_BASE_URL}/fetch/twitter/user`;
@@ -38,7 +40,7 @@ function normalizeUsername(value) {
 function serializeVipUser(row) {
   return {
     id: row.id,
-    username: row.username,
+    username: row.username || null,
     twitterId: row.twitterId || null,
   };
 }
@@ -123,26 +125,19 @@ async function syncVipListsToFeatureFlags() {
 
   const rows = await XhuntVipTestUser.findAll({
     attributes: ["username", "listType"],
+    where: { listType: "internal_test" },
   });
-  const vipNames = rows.filter((row) => row.listType === "vip").map((row) => row.username);
   const internalTestNames = rows
     .filter((row) => row.listType === "internal_test")
     .map((row) => row.username);
 
-  const canaryConfig =
-    config.canaryConfig && typeof config.canaryConfig === "object" && !Array.isArray(config.canaryConfig)
-      ? config.canaryConfig
-      : {};
   const testConfig =
     config.testConfig && typeof config.testConfig === "object" && !Array.isArray(config.testConfig)
       ? config.testConfig
       : {};
 
-  const existingCanaries = Array.isArray(canaryConfig.canaries) ? canaryConfig.canaries : [];
   const existingTesters = Array.isArray(testConfig.testers) ? testConfig.testers : [];
-  canaryConfig.canaries = Array.from(new Set([...existingCanaries, ...vipNames]));
   testConfig.testers = Array.from(new Set([...existingTesters, ...internalTestNames]));
-  config.canaryConfig = canaryConfig;
   config.testConfig = testConfig;
 
   const form = new URLSearchParams({
@@ -181,6 +176,22 @@ async function syncMissingTwitterId(row) {
 }
 
 router.get(
+  "/vip-memberships",
+  adminAuth,
+  requirePermission("vip-management"),
+  async (req, res) => {
+    try {
+      const data = await vipMembershipService.listForAdmin(req.query);
+      res.set("Cache-Control", "no-store");
+      return res.json({ success: true, data });
+    } catch (error) {
+      console.error("[vip-memberships] 获取失败:", error);
+      return res.status(500).json({ success: false, error: error.message || "获取 VIP 会员失败" });
+    }
+  }
+);
+
+router.get(
   "/vip-lists",
   adminAuth,
   requirePermission(["vip-management", "feature_flags_config"]),
@@ -188,6 +199,12 @@ router.get(
     try {
       const rows = await XhuntVipTestUser.findAll({
         attributes: ["id", "username", "twitterId", "listType"],
+        where: {
+          [Op.or]: [
+            { listType: "internal_test" },
+            { listType: "vip", vipExpiresAt: { [Op.gt]: new Date() } },
+          ],
+        },
         order: [
           ["listType", "ASC"],
           ["username", "ASC"],
@@ -218,6 +235,7 @@ router.post(
     const { force = true } = req.body || {};
     try {
       const rows = await XhuntVipTestUser.findAll({
+        where: { listType: "internal_test" },
         order: [
           ["listType", "ASC"],
           ["username", "ASC"],
@@ -344,6 +362,9 @@ async function handleUpdateTwitterId(req, res) {
     if (!row) {
       return res.status(404).json({ success: false, error: "名单用户不存在" });
     }
+    if (row.listType === "vip") {
+      return res.status(403).json({ success: false, error: "VIP 会员只允许通过内部会员接口维护" });
+    }
 
     const rawTwitterId = req.body?.twitterId;
     const normalizedTwitterId =
@@ -412,6 +433,9 @@ router.post(
       if (!["vip", "internal_test"].includes(listType)) {
         return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
       }
+      if (listType === "vip") {
+        return res.status(403).json({ success: false, error: "VIP 会员只允许通过内部会员接口开通" });
+      }
 
       const normalizedUsername = normalizeUsername(username);
       if (!normalizedUsername) {
@@ -478,6 +502,9 @@ router.post(
       const { listType, username, twitterId } = req.body || {};
       if (!["vip", "internal_test"].includes(listType)) {
         return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
+      }
+      if (listType === "vip") {
+        return res.status(403).json({ success: false, error: "VIP 会员只允许通过内部会员接口开通" });
       }
 
       const normalizedUsername = normalizeUsername(username);
@@ -560,6 +587,9 @@ router.post(
       row = await XhuntVipTestUser.findByPk(id);
       if (!row) {
         return res.status(404).json({ success: false, error: "名单用户不存在" });
+      }
+      if (row.listType === "vip") {
+        return res.status(403).json({ success: false, error: "VIP 会员不支持后台认证者操作" });
       }
 
       const userId = String(row.twitterId || "").trim();
@@ -651,6 +681,9 @@ router.delete(
       const row = await XhuntVipTestUser.findByPk(id);
       if (!row) {
         return res.status(404).json({ success: false, error: "名单用户不存在" });
+      }
+      if (row.listType === "vip") {
+        return res.status(403).json({ success: false, error: "VIP 会员只允许通过内部会员接口维护" });
       }
 
       const message = `listType=${row.listType} username=${row.username}`;

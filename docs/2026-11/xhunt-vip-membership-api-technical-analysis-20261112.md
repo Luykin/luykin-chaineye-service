@@ -1,7 +1,7 @@
 # XHunt VIP 统一会员接口与旧 Pro 订阅移除技术分析
 
 > 日期：2026-11-12  
-> 状态：技术方案，业务口径已确认，待实施  
+> 状态：已实施代码，待用户确认迁移与部署
 > 涉及范围：XHunt 插件 VIP、VIP 管理后台、内部会员服务接口、旧 Pro 订阅链路
 
 ## 1. 结论
@@ -475,6 +475,15 @@ vipLastApiOrderNo = NULL
 - `vip:force-expire`
 
 初期会员服务只授予 `vip:grant` 和 `vip:read`。
+
+实现使用以下环境变量注入哈希凭证和限流，不保存明文 token：
+
+```text
+XHUNT_VIP_SERVICE_CREDENTIALS=[{"clientKey":"membership-service","tokenHash":"<sha256-hex>","scopes":["vip:grant","vip:read"]}]
+XHUNT_VIP_API_RATE_LIMIT_PER_MINUTE=120
+```
+
+凭证数组允许同一 `clientKey` 暂时配置多个 token 哈希，以便无中断轮换。`vip:force-expire` 只应配置给单独的高权限凭证。
 
 ## 12. 发布顺序
 

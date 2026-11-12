@@ -12,7 +12,6 @@ const XhuntCampaignLeaderboardAddressBindingModel = require("../../xhunt/models/
 const XhuntCampaignTweetSubmissionModel = require("../../xhunt/models/XhuntCampaignTweetSubmission");
 const XPrivateMessageModel = require("../../xhunt/models/XPrivateMessage");
 const DailyActiveUserModel = require("../../xhunt/models/DailyActiveUser");
-const XHuntUserProSubscriptionModel = require("../../xhunt/models/XHuntUserProSubscription");
 const VersionRequestStatsModel = require("../../xhunt/models/VersionRequestStats");
 const UrlRequestStatsModel = require("../../xhunt/models/UrlRequestStats");
 const GenericStatEventModel = require("../../xhunt/models/GenericStatEvent");
@@ -25,6 +24,8 @@ const XhuntAdminDbTableGrantModel = require("../../xhunt/models/XhuntAdminDbTabl
 const XhuntNacosConfigSnapshotModel = require("../../xhunt/models/XhuntNacosConfigSnapshot");
 const XhuntExternalLeaderboardAdapterModel = require("../../xhunt/models/XhuntExternalLeaderboardAdapter");
 const XhuntVipTestUserModel = require("../../xhunt/models/XhuntVipTestUser");
+const XhuntVipOperationModel = require("../../xhunt/models/XhuntVipOperation");
+const XhuntVipApiCallLogModel = require("../../xhunt/models/XhuntVipApiCallLog");
 const XHuntUserSettingsModel = require("../../xhunt/models/XHuntUserSettings");
 const XhuntUserTagModel = require("../../xhunt/models/XhuntUserTag");
 const XhuntSpecialUserMarkerModel = require("../../xhunt/models/XhuntSpecialUserMarker");
@@ -93,7 +94,6 @@ function initModels(pgInstance) {
     XhuntCampaignTweetSubmission: XhuntCampaignTweetSubmissionModel(pgInstance),
     XPrivateMessage: XPrivateMessageModel(pgInstance),
     DailyActiveUser: DailyActiveUserModel(pgInstance),
-    XHuntUserProSubscription: XHuntUserProSubscriptionModel(pgInstance),
     VersionRequestStats: VersionRequestStatsModel(pgInstance),
     UrlRequestStats: UrlRequestStatsModel(pgInstance),
     GenericStatEvent: GenericStatEventModel(pgInstance),
@@ -106,6 +106,8 @@ function initModels(pgInstance) {
     XhuntNacosConfigSnapshot: XhuntNacosConfigSnapshotModel(pgInstance),
     XhuntExternalLeaderboardAdapter: XhuntExternalLeaderboardAdapterModel(pgInstance),
     XhuntVipTestUser: XhuntVipTestUserModel(pgInstance),
+    XhuntVipOperation: XhuntVipOperationModel(pgInstance),
+    XhuntVipApiCallLog: XhuntVipApiCallLogModel(pgInstance),
     XHuntUserSettings: XHuntUserSettingsModel(pgInstance),
     XhuntUserTag: XhuntUserTagModel(pgInstance),
     XhuntSpecialUserMarker: XhuntSpecialUserMarkerModel(pgInstance),

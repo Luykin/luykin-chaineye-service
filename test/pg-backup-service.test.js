@@ -7,6 +7,10 @@ const zlib = require("node:zlib");
 
 const pgBackupService = require("../src/services/pg-backup-service");
 
+test("does not back up the removed legacy Pro subscription table", () => {
+  assert.equal(pgBackupService.tablesToBackup.includes("XHuntUserProSubscriptions"), false);
+});
+
 const SAMPLE_DUMP = [
   "COPY public.\"Projects\" (id, name) FROM stdin;",
   "1\tExample",

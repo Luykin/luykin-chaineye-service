@@ -50,8 +50,34 @@ export interface FeatureFlagsPublishResponse {
 
 export interface VipListItem {
   id: number;
-  username: string;
+  username: string | null;
   twitterId?: string | null;
+}
+
+export interface VipMembershipItem {
+  id: number;
+  twitterId: string;
+  username: string | null;
+  status: "active" | "expired";
+  expiresAt: string;
+  origin: "legacy_manual" | "membership_api";
+  lastApiGrantedAt: string | null;
+  lastApiOrderNo: string | null;
+  forceExpiredAt: string | null;
+  createdAt: string;
+}
+
+export interface VipMembershipsResponse {
+  success: boolean;
+  data: {
+    items: VipMembershipItem[];
+    pagination: {
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  };
 }
 
 export interface VipTwitterIdSyncResponse {

@@ -10,18 +10,11 @@ const {
   applyProDataFiltering,
 } = require("../src/xhunt/utils/pro-data-filtering");
 const {
-  PRO_ACCESS_MIN_EXTENSION_VERSION,
-} = require("../src/xhunt/constants/pro");
-const {
   loadVipLists,
 } = require("../src/xhunt/constants/xhuntVip");
 const {
   XhuntVipTestUser,
 } = require("../src/models/postgres-start");
-
-test("uses one shared Pro access version threshold", () => {
-  assert.equal(PRO_ACCESS_MIN_EXTENSION_VERSION, "99.99.99");
-});
 
 test("follow relation always returns the complete upstream payload", () => {
   const payload = {
@@ -43,7 +36,7 @@ test("follow relation always returns the complete upstream payload", () => {
     {
       path: "/public/fetch/twitter/follow_relation",
       headers: {
-        "x-extension-version": PRO_ACCESS_MIN_EXTENSION_VERSION,
+        "x-extension-version": "99.99.99",
       },
       isPro: false,
     },
@@ -69,6 +62,7 @@ test("deleted tweet response includes the request VIP status", async () => {
       username: "vip-user",
       twitterId: "123456",
       listType: "vip",
+      vipExpiresAt: new Date(Date.now() + 60_000),
     },
   ];
 
@@ -121,6 +115,7 @@ test("deleted tweet response preserves every upstream item with role-based maski
       username: "vip-user",
       twitterId: "123456",
       listType: "vip",
+      vipExpiresAt: new Date(Date.now() + 60_000),
     },
     {
       username: "internal-user",

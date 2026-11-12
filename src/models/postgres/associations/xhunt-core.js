@@ -1,5 +1,5 @@
 /**
- * XHunt 核心业务模型关联 (用户、账号、点评、积分、备注、配置、Pro订阅)
+ * XHunt 核心业务模型关联（用户、账号、点评、积分、备注、配置）
  */
 function setupXhuntCoreAssociations({
   XHuntUser,
@@ -9,7 +9,6 @@ function setupXhuntCoreAssociations({
   XPointRecord,
   XPrivateNote,
   XHuntUserSettings,
-  XHuntUserProSubscription,
 }) {
   // 点评与用户关联
   XHuntUser.hasMany(XReviewForAccount, {
@@ -86,16 +85,6 @@ function setupXhuntCoreAssociations({
     as: "settings",
   });
   XHuntUserSettings.belongsTo(XHuntUser, {
-    foreignKey: "userId",
-    as: "user",
-  });
-
-  // Pro 订阅记录
-  XHuntUser.hasMany(XHuntUserProSubscription, {
-    foreignKey: "userId",
-    as: "proSubscriptions",
-  });
-  XHuntUserProSubscription.belongsTo(XHuntUser, {
     foreignKey: "userId",
     as: "user",
   });

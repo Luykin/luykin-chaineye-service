@@ -73,7 +73,6 @@ const tableMetadata = {
   XHuntHotVoteRecords: { label: "热门投票记录", description: "用户对热门投票话题提交的投票记录。" },
   XHuntHotVoteTopics: { label: "热门投票话题", description: "运营创建或同步的热门投票主题。" },
   XHuntKolCollaborations: { label: "KOL 商务资料", description: "KOL 的合作意愿、报价、收款地址与商务资料。" },
-  XHuntUserProSubscriptions: { label: "XHunt Pro 订阅", description: "用户付费 Pro 权益与订阅有效期记录。" },
   XHuntUserSettings: { label: "XHunt 用户设置", description: "XHunt 用户的偏好与个性化设置。" },
   XHuntUserTokens: { label: "XHunt 用户令牌", description: "旧版 XHunt 登录令牌、OAuth 信息与设备绑定记录。" },
   XHuntUsers: { label: "XHunt 用户", description: "旧版 XHunt 用户主体，主要关联 X（Twitter）身份。" },
@@ -93,6 +92,8 @@ const tableMetadata = {
   xhunt_special_user_markers: { label: "特殊用户标记", description: "为指定用户配置的运营、测试或功能标记。" },
   xhunt_user_tags: { label: "用户标签", description: "XHunt 用户的运营标签与分组信息。" },
   xhunt_vip_test_users: { label: "VIP / 内测用户", description: "VIP 和内部测试用户的白名单配置。" },
+  xhunt_vip_operations: { label: "VIP 会员操作", description: "内部会员接口成功执行的幂等业务命令与结果。" },
+  xhunt_vip_api_call_logs: { label: "VIP 接口调用日志", description: "内部会员接口每次 HTTP 调用的审计记录。" },
 
   EchohuntSocialListeningAccessAuditLogs: { label: "社媒监听访问审计", description: "Social Listening 的访问授权与操作审计记录。" },
   EchohuntSocialListeningAccountSignals: { label: "社媒监听账号信号", description: "社媒监听识别出的账号级动态和信号。" },
@@ -120,9 +121,22 @@ const tableOverrides = {
     },
   },
   xhunt_vip_test_users: {
+    allowCreate: false,
+    allowUpdate: false,
+    allowDelete: false,
     enumOptions: {
       listType: ["vip", "internal_test"],
     },
+  },
+  xhunt_vip_operations: {
+    allowCreate: false,
+    allowUpdate: false,
+    allowDelete: false,
+  },
+  xhunt_vip_api_call_logs: {
+    allowCreate: false,
+    allowUpdate: false,
+    allowDelete: false,
   },
 };
 

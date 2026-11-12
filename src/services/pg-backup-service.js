@@ -56,7 +56,6 @@ class PostgresBackupService {
     this.tablesToBackup = [
       "XHuntUsers",
       "XHuntUserTokens",
-      "XHuntUserProSubscriptions",
       "XAccounts",
       "XReviewForAccounts",
       "XPrivateNotes",

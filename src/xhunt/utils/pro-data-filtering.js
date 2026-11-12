@@ -1,12 +1,7 @@
-const { getVersionFromRequest, isVersionGreaterOrEqual } = require("./version");
-const { getXUserId, checkLegacyPro } = require("./legacy-pro");
 const {
   isRequestXHuntVip,
   isRequestInternalTestUser,
 } = require("../constants/xhuntVip");
-const {
-  PRO_ACCESS_MIN_EXTENSION_VERSION,
-} = require("../constants/pro");
 
 const DELETED_TWEET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DELETED_TWEET_HIDDEN_MESSAGE = "您暂时无法查看详细删帖内容";
@@ -111,16 +106,7 @@ function applyDeletedTweetFiltering(req, data) {
 }
 
 /**
- * Pro 用户数据裁切逻辑（统一管理）
- * 根据 req.isPro 状态和请求路径，对返回数据进行过滤
- *
- * 数据权限功能列表：
- * - 删帖功能：/public/fetch/tweet/deleted（内测用户查看全部详情，VIP 查看最近 24 小时详情，普通用户隐藏全部详情）
- * - 删除账户信息：/public/fetch/twitter/user（部分字段）
- * - 实时feeds流：后续实现
- * - 账户profile改变：/public/fetch/twitter/user（部分字段）
- *
- * 注意：除删帖接口外，只有版本号 >= 99.99.99 才会进行数据裁切。
+ * 保留代理层现有入口名称，仅处理仍在使用的删帖 VIP 裁剪。
  *
  * @param {express.Request} req - Express 请求对象
  * @param {any} data - 原始响应数据
@@ -134,85 +120,6 @@ function applyProDataFiltering(req, data) {
     return applyDeletedTweetFiltering(req, data);
   }
 
-  // 关注关系接口不做 Pro 或版本裁剪，始终原样返回上游数据。
-  if (path === "/public/fetch/twitter/follow_relation") {
-    return data;
-  }
-
-  // 检查版本号，如果版本号 < 99.99.99，直接返回原始数据，不进行裁切
-  const version = getVersionFromRequest(req);
-  if (
-    !version ||
-    !isVersionGreaterOrEqual(version, PRO_ACCESS_MIN_EXTENSION_VERSION)
-  ) {
-    return data;
-  }
-
-  // 如果是 Pro 用户，直接返回原始数据
-  if (req.isPro === true) {
-    return data;
-  }
-
-  // 检查是否是老用户 Pro（在活跃用户名单中且在 2025-12-29 之前）
-  // 优先使用 req.user.username（已验证的用户名），如果没有则使用 x-user-id
-  const username = req.user?.username || getXUserId(req);
-  const legacyProCheck = checkLegacyPro(username);
-  const isLegacyPro = legacyProCheck.isLegacyPro;
-
-  // 如果是老用户 Pro，不进行数据裁切，但添加提示信息
-  if (isLegacyPro) {
-    // 检查是否是需要特殊处理的接口
-    const needsLegacyMessage = path === "/public/fetch/twitter/user";
-
-    if (needsLegacyMessage && data && typeof data === "object") {
-      const result = { ...data };
-      result.legacyProMessage =
-        "You are a legacy user. As a thank you for your early support, you have access to complete data until December 29, 2025.";
-      return result;
-    }
-
-    // 其他接口直接返回原始数据
-    return data;
-  }
-
-  // 非 Pro 用户且不是老用户，根据路径进行数据裁切
-  // 1. 账户profile接口：/public/fetch/twitter/user
-  // 非 Pro 用户：将 profile_his.history 数组中每个对象只保留 name 字段
-  // 数据结构：{ code: 200, message: "get data success", data: { data: { profile_his: { history: [...] } } } }
-  if (path === "/public/fetch/twitter/user") {
-    if (data && typeof data === "object") {
-      const filtered = { ...data };
-
-      // 处理嵌套的 data.data.profile_his.history 数组
-      if (
-        filtered.data &&
-        typeof filtered.data === "object" &&
-        filtered.data.data &&
-        typeof filtered.data.data === "object" &&
-        filtered.data.data.profile_his &&
-        typeof filtered.data.data.profile_his === "object" &&
-        Array.isArray(filtered.data.data.profile_his.history)
-      ) {
-        // 遍历 history 数组，每个对象只保留 name 字段
-        filtered.data.data.profile_his.history =
-          filtered.data.data.profile_his.history.map((item) => {
-            if (item && typeof item === "object" && item.name !== undefined) {
-              return { name: item.name };
-            }
-            // 如果没有 name 字段，返回空对象
-            return {};
-          });
-      }
-
-      // 在 message 同级添加提示信息
-      filtered.proMessage = "Pro subscription required to get full information";
-
-      return filtered;
-    }
-    return data;
-  }
-
-  // 其他路径暂不处理，返回原始数据
   return data;
 }
 
