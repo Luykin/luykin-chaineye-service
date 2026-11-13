@@ -9,7 +9,11 @@ const axios = require("axios");
 
 // Rootdata API 配置
 const ROOTDATA_API_BASE = "https://api.rootdata.com/open";
-const ROOTDATA_API_KEY = "0TpF08MLXdb50VCGx1H8buExoMwgADbR";
+const ROOTDATA_API_KEY = process.env.ROOTDATA_API_KEY;
+
+if (!ROOTDATA_API_KEY) {
+  throw new Error("ROOTDATA_API_KEY is not configured");
+}
 
 /**
  * 从 URL 中提取 project_id

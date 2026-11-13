@@ -160,7 +160,6 @@ cd "$PROJECT_ROOT"
 
 "$TARGET_NODE" --check src/apiServer.js
 "$TARGET_NODE" --check src/crawlerServer.js
-"$TARGET_NODE" --check src/botServer.js
 "$TARGET_NODE" --check src/singletonJobsServer.js
 
 "$TARGET_NODE" -e '
@@ -199,7 +198,6 @@ env PATH="$TARGET_BIN:$SYSTEM_PATH" \
   "$TARGET_PM2" restart \
     luykin-chaineye-api \
     luykin-chaineye-crawler \
-    luykin-chaineye-bot \
     luykin-chaineye-jobs \
     --update-env
 
@@ -249,7 +247,6 @@ env PATH="$TARGET_BIN:$SYSTEM_PATH" \
   "$TARGET_PM2" logs \
     luykin-chaineye-api \
     luykin-chaineye-crawler \
-    luykin-chaineye-bot \
     luykin-chaineye-jobs \
     --lines 80 \
     --nostream
@@ -319,7 +316,6 @@ env PATH="$SYSTEM_PATH" \
   /usr/bin/node /usr/local/lib/node_modules/pm2/bin/pm2 restart \
     luykin-chaineye-api \
     luykin-chaineye-crawler \
-    luykin-chaineye-bot \
     luykin-chaineye-jobs \
     --update-env
 

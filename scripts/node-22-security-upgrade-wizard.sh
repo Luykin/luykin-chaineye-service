@@ -266,7 +266,6 @@ verify_expected_apps_online() {
     const expected = [
       "luykin-chaineye-api",
       "luykin-chaineye-crawler",
-      "luykin-chaineye-bot",
       "luykin-chaineye-jobs"
     ];
     process.stdin.on("data", (chunk) => { input += chunk; });
@@ -339,7 +338,6 @@ rollback_to_system_node() {
   pm2_system restart \
     luykin-chaineye-api \
     luykin-chaineye-crawler \
-    luykin-chaineye-bot \
     luykin-chaineye-jobs \
     --update-env
   pm2_system save --force
@@ -431,7 +429,6 @@ say "These checks use Node $TARGET_NODE_VERSION but do not start or stop any ser
 cd "$PROJECT_ROOT"
 "$TARGET_NODE" --check src/apiServer.js
 "$TARGET_NODE" --check src/crawlerServer.js
-"$TARGET_NODE" --check src/botServer.js
 "$TARGET_NODE" --check src/singletonJobsServer.js
 "$TARGET_NODE" -e '
   const modules = ["axios", "dd-trace", "express", "pg", "redis", "sqlite3"];
@@ -458,7 +455,6 @@ pm2_target resurrect
 pm2_target restart \
   luykin-chaineye-api \
   luykin-chaineye-crawler \
-  luykin-chaineye-bot \
   luykin-chaineye-jobs \
   --update-env
 pm2_target save --force
@@ -500,7 +496,7 @@ curl -fsS --max-time 10 "$HEALTH_URL"
 printf '\n'
 say "Automated runtime and health checks passed."
 warn "Before accepting the release, manually inspect recent errors:"
-note "  PATH=\"$TARGET_BIN:\$PATH\" $TARGET_PM2 logs luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot luykin-chaineye-jobs --lines 80 --nostream"
+note "  PATH=\"$TARGET_BIN:\$PATH\" $TARGET_PM2 logs luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-jobs --lines 80 --nostream"
 pause "Inspect the logs in another terminal, then press Enter to continue."
 
 stage "Optional boot persistence"

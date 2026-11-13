@@ -28,7 +28,6 @@ const LOG_SEARCH_SCOPE_OPTIONS = [
   { label: "全部服务", value: "all" },
   { label: "API · luykin-chaineye-api", value: "api" },
   { label: "爬虫 · luykin-chaineye-crawler", value: "crawler" },
-  { label: "Bot · luykin-chaineye-bot", value: "bot" },
   { label: "Jobs · luykin-chaineye-jobs", value: "jobs" },
   { label: "币安广场爬虫", value: "binance-square-crawler" },
   { label: "其他日志", value: "other" },

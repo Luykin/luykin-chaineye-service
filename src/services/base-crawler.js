@@ -9,8 +9,8 @@ puppeteer.use(Stealth());
 puppeteer.use(AnonymizeUA());
 const twentyMinutesInMilliseconds = 20 * 60 * 1000; // 1,200,000 毫秒 20分钟
 const TelegramBot = require("node-telegram-bot-api");
-const _devTgToken = "7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0";
-const _proTgToken = "7615998524:AAFLD25mHIeKKsW4ZJt2rmqY-AFWmwu1J6E";
+const _devTgToken = process.env.BASE_CRAWLER_TG_DEV_TOKEN;
+const _proTgToken = process.env.BASE_CRAWLER_TG_PRO_TOKEN;
 const _devTgGroupChatIdList = [
   {
     group_id: "-1002198757776",

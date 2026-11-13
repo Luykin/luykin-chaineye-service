@@ -8,7 +8,6 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_PM2_APPS = [
   { name: "luykin-chaineye-api", minOnline: 1 },
   { name: "luykin-chaineye-crawler", minOnline: 1 },
-  { name: "luykin-chaineye-bot", minOnline: 1 },
   { name: "luykin-chaineye-jobs", minOnline: 1 },
 ];
 

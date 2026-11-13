@@ -37,22 +37,6 @@ module.exports = {
 			}
 		},
 		{
-			name: "luykin-chaineye-bot",     // 爬虫服务
-			script: "./src/botServer.js",        // 爬虫服务的启动文件路径
-			instances: 1,                        // 单个实例
-			exec_mode: "fork",                   // 使用 fork 模式
-			watch: false,                        // 关闭文件监视
-			time: true,
-			env: {
-				TZ: "Asia/Shanghai", // 设置时区为北京时间
-				NODE_ENV: "development",          // 开发环境变量
-			},
-			env_production: {
-				TZ: "Asia/Shanghai", // 设置时区为北京时间
-				NODE_ENV: "production",           // 生产环境变量
-			}
-		},
-		{
 			name: "luykin-chaineye-jobs",     // 单例任务服务（备份/日志清理等）
 			script: "./src/singletonJobsServer.js", // 单例任务服务启动文件
 			instances: 1,                        // 单实例

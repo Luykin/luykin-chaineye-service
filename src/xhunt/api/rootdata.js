@@ -16,7 +16,14 @@ const HTTP_CACHE_TTL = 6000;
 
 // Rootdata API 配置
 const ROOTDATA_API_BASE = "https://api.rootdata.com/open";
-const ROOTDATA_API_KEY = "0TpF08MLXdb50VCGx1H8buExoMwgADbR";
+
+function getRootdataApiKey() {
+  const apiKey = process.env.ROOTDATA_API_KEY;
+  if (!apiKey) {
+    throw new Error("ROOTDATA_API_KEY is not configured");
+  }
+  return apiKey;
+}
 
 /**
  * Rootdata API 服务类
@@ -56,7 +63,7 @@ class RootdataAPIService {
         },
         {
           headers: {
-            apikey: ROOTDATA_API_KEY,
+            apikey: getRootdataApiKey(),
             language: "en",
             "Content-Type": "application/json",
           },
@@ -86,7 +93,7 @@ class RootdataAPIService {
         { people_id: peopleId },
         {
           headers: {
-            apikey: ROOTDATA_API_KEY,
+            apikey: getRootdataApiKey(),
             language: "en",
             "Content-Type": "application/json",
           },
@@ -126,7 +133,7 @@ class RootdataAPIService {
         },
         {
           headers: {
-            apikey: ROOTDATA_API_KEY,
+            apikey: getRootdataApiKey(),
             language: "en",
             "Content-Type": "application/json",
           },
@@ -167,7 +174,7 @@ class RootdataAPIService {
         { type },
         {
           headers: {
-            apikey: ROOTDATA_API_KEY,
+            apikey: getRootdataApiKey(),
             language: "en",
             "Content-Type": "application/json",
           },
@@ -343,7 +350,7 @@ class RootdataAPIService {
         },
         {
           headers: {
-            apikey: ROOTDATA_API_KEY,
+            apikey: getRootdataApiKey(),
             language: "en",
             "Content-Type": "application/json",
           },

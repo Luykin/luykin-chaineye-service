@@ -11,6 +11,8 @@ admin-web/*.tsbuildinfo
 database.sqlite
 # Ignore all .env files
 .env*
+# Ignore local key material
+*.pem
 # Ignore DAU backup files
 data/
 # Ignore PostgreSQL backup files

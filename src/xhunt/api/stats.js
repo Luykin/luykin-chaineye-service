@@ -126,11 +126,6 @@ const LOG_SEARCH_APP_SCOPES = [
     appNames: ["luykin-chaineye-crawler"],
   },
   {
-    key: "bot",
-    label: "luykin-chaineye-bot",
-    appNames: ["luykin-chaineye-bot"],
-  },
-  {
     key: "jobs",
     label: "luykin-chaineye-jobs",
     appNames: ["luykin-chaineye-jobs"],
@@ -2231,13 +2226,21 @@ router.get("/daily-cohorts", adminAuth, async (req, res) => {
 router.get("/rootdata-quota", adminAuth, async (req, res) => {
   try {
     const axios = require("axios");
+    const rootdataApiKey = process.env.ROOTDATA_API_KEY;
+
+    if (!rootdataApiKey) {
+      return res.status(503).json({
+        success: false,
+        error: "ROOTDATA_API_KEY is not configured",
+      });
+    }
 
     const response = await axios.post(
       "https://api.rootdata.com/open/quotacredits",
       {},
       {
         headers: {
-          apikey: "0TpF08MLXdb50VCGx1H8buExoMwgADbR",
+          apikey: rootdataApiKey,
           language: "en",
           "Content-Type": "application/json",
         },
